@@ -17,6 +17,8 @@ import { formatarDataBR } from '../../lib/utils/formatarData'
 import { DadosCadastraisTab } from '../crm/ClienteDetailPage'
 import CotacaoAutoForm from './CotacaoAutoForm'
 import ApoliceAutoForm from './ApoliceAutoForm'
+import EspecialistaAuto from '../especialista/EspecialistaAuto'
+import { gerarResumoCandidato, criarCandidatoConhecimento, aprovarCandidatoComoCasoReal, rejeitarCandidato } from '../../lib/crm/aprendizadoService'
 import { useAuth } from '../auth/AuthContext'
 
 const ABAS = ['Dados Cadastrais', 'Cotações', 'Apólices', 'Demandas']
@@ -295,6 +297,7 @@ function DemandasLifleetTab({ demandas, cliente, onAtualizado }) {
         organizacaoId: cliente.organizacao_id,
         descricao,
         dataProximaAcao: dataAcao || null,
+        codigoRpc: 'gerar_codigo_demanda_auto',
       })
       setDescricao('')
       setDataAcao('')
@@ -365,6 +368,7 @@ function DemandasLifleetTab({ demandas, cliente, onAtualizado }) {
       {demandaSelecionada && (
         <DemandaDetailLifleetModal
           demanda={demandaSelecionada}
+          cliente={cliente}
           onFechar={() => setDemandaSelecionada(null)}
           onSalvoSemFechar={onAtualizado}
           onAtualizado={() => {
@@ -378,44 +382,106 @@ function DemandasLifleetTab({ demandas, cliente, onAtualizado }) {
 }
 
 /**
- * Painel de detalhe da Demanda no Lifleet — mesma ideia do Lifcare
- * (histórico só leitura, "Editar" destrava status + atualização), mas
- * SEM o botão de Especialista (o Lifleet ainda não tem uma IA própria).
+ * Painel de detalhe da Demanda no Lifleet — mesmo padrão do Lifcare:
+ * histórico só leitura por padrão, "Editar" destrava status +
+ * atualização, botão "Especialista" abre o Especialista de Auto/Frota
+ * vinculado a essa demanda, e encerrar gera um resumo sugerido de Caso
+ * Real (nunca vira conhecimento institucional sem aprovação humana).
  */
-function DemandaDetailLifleetModal({ demanda, onFechar, onAtualizado, onSalvoSemFechar }) {
+function DemandaDetailLifleetModal({ demanda, cliente, onFechar, onAtualizado, onSalvoSemFechar }) {
   const { perfil } = useAuth()
   const [editando, setEditando] = useState(false)
   const [situacao, setSituacao] = useState(demanda.situacao)
   const [dataProximaAcao, setDataProximaAcao] = useState(demanda.data_proxima_acao ?? '')
   const [novaAtualizacao, setNovaAtualizacao] = useState('')
   const [salvando, setSalvando] = useState(false)
+  const [abrirEspecialista, setAbrirEspecialista] = useState(false)
+  const [gerandoResumo, setGerandoResumo] = useState(false)
+  const [candidato, setCandidato] = useState(null)
 
   async function handleSalvar() {
     setSalvando(true)
     try {
+      const situacaoMudouParaEncerrado = situacao === 'encerrado' && demanda.situacao !== 'encerrado'
+
       await atualizarDemanda(demanda.id, { situacao, dataProximaAcao })
       if (novaAtualizacao.trim()) {
         await adicionarAtualizacaoManual(demanda.id, novaAtualizacao, perfil?.id)
       }
+
+      if (situacaoMudouParaEncerrado) {
+        // Mesma regra do Lifcare: todo ciclo encerrado gera um resumo
+        // sugerido, mas NUNCA vira Caso Real sem aprovação humana. É
+        // assim que a base de casos do Auto cresce organicamente.
+        setGerandoResumo(true)
+        const resumo = await gerarResumoCandidato(demanda.id)
+        const novoCandidato = await criarCandidatoConhecimento(demanda.id, resumo)
+        setCandidato({ ...novoCandidato, resumoObjeto: resumo })
+        setGerandoResumo(false)
+        setEditando(false)
+        return
+      }
+
       setNovaAtualizacao('')
       setEditando(false)
-      if (situacao === 'encerrado') {
-        onAtualizado()
-      } else {
-        onSalvoSemFechar?.()
-      }
+      onSalvoSemFechar?.()
     } finally {
       setSalvando(false)
     }
   }
 
+  async function handleAprovarCandidato() {
+    await aprovarCandidatoComoCasoReal(candidato.id, perfil?.id)
+    onAtualizado()
+  }
+
+  async function handleRejeitarCandidato() {
+    await rejeitarCandidato(candidato.id)
+    onAtualizado()
+  }
+
+  if (abrirEspecialista) {
+    return (
+      <div className="ls-modal-overlay" onClick={onFechar}>
+        <div className="especialista-modal" onClick={(e) => e.stopPropagation()}>
+          <button className="especialista-modal-fechar" onClick={onFechar}>✕</button>
+          <EspecialistaAuto clienteProspectIdInicial={cliente?.id} casoIdContinuacao={demanda.id} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="ls-modal-overlay" onClick={onFechar}>
       <div className="ls-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>{demanda.codigo}</h3>
+        <div className="demanda-detail-header">
+          <h3>{demanda.codigo}</h3>
+          <div className="demanda-detail-header-botoes">
+            <button className="ls-btn ls-btn-accent" onClick={() => setAbrirEspecialista(true)}>
+              🧠 Especialista
+            </button>
+          </div>
+        </div>
         <p className="config-instrucao">{demanda.demanda_original}</p>
 
-        {!editando ? (
+        {gerandoResumo && <p className="especialista-carregando-historico">Gerando resumo sugerido...</p>}
+
+        {candidato ? (
+          <div className="candidato-aprovacao">
+            <h4>✅ Demanda encerrada — sugestão de Caso Real gerada</h4>
+            <p className="config-instrucao">
+              <strong>{candidato.resumoObjeto.titulo}</strong><br />
+              {candidato.resumoObjeto.resultado}
+            </p>
+            <p className="config-instrucao">
+              Isso só vira conhecimento institucional se você aprovar — nada acontece sozinho.
+            </p>
+            <div className="ls-modal-acoes">
+              <button className="ls-btn ls-btn-ghost" onClick={handleRejeitarCandidato}>Rejeitar</button>
+              <button className="ls-btn ls-btn-primary" onClick={handleAprovarCandidato}>Aprovar como Caso Real</button>
+            </div>
+          </div>
+        ) : !editando ? (
           <>
             <p><strong>Situação:</strong> {traduzirSituacaoLifleet(demanda.situacao)}</p>
             <p><strong>Próxima ação:</strong> {demanda.data_proxima_acao ? formatarDataBR(demanda.data_proxima_acao) : '—'}</p>

@@ -4,6 +4,7 @@ import LoginPage from './features/auth/LoginPage'
 import TopNav from './components/TopNav'
 import SideIconMenu from './components/SideIconMenu'
 import EspecialistaFlutuante from './components/EspecialistaFlutuante'
+import EspecialistaFlutuanteAuto from './components/EspecialistaFlutuanteAuto'
 import PipelinePage from './features/crm/PipelinePage'
 import ClienteDetailPage from './features/crm/ClienteDetailPage'
 import ConfiguracoesPage from './features/configuracoes/ConfiguracoesPage'
@@ -46,10 +47,10 @@ function AppShell() {
   )
 }
 
-/** O Especialista (IA de Saúde) só faz sentido dentro do Lifcare — o Lifleet ainda não tem uma IA própria */
+/** Mostra o Especialista certo conforme o módulo em que se está navegando */
 function EspecialistaFlutuanteCondicional() {
   const location = useLocation()
-  if (location.pathname.startsWith('/lifleet')) return null
+  if (location.pathname.startsWith('/lifleet')) return <EspecialistaFlutuanteAuto />
   return <EspecialistaFlutuante />
 }
 

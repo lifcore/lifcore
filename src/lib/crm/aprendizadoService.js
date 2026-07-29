@@ -75,23 +75,41 @@ export async function criarCandidatoConhecimento(casoId, resumoJson) {
 export async function aprovarCandidatoComoCasoReal(candidatoId, usuarioId) {
   const { data: candidato, error: erroCandidato } = await operacional
     .from('candidatos_conhecimento')
-    .select('*')
+    .select('*, casos(cliente_prospect_id)')
     .eq('id', candidatoId)
     .single()
   if (erroCandidato) throw new Error(`Erro ao buscar candidato: ${erroCandidato.message}`)
 
   const resumo = JSON.parse(candidato.resumo_aprendizado)
 
+  // Descobre a qual módulo esse caso pertence (Saúde ou Auto), a partir
+  // do cliente vinculado — assim o Caso Real nasce com o prefixo e a
+  // numeração certos, sem misturar a contagem entre os dois módulos.
+  let modulo = 'saude'
+  const clienteProspectId = candidato.casos?.cliente_prospect_id
+  if (clienteProspectId) {
+    const { data: cliente } = await operacional
+      .from('clientes_prospects')
+      .select('modulo')
+      .eq('id', clienteProspectId)
+      .maybeSingle()
+    modulo = cliente?.modulo ?? 'saude'
+  }
+
+  const prefixo = modulo === 'auto' ? 'CASO-AUTO' : 'CASO-SAU'
+
   const { count } = await institucional
     .from('casos_fundamentais')
     .select('id', { count: 'exact', head: true })
+    .eq('modulo', modulo)
   const proximoNumero = String((count ?? 0) + 1).padStart(3, '0')
-  const codigo = `CASO-SAU-${proximoNumero}-REAL`
+  const codigo = `${prefixo}-${proximoNumero}-REAL`
 
   const { data: novoCaso, error: erroCaso } = await institucional
     .from('casos_fundamentais')
     .insert({
       codigo,
+      modulo,
       titulo: resumo.titulo,
       contexto: resumo.contexto,
       problema: resumo.problema,

@@ -32,11 +32,12 @@ const PALAVRAS_IRRELEVANTES = new Set([
  * cresce (ex: 24 documentos na categoria ANS): sem isso, o documento
  * realmente relevante para a pergunta pode nunca ser consultado.
  */
-export async function buscarBibliotecaRelevante(categoria, textoDemanda, limite = 5) {
+export async function buscarBibliotecaRelevante(categoria, textoDemanda, limite = 5, modulo = 'saude') {
   const { data, error } = await institucional
     .from('biblioteca')
     .select('codigo, titulo, conteudo, categoria')
     .eq('categoria', categoria)
+    .eq('modulo', modulo)
     .limit(50) // teto de segurança; categorias hoje têm no máximo ~24 documentos
 
   if (error) throw new Error(`Erro ao consultar biblioteca (${categoria}): ${error.message}`)
@@ -137,10 +138,11 @@ export async function buscarCasosFundamentais(codigos) {
  * pelo motor de raciocínio único (substitui a arquitetura de Playbooks
  * como portão de decisão).
  */
-export async function buscarCasosRelevantes(textoDemanda, limite = 4) {
+export async function buscarCasosRelevantes(textoDemanda, limite = 4, modulo = 'saude') {
   const { data, error } = await institucional
     .from('casos_fundamentais')
     .select('codigo, titulo, categoria, contexto, problema, resultado, licoes_aprendidas, conteudo_completo, status_validacao')
+    .eq('modulo', modulo)
     .neq('status_validacao', 'rejeitado')
     .limit(100)
 

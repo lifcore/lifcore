@@ -422,8 +422,8 @@ export async function excluirCotacao(cotacaoId) {
 }
 
 /** Abre uma demanda manual (sem passar pelo Especialista) — usado no botão "Nova Demanda" da aba Demandas */
-export async function criarDemandaManual({ clienteProspectId, organizacaoId, descricao, dataProximaAcao }) {
-  const { data: codigo } = await operacional.rpc('gerar_codigo_demanda_saude')
+export async function criarDemandaManual({ clienteProspectId, organizacaoId, descricao, dataProximaAcao, codigoRpc = 'gerar_codigo_demanda_saude' }) {
+  const { data: codigo } = await operacional.rpc(codigoRpc)
 
   const { data, error } = await operacional
     .from('casos')
