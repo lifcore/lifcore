@@ -7,8 +7,10 @@
 /* ---------- Pipeline ---------- */
 .pipeline-header {
   display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   margin-bottom: 1.25rem;
 }
 

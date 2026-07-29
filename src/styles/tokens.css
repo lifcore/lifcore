@@ -131,7 +131,7 @@ h1, h2, h3, h4 {
    do sistema herda isso, então uma mudança aqui padroniza tudo
    de uma vez (login, modais, configurações, formulários de CRM).
    ============================================================ */
-input:not([type="checkbox"]):not([type="radio"]),
+input:where(:not([type="checkbox"]):not([type="radio"])),
 select,
 textarea {
   width: 100%;
@@ -146,13 +146,13 @@ textarea {
   box-sizing: border-box;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):hover,
+input:where(:not([type="checkbox"]):not([type="radio"])):hover,
 select:hover,
 textarea:hover {
   border-color: #c9c0ac;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):focus,
+input:where(:not([type="checkbox"]):not([type="radio"])):focus,
 select:focus,
 textarea:focus {
   outline: none;
