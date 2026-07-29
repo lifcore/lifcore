@@ -1,5 +1,5 @@
 /**
- * CAMADA DE IA DESACOPLADA — CoreON
+ * CAMADA DE IA DESACOPLADA — Lifcore
  * ============================================================
  * Objetivo: nenhuma parte do sistema deve chamar um provedor de IA
  * (Anthropic, OpenAI, etc.) diretamente. Tudo passa por aqui.
@@ -8,16 +8,15 @@
  * no .env e, no máximo, implementar um novo "adapter" abaixo.
  * O resto do sistema (agentes, especialistas) nunca precisa mudar.
  *
- * IMPORTANTE (segurança): em produção, essas chamadas devem ser feitas
- * por um backend/edge function, nunca diretamente do navegador —
- * do contrário a chave de API fica exposta ao usuário final.
- * Nesta fase inicial (desenvolvimento local), simplificamos para
- * validar a integração rapidamente.
+ * SEGURANÇA (atualizado): a chamada NÃO vai mais direto do navegador
+ * pra Anthropic. Ela passa por uma Edge Function do Supabase
+ * ("especialista-ia"), que guarda a chave da Anthropic como "secret"
+ * no servidor — o navegador nunca vê essa chave.
  * ============================================================
  */
+import { supabase } from './supabaseClient'
 
 const PROVIDER = import.meta.env.VITE_AI_PROVIDER || 'anthropic'
-const API_KEY = import.meta.env.VITE_AI_API_KEY
 
 /**
  * Formato padrão de entrada, independente do provedor:
@@ -28,50 +27,17 @@ const API_KEY = import.meta.env.VITE_AI_API_KEY
  */
 
 async function callAnthropic({ systemPrompt, messages, maxTokens = 1000, images = [] }) {
-  // Se houver imagens, a última mensagem do usuário passa a ter
-  // conteúdo em blocos (imagem + texto), em vez de string simples —
-  // formato multimodal exigido pela API da Anthropic.
-  const mensagensFinais = messages.map((msg, index) => {
-    const ehUltimaDoUsuario = index === messages.length - 1 && msg.role === 'user'
-    if (!ehUltimaDoUsuario || images.length === 0) return msg
-
-    return {
-      role: msg.role,
-      content: [
-        ...images.map((img) => ({
-          type: 'image',
-          source: { type: 'base64', media_type: img.mediaType, data: img.base64 },
-        })),
-        { type: 'text', text: msg.content },
-      ],
-    }
+  const { data, error } = await supabase.functions.invoke('especialista-ia', {
+    body: { systemPrompt, messages, maxTokens, images },
   })
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': API_KEY,
-      'anthropic-version': '2023-06-01',
-      // ATENÇÃO: este header só existe para permitir testes locais direto do
-      // navegador. Em produção, essa chamada deve vir de um backend, e este
-      // header NUNCA deve ser usado nesse contexto.
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: mensagensFinais,
-    }),
-  })
-
-  if (!response.ok) {
-    const errorBody = await response.text()
-    throw new Error(`Erro na API Anthropic: ${response.status} — ${errorBody}`)
+  if (error) {
+    throw new Error(`Erro na chamada da IA (Edge Function): ${error.message}`)
+  }
+  if (data?.error) {
+    throw new Error(`Erro na API Anthropic: ${JSON.stringify(data.error)}`)
   }
 
-  const data = await response.json()
   const text = data.content
     ?.filter((block) => block.type === 'text')
     .map((block) => block.text)
