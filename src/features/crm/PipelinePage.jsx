@@ -51,7 +51,8 @@ export default function PipelinePage() {
       ? itens.filter(
           (i) =>
             i.razao_social?.toLowerCase().includes(busca.toLowerCase()) ||
-            i.cnpj?.toLowerCase().includes(busca.toLowerCase())
+            i.cnpj?.toLowerCase().includes(busca.toLowerCase()) ||
+            i.cpf?.toLowerCase().includes(busca.toLowerCase())
         )
       : itens
     return filtrados.filter((i) => i.status === status)
@@ -81,7 +82,7 @@ export default function PipelinePage() {
           <input
             type="text"
             className="pipeline-busca"
-            placeholder="🔍 Buscar por nome ou CNPJ..."
+            placeholder="🔍 Buscar por nome, CNPJ ou CPF..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />

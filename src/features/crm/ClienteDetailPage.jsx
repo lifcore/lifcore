@@ -134,12 +134,15 @@ export default function ClienteDetailPage() {
 }
 
 function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario, grupoInfo, onSalvo }) {
+  const ehPessoaFisica = cliente.tipo_pessoa === 'fisica'
   const [editando, setEditando] = useState(false)
   const [empresa, setEmpresa] = useState({
     cnpj: cliente.cnpj ?? '',
     segmento: cliente.segmento ?? '',
     numero_colaboradores: cliente.numero_colaboradores ?? '',
     data_vigencia: cliente.data_vigencia ?? '',
+    cpf: cliente.cpf ?? '',
+    graduacao: cliente.graduacao ?? '',
   })
   const [primario, setPrimario] = useState(contatoPrimario)
   const [secundario, setSecundario] = useState(contatoSecundario)
@@ -147,12 +150,20 @@ function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario, grupo
 
   async function handleSalvarTudo() {
     setSalvando(true)
-    await atualizarClienteProspect(cliente.id, {
-      cnpj: empresa.cnpj || null,
-      segmento: empresa.segmento || null,
-      numero_colaboradores: empresa.numero_colaboradores ? parseInt(empresa.numero_colaboradores, 10) : null,
-      data_vigencia: empresa.data_vigencia || null,
-    })
+    if (ehPessoaFisica) {
+      await atualizarClienteProspect(cliente.id, {
+        cpf: empresa.cpf || null,
+        graduacao: empresa.graduacao || null,
+        data_vigencia: empresa.data_vigencia || null,
+      })
+    } else {
+      await atualizarClienteProspect(cliente.id, {
+        cnpj: empresa.cnpj || null,
+        segmento: empresa.segmento || null,
+        numero_colaboradores: empresa.numero_colaboradores ? parseInt(empresa.numero_colaboradores, 10) : null,
+        data_vigencia: empresa.data_vigencia || null,
+      })
+    }
     await salvarContato(cliente.id, 'primario', primario)
     await salvarContato(cliente.id, 'secundario', secundario)
     setSalvando(false)
@@ -164,16 +175,26 @@ function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario, grupo
     return (
       <div className="ls-card cadastro-card">
         <div className="cadastro-header-view">
-          <h4>Empresa</h4>
+          <h4>{ehPessoaFisica ? 'Pessoa Física' : 'Empresa'}</h4>
           <button className="ls-btn ls-btn-ghost" onClick={() => setEditando(true)}>Editar</button>
         </div>
         <div className="cadastro-grid">
-          <CampoView label="Razão Social" valor={cliente.razao_social} />
-          <CampoView label="CNPJ" valor={empresa.cnpj || '—'} />
-          <CampoView label="Segmento" valor={empresa.segmento || '—'} />
-          <CampoView label="Nº Colaboradores" valor={empresa.numero_colaboradores || '—'} />
-          <CampoView label="Vigência" valor={empresa.data_vigencia ? formatarDataBR(empresa.data_vigencia) : '—'} />
-          <CampoView label="Porte (calculado)" valor={cliente.porte ?? '—'} />
+          <CampoView label={ehPessoaFisica ? 'Nome Completo' : 'Razão Social'} valor={cliente.razao_social} />
+          {ehPessoaFisica ? (
+            <>
+              <CampoView label="CPF" valor={empresa.cpf || '—'} />
+              <CampoView label="Graduação" valor={empresa.graduacao || '—'} />
+              <CampoView label="Vigência" valor={empresa.data_vigencia ? formatarDataBR(empresa.data_vigencia) : '—'} />
+            </>
+          ) : (
+            <>
+              <CampoView label="CNPJ" valor={empresa.cnpj || '—'} />
+              <CampoView label="Segmento" valor={empresa.segmento || '—'} />
+              <CampoView label="Nº Colaboradores" valor={empresa.numero_colaboradores || '—'} />
+              <CampoView label="Vigência" valor={empresa.data_vigencia ? formatarDataBR(empresa.data_vigencia) : '—'} />
+              <CampoView label="Porte (calculado)" valor={cliente.porte ?? '—'} />
+            </>
+          )}
         </div>
         <h4>Contato Primário</h4>
         <ContatoView contato={primario} />
@@ -203,34 +224,62 @@ function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario, grupo
 
   return (
     <div className="ls-card cadastro-card">
-      <h4>Empresa</h4>
+      <h4>{ehPessoaFisica ? 'Pessoa Física' : 'Empresa'}</h4>
       <div className="cadastro-grid">
-        <Campo label="Razão Social" valor={cliente.razao_social} disabled />
-        <div>
-          <label>CNPJ</label>
-          <input value={empresa.cnpj} onChange={(e) => setEmpresa({ ...empresa, cnpj: e.target.value })} placeholder="00.000.000/0001-00" />
-        </div>
-        <div>
-          <label>Segmento</label>
-          <input value={empresa.segmento} onChange={(e) => setEmpresa({ ...empresa, segmento: e.target.value })} />
-        </div>
-        <div>
-          <label>Número de colaboradores</label>
-          <input
-            type="number"
-            value={empresa.numero_colaboradores}
-            onChange={(e) => setEmpresa({ ...empresa, numero_colaboradores: e.target.value })}
-          />
-        </div>
-        <div>
-          <label>Data de vigência / renovação</label>
-          <input
-            type="date"
-            value={empresa.data_vigencia ?? ''}
-            onChange={(e) => setEmpresa({ ...empresa, data_vigencia: e.target.value })}
-          />
-        </div>
-        <Campo label="Porte (calculado)" valor={cliente.porte ?? '—'} disabled />
+        <Campo label={ehPessoaFisica ? 'Nome Completo' : 'Razão Social'} valor={cliente.razao_social} disabled />
+
+        {ehPessoaFisica ? (
+          <>
+            <div>
+              <label>CPF</label>
+              <input value={empresa.cpf} onChange={(e) => setEmpresa({ ...empresa, cpf: e.target.value })} placeholder="000.000.000-00" />
+            </div>
+            <div>
+              <label>Graduação</label>
+              <input
+                value={empresa.graduacao}
+                onChange={(e) => setEmpresa({ ...empresa, graduacao: e.target.value })}
+                placeholder="Ex: Engenheiro, Advogado... (se for Adesão)"
+              />
+            </div>
+            <div>
+              <label>Data de vigência / renovação</label>
+              <input
+                type="date"
+                value={empresa.data_vigencia ?? ''}
+                onChange={(e) => setEmpresa({ ...empresa, data_vigencia: e.target.value })}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <label>CNPJ</label>
+              <input value={empresa.cnpj} onChange={(e) => setEmpresa({ ...empresa, cnpj: e.target.value })} placeholder="00.000.000/0001-00" />
+            </div>
+            <div>
+              <label>Segmento</label>
+              <input value={empresa.segmento} onChange={(e) => setEmpresa({ ...empresa, segmento: e.target.value })} />
+            </div>
+            <div>
+              <label>Número de colaboradores</label>
+              <input
+                type="number"
+                value={empresa.numero_colaboradores}
+                onChange={(e) => setEmpresa({ ...empresa, numero_colaboradores: e.target.value })}
+              />
+            </div>
+            <div>
+              <label>Data de vigência / renovação</label>
+              <input
+                type="date"
+                value={empresa.data_vigencia ?? ''}
+                onChange={(e) => setEmpresa({ ...empresa, data_vigencia: e.target.value })}
+              />
+            </div>
+            <Campo label="Porte (calculado)" valor={cliente.porte ?? '—'} disabled />
+          </>
+        )}
       </div>
 
       <h4>Contato Primário</h4>
