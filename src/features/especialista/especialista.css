@@ -125,9 +125,9 @@
 
 .especialista-chat-header {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: flex-start;
-  gap: 1rem;
+  gap: 0.6rem;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--ls-border, #e4ded2);
   margin-bottom: 0.75rem;
@@ -136,7 +136,7 @@
 .especialista-chat-header-botoes {
   display: flex;
   gap: 0.5rem;
-  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .especialista-lista-clientes {

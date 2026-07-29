@@ -81,14 +81,7 @@ export default function PipelinePage() {
   return (
     <div className="pipeline-page">
       <div className="pipeline-header">
-        <div>
-          <h2>Pipeline — Saúde</h2>
-          <p className="pipeline-subtitulo">
-            {mostrarFuturas
-              ? 'Mostrando todos os clientes e prospects, com ações futuras.'
-              : 'Mostrando ações dos próximos 15 dias (atrasadas sempre aparecem).'}
-          </p>
-        </div>
+        <h2>Lifcare — Saúde&amp;Odonto</h2>
         <div className="pipeline-header-acoes">
           {ehMaster && (
             <SeletorCarteira

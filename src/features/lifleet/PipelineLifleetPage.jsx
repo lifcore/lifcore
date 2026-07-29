@@ -81,14 +81,7 @@ export default function PipelineLifleetPage() {
   return (
     <div className="pipeline-page">
       <div className="pipeline-header">
-        <div>
-          <h2>Pipeline — Auto/Frota</h2>
-          <p className="pipeline-subtitulo">
-            {mostrarFuturas
-              ? 'Mostrando todos os clientes e prospects, com ações futuras.'
-              : 'Mostrando ações dos próximos 15 dias (atrasadas sempre aparecem).'}
-          </p>
-        </div>
+        <h2>Lifleet — Auto&amp;Frota</h2>
         <div className="pipeline-header-acoes">
           {ehMaster && (
             <SeletorCarteira

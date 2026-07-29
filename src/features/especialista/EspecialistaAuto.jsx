@@ -78,21 +78,10 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
 
       setArquivo(null)
 
-      if (resposta.precisaMaisInformacao) {
-        setMensagens((msgs) => [
-          ...msgs,
-          {
-            autor: 'especialista',
-            texto: 'Preciso de mais informações antes de continuar:\n' + resposta.perguntasParaConsultor.map((p) => `- ${p}`).join('\n'),
-            criadoEm: new Date().toISOString(),
-          },
-        ])
-      } else {
-        setMensagens((msgs) => [
-          ...msgs,
-          { autor: 'especialista', texto: resposta.resposta.textoCompleto, criadoEm: new Date().toISOString() },
-        ])
-      }
+      setMensagens((msgs) => [
+        ...msgs,
+        { autor: 'especialista', texto: resposta.resposta.textoCompleto, criadoEm: new Date().toISOString() },
+      ])
     } catch (err) {
       setErro(err.message)
     } finally {
@@ -151,11 +140,6 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
       <div className="especialista-chat-header">
         <div>
           <h2>Especialista de Auto/Frota</h2>
-          <p className="especialista-subtitulo">
-            {modoDemanda
-              ? 'Conversa vinculada a um cliente — registrada como Demanda.'
-              : 'Consulta rápida, sem cliente vinculado — converse à vontade.'}
-          </p>
         </div>
         <div className="especialista-chat-header-botoes">
           {mensagens.length > 0 && (

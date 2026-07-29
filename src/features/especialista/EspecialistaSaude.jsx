@@ -85,27 +85,16 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
 
       setArquivo(null)
 
-      if (resposta.precisaMaisInformacao) {
-        setMensagens((msgs) => [
-          ...msgs,
-          {
-            autor: 'especialista',
-            texto: 'Preciso de mais informações antes de continuar:\n' + resposta.perguntasParaConsultor.map((p) => `- ${p}`).join('\n'),
-            criadoEm: new Date().toISOString(),
-          },
-        ])
-      } else {
-        setMensagens((msgs) => [
-          ...msgs,
-          { autor: 'especialista', texto: resposta.resposta.textoCompleto, criadoEm: new Date().toISOString() },
-        ])
-        setUltimoContexto({
-          playbook: resposta.playbookUtilizado,
-          modelosRaciocinio: resposta.modelosRaciocinio,
-          regulamentacaoAplicavel: resposta.regulamentacaoAplicavel,
-          casosRelacionados: resposta.casosRelacionados,
-        })
-      }
+      setMensagens((msgs) => [
+        ...msgs,
+        { autor: 'especialista', texto: resposta.resposta.textoCompleto, criadoEm: new Date().toISOString() },
+      ])
+      setUltimoContexto({
+        playbook: resposta.playbookUtilizado,
+        modelosRaciocinio: resposta.modelosRaciocinio,
+        regulamentacaoAplicavel: resposta.regulamentacaoAplicavel,
+        casosRelacionados: resposta.casosRelacionados,
+      })
     } catch (err) {
       setErro(err.message)
     } finally {
@@ -164,11 +153,6 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
       <div className="especialista-chat-header">
         <div>
           <h2>Especialista de Saúde</h2>
-          <p className="especialista-subtitulo">
-            {modoDemanda
-              ? 'Conversa vinculada a um cliente — registrada como Demanda.'
-              : 'Consulta rápida, sem cliente vinculado — converse à vontade.'}
-          </p>
         </div>
         <div className="especialista-chat-header-botoes">
           {mensagens.length > 0 && (
