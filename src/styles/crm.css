@@ -118,13 +118,10 @@
   display: flex;
   gap: 0.6rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .pipeline-busca {
-  padding: 0.55rem 0.85rem;
-  border: 1px solid var(--ls-border);
-  border-radius: var(--ls-radius-sm);
-  font-family: inherit;
   font-size: 0.85rem;
   width: 220px;
 }
@@ -198,14 +195,6 @@
   color: var(--ls-text-muted);
   margin-top: 0.6rem;
   margin-bottom: 0.2rem;
-}
-
-.demanda-form input {
-  width: 100%;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--ls-border);
-  border-radius: var(--ls-radius-sm);
-  font-family: inherit;
 }
 
 .cliente-detail-header-direita {
@@ -358,14 +347,6 @@
   margin-bottom: 0.2rem;
 }
 
-.demanda-detail-edicao input {
-  width: 100%;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--ls-border);
-  border-radius: var(--ls-radius-sm);
-  font-family: inherit;
-}
-
 .candidato-aprovacao {
   padding-top: 0.85rem;
   border-top: 2px solid var(--ls-accent);
@@ -378,7 +359,23 @@
 }
 
 .config-page {
-  max-width: 560px;
+  max-width: 880px;
+}
+
+.config-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1.25rem;
+}
+
+.config-form-grid > .config-campo-largo {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+  .config-form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .config-card {
@@ -401,15 +398,6 @@
   color: var(--ls-text-muted);
   margin-top: 0.6rem;
   margin-bottom: 0.2rem;
-}
-
-.config-card input,
-.config-card select {
-  width: 100%;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--ls-border);
-  border-radius: var(--ls-radius-sm);
-  font-family: inherit;
 }
 
 .config-sucesso {
@@ -472,14 +460,6 @@
   color: var(--ls-text-muted);
   margin-top: 0.75rem;
   margin-bottom: 0.2rem;
-}
-
-.ls-modal input {
-  width: 100%;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--ls-border);
-  border-radius: var(--ls-radius-sm);
-  font-family: inherit;
 }
 
 .ls-modal-erro {
@@ -571,14 +551,6 @@
   margin-bottom: 0.2rem;
 }
 
-.cadastro-grid input {
-  width: 100%;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--ls-border);
-  border-radius: var(--ls-radius-sm);
-  font-family: inherit;
-}
-
 .cadastro-atualizado-em {
   grid-column: 1 / -1;
   font-size: 0.72rem;
@@ -640,14 +612,6 @@
   font-weight: 600;
   color: var(--ls-text-muted);
   margin-bottom: 0.2rem;
-}
-
-.cotacao-form input {
-  width: 100%;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--ls-border);
-  border-radius: var(--ls-radius-sm);
-  font-family: inherit;
 }
 
 .cotacao-resumo {
@@ -743,9 +707,6 @@
 
 .cotacao-faixas-linha input {
   padding: 0.4rem 0.5rem;
-  border: 1px solid var(--ls-border);
-  border-radius: var(--ls-radius-sm);
-  font-family: inherit;
 }
 
 .cotacao-add-bloco {
@@ -829,26 +790,104 @@
   font-size: 1.1rem;
 }
 
-.especialista-modal {
-  background: transparent;
-  width: 100%;
-  max-width: 760px;
-  max-height: 90vh;
-  overflow-y: auto;
-  position: relative;
+/* O painel "sobe" do canto inferior direito, como um widget de chat
+   — nunca centralizado na tela. O fundo (overlay) é bem sutil, só
+   pra permitir fechar clicando fora, sem escurecer a tela toda. */
+.especialista-painel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 42, 61, 0.08);
+  z-index: 100;
 }
 
-.especialista-modal-fechar {
+.especialista-painel {
+  position: fixed;
+  bottom: 1.75rem;
+  right: 1.75rem;
+  width: min(420px, calc(100vw - 2rem));
+  max-height: min(720px, calc(100vh - 3.5rem));
+  background: var(--ls-surface);
+  border-radius: 22px;
+  box-shadow: var(--ls-shadow-lift);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: especialista-subir 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes especialista-subir {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.especialista-painel-fechar {
   position: absolute;
-  top: -0.5rem;
-  right: -0.5rem;
-  background: white;
-  border: 1px solid var(--ls-border);
+  top: 0.9rem;
+  right: 0.9rem;
+  background: var(--ls-bg);
+  border: none;
   border-radius: 999px;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   cursor: pointer;
+  color: var(--ls-text-muted);
+  font-size: 0.85rem;
   z-index: 10;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.especialista-painel-fechar:hover {
+  background: var(--ls-accent-soft);
+  color: var(--ls-accent);
+}
+
+.especialista-painel-corpo {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  padding: 0;
+}
+
+.especialista-painel-corpo .especialista-container {
+  box-shadow: none;
+  border-radius: 0;
+  padding: 1.35rem 1.35rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.especialista-painel-corpo .especialista-chat-container {
+  max-height: none;
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 640px) {
+  .especialista-painel {
+    bottom: 0;
+    right: 0;
+    left: 0;
+    top: 3.5rem;
+    width: 100%;
+    max-height: none;
+    height: calc(100vh - 3.5rem);
+    border-radius: 20px 20px 0 0;
+  }
+
+  .especialista-flutuante-btn {
+    bottom: 1.1rem;
+    right: 1.1rem;
+    padding: 0.75rem 1.1rem;
+    font-size: 0.85rem;
+  }
 }
 
 @media (max-width: 900px) {

@@ -74,48 +74,69 @@ export default function PerfilPage() {
     <div className="config-page">
       <h2>Meu Perfil</h2>
       <div className="ls-card config-card">
-        <label>Nome completo</label>
-        <input value={nome} onChange={(e) => setNome(e.target.value)} />
+        <div className="config-form-grid">
+          <div>
+            <label>Nome completo</label>
+            <input value={nome} onChange={(e) => setNome(e.target.value)} />
+          </div>
+          <div>
+            <label>E-mail (login)</label>
+            <input value={perfil?.email ?? ''} disabled />
+          </div>
 
-        <label>E-mail (login)</label>
-        <input value={perfil?.email ?? ''} disabled />
+          <div>
+            <label>Telefone / Celular</label>
+            <input value={telefone ?? ''} onChange={(e) => setTelefone(e.target.value)} placeholder="(11) 91234-5678" />
+          </div>
+          <div>
+            <label>CPF</label>
+            <input value={cpf ?? ''} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" />
+          </div>
 
-        <label>Telefone / Celular</label>
-        <input value={telefone ?? ''} onChange={(e) => setTelefone(e.target.value)} placeholder="(11) 91234-5678" />
-
-        <label>CPF</label>
-        <input value={cpf ?? ''} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" />
-
-        <label>Endereço (opcional)</label>
-        <input value={endereco ?? ''} onChange={(e) => setEndereco(e.target.value)} placeholder="Rua, número, cidade..." />
-
-        <label>Papel</label>
-        <input value={perfil?.papel ?? ''} disabled />
+          <div>
+            <label>Papel</label>
+            <input value={perfil?.papel ?? ''} disabled />
+          </div>
+          <div>
+            <label>Endereço (opcional)</label>
+            <input value={endereco ?? ''} onChange={(e) => setEndereco(e.target.value)} placeholder="Rua, número, cidade..." />
+          </div>
+        </div>
 
         <h4 style={{ marginTop: '1.5rem' }}>Dados Bancários</h4>
         <p className="config-instrucao">Usados para pagamento de comissão.</p>
 
-        <label>Banco</label>
-        <input value={banco ?? ''} onChange={(e) => setBanco(e.target.value)} placeholder="Ex: Itaú, Nubank..." />
+        <div className="config-form-grid">
+          <div>
+            <label>Banco</label>
+            <input value={banco ?? ''} onChange={(e) => setBanco(e.target.value)} placeholder="Ex: Itaú, Nubank..." />
+          </div>
+          <div>
+            <label>Agência</label>
+            <input value={agencia ?? ''} onChange={(e) => setAgencia(e.target.value)} />
+          </div>
 
-        <label>Agência</label>
-        <input value={agencia ?? ''} onChange={(e) => setAgencia(e.target.value)} />
+          <div>
+            <label>Conta</label>
+            <input value={conta ?? ''} onChange={(e) => setConta(e.target.value)} />
+          </div>
+          <div>
+            <label>Tipo de Conta</label>
+            <select value={tipoConta} onChange={(e) => setTipoConta(e.target.value)}>
+              <option value="corrente">Corrente</option>
+              <option value="poupanca">Poupança</option>
+            </select>
+          </div>
 
-        <label>Conta</label>
-        <input value={conta ?? ''} onChange={(e) => setConta(e.target.value)} />
-
-        <label>Tipo de Conta</label>
-        <select value={tipoConta} onChange={(e) => setTipoConta(e.target.value)}>
-          <option value="corrente">Corrente</option>
-          <option value="poupanca">Poupança</option>
-        </select>
-
-        <label>Chave PIX (opcional)</label>
-        <input value={chavePix ?? ''} onChange={(e) => setChavePix(e.target.value)} placeholder="CPF, e-mail, telefone ou chave aleatória" />
+          <div className="config-campo-largo">
+            <label>Chave PIX (opcional)</label>
+            <input value={chavePix ?? ''} onChange={(e) => setChavePix(e.target.value)} placeholder="CPF, e-mail, telefone ou chave aleatória" />
+          </div>
+        </div>
 
         {sucessoPerfil && <p className="config-sucesso">{sucessoPerfil}</p>}
 
-        <button className="ls-btn ls-btn-primary" onClick={handleSalvarPerfil} disabled={salvandoPerfil}>
+        <button className="ls-btn ls-btn-primary" onClick={handleSalvarPerfil} disabled={salvandoPerfil} style={{ marginTop: '1rem' }}>
           {salvandoPerfil ? 'Salvando...' : 'Salvar perfil'}
         </button>
       </div>
@@ -127,41 +148,53 @@ export default function PerfilPage() {
           caso um cliente peça CNPJ/SUSEP da LifitSeg.
         </p>
 
-        <label>Razão Social</label>
-        <input value={corretora.razao_social ?? ''} disabled />
+        <div className="config-form-grid">
+          <div className="config-campo-largo">
+            <label>Razão Social</label>
+            <input value={corretora.razao_social ?? ''} disabled />
+          </div>
 
-        <label>CNPJ</label>
-        <input
-          value={corretora.cnpj ?? ''}
-          onChange={(e) => setCorretora({ ...corretora, cnpj: e.target.value })}
-          disabled={!podeEditarCorretora}
-        />
+          <div>
+            <label>CNPJ</label>
+            <input
+              value={corretora.cnpj ?? ''}
+              onChange={(e) => setCorretora({ ...corretora, cnpj: e.target.value })}
+              disabled={!podeEditarCorretora}
+            />
+          </div>
 
-        <label>Registro SUSEP</label>
-        <input
-          value={corretora.susep ?? ''}
-          onChange={(e) => setCorretora({ ...corretora, susep: e.target.value })}
-          disabled={!podeEditarCorretora}
-        />
+          <div>
+            <label>Registro SUSEP</label>
+            <input
+              value={corretora.susep ?? ''}
+              onChange={(e) => setCorretora({ ...corretora, susep: e.target.value })}
+              disabled={!podeEditarCorretora}
+            />
+          </div>
 
-        <label>Telefone</label>
-        <input
-          value={corretora.telefone ?? ''}
-          onChange={(e) => setCorretora({ ...corretora, telefone: e.target.value })}
-          disabled={!podeEditarCorretora}
-        />
+          <div>
+            <label>Telefone</label>
+            <input
+              value={corretora.telefone ?? ''}
+              onChange={(e) => setCorretora({ ...corretora, telefone: e.target.value })}
+              disabled={!podeEditarCorretora}
+            />
+          </div>
 
-        <label>Endereço</label>
-        <input
-          value={corretora.endereco ?? ''}
-          onChange={(e) => setCorretora({ ...corretora, endereco: e.target.value })}
-          disabled={!podeEditarCorretora}
-        />
+          <div>
+            <label>Endereço</label>
+            <input
+              value={corretora.endereco ?? ''}
+              onChange={(e) => setCorretora({ ...corretora, endereco: e.target.value })}
+              disabled={!podeEditarCorretora}
+            />
+          </div>
+        </div>
 
         {sucessoCorretora && <p className="config-sucesso">{sucessoCorretora}</p>}
 
         {podeEditarCorretora ? (
-          <button className="ls-btn ls-btn-primary" onClick={handleSalvarCorretora} disabled={salvandoCorretora}>
+          <button className="ls-btn ls-btn-primary" onClick={handleSalvarCorretora} disabled={salvandoCorretora} style={{ marginTop: '1rem' }}>
             {salvandoCorretora ? 'Salvando...' : 'Salvar dados da corretora'}
           </button>
         ) : (

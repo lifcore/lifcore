@@ -126,6 +126,160 @@ h1, h2, h3, h4 {
   outline-offset: 2px;
 }
 
+/* ============================================================
+   Base compartilhada de campos — qualquer input/select/textarea
+   do sistema herda isso, então uma mudança aqui padroniza tudo
+   de uma vez (login, modais, configurações, formulários de CRM).
+   ============================================================ */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1.5px solid var(--ls-border);
+  border-radius: var(--ls-radius-sm);
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--ls-text);
+  background: var(--ls-surface);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  box-sizing: border-box;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):hover,
+select:hover,
+textarea:hover {
+  border-color: #c9c0ac;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--ls-accent);
+  box-shadow: 0 0 0 3px var(--ls-accent-soft);
+}
+
+input:disabled, select:disabled, textarea:disabled {
+  background: var(--ls-bg);
+  color: var(--ls-text-muted);
+  cursor: not-allowed;
+}
+
+label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ls-text-muted);
+  margin: 0.6rem 0 0.3rem;
+}
+
+/* ============================================================
+   Dropdown de clique (menu flutuante) — usado pelo seletor de
+   carteira e em qualquer outro lugar que precise de "clique e
+   lista" no lugar de um <select> nativo.
+   ============================================================ */
+.ls-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.ls-dropdown-gatilho {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--ls-surface);
+  border: 1.5px solid var(--ls-border);
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ls-primary);
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  white-space: nowrap;
+}
+
+.ls-dropdown-gatilho:hover {
+  border-color: var(--ls-accent);
+}
+
+.ls-dropdown-gatilho.ls-dropdown-aberto {
+  border-color: var(--ls-accent);
+  box-shadow: 0 0 0 3px var(--ls-accent-soft);
+}
+
+.ls-dropdown-seta {
+  font-size: 0.65rem;
+  color: var(--ls-text-muted);
+  transition: transform 0.15s ease;
+}
+
+.ls-dropdown-aberto .ls-dropdown-seta {
+  transform: rotate(180deg);
+}
+
+.ls-dropdown-painel {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: 280px;
+  background: var(--ls-surface);
+  border: 1px solid var(--ls-border);
+  border-radius: var(--ls-radius);
+  box-shadow: var(--ls-shadow-lift);
+  padding: 0.4rem;
+  z-index: 60;
+  max-height: 320px;
+  overflow-y: auto;
+  animation: ls-dropdown-entrada 0.12s ease;
+}
+
+@keyframes ls-dropdown-entrada {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ls-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--ls-radius-sm);
+  font-size: 0.85rem;
+  font-family: inherit;
+  color: var(--ls-text);
+  cursor: pointer;
+}
+
+.ls-dropdown-item:hover {
+  background: var(--ls-bg);
+}
+
+.ls-dropdown-item.ls-dropdown-item-ativo {
+  background: var(--ls-accent-soft);
+  color: var(--ls-accent);
+  font-weight: 600;
+}
+
+.ls-dropdown-item-check {
+  width: 1rem;
+  color: var(--ls-accent);
+  flex-shrink: 0;
+}
+
+.ls-dropdown-separador {
+  border: none;
+  border-top: 1px solid var(--ls-border);
+  margin: 0.35rem 0.2rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }

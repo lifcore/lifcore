@@ -58,19 +58,27 @@ export default function ConfiguracoesPage() {
           <strong>Passo 2:</strong> preencha abaixo com o mesmo e-mail para vincular o perfil.
         </p>
 
-        <label>E-mail (o mesmo usado no Supabase Auth)</label>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@lifitseg.com.br" />
+        <div className="config-form-grid">
+          <div className="config-campo-largo">
+            <label>E-mail (o mesmo usado no Supabase Auth)</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@lifitseg.com.br" />
+          </div>
 
-        <label>Nome completo</label>
-        <input value={nome} onChange={(e) => setNome(e.target.value)} />
+          <div>
+            <label>Nome completo</label>
+            <input value={nome} onChange={(e) => setNome(e.target.value)} />
+          </div>
 
-        <label>Papel</label>
-        <select value={papel} onChange={(e) => setPapel(e.target.value)}>
-          <option value="corretor">Corretor</option>
-          <option value="assistente">Assistente</option>
-          <option value="administrador">Administrador</option>
-          <option value="master">Master</option>
-        </select>
+          <div>
+            <label>Papel</label>
+            <select value={papel} onChange={(e) => setPapel(e.target.value)}>
+              <option value="corretor">Corretor</option>
+              <option value="assistente">Assistente</option>
+              <option value="administrador">Administrador</option>
+              <option value="master">Master</option>
+            </select>
+          </div>
+        </div>
 
         {erro && <p className="ls-modal-erro">{erro}</p>}
         {sucesso && <p className="config-sucesso">{sucesso}</p>}
@@ -241,21 +249,27 @@ function TransferirCarteiraCard() {
         para outro corretor, preservando o histórico completo (contratos, cotações, demandas).
       </p>
 
-      <label>De (corretor de origem)</label>
-      <select value={origemId} onChange={(e) => setOrigemId(e.target.value)}>
-        <option value="">Selecione...</option>
-        {perfis.map((p) => (
-          <option key={p.id} value={p.id}>{p.nome_completo} {!p.ativo ? '(inativo)' : ''}</option>
-        ))}
-      </select>
+      <div className="config-form-grid">
+        <div>
+          <label>De (corretor de origem)</label>
+          <select value={origemId} onChange={(e) => setOrigemId(e.target.value)}>
+            <option value="">Selecione...</option>
+            {perfis.map((p) => (
+              <option key={p.id} value={p.id}>{p.nome_completo} {!p.ativo ? '(inativo)' : ''}</option>
+            ))}
+          </select>
+        </div>
 
-      <label>Para (corretor de destino)</label>
-      <select value={destinoId} onChange={(e) => setDestinoId(e.target.value)}>
-        <option value="">Selecione...</option>
-        {perfis.filter((p) => p.ativo).map((p) => (
-          <option key={p.id} value={p.id}>{p.nome_completo}</option>
-        ))}
-      </select>
+        <div>
+          <label>Para (corretor de destino)</label>
+          <select value={destinoId} onChange={(e) => setDestinoId(e.target.value)}>
+            <option value="">Selecione...</option>
+            {perfis.filter((p) => p.ativo).map((p) => (
+              <option key={p.id} value={p.id}>{p.nome_completo}</option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       {erro && <p className="ls-modal-erro">{erro}</p>}
       {resultado && <p className="config-sucesso">{resultado}</p>}

@@ -9,6 +9,7 @@ import { listarCorretores } from '../../lib/crm/apolicesService'
 import NovoClienteModal from './NovoClienteModal'
 import { formatarDataBR, dataLocalISO } from '../../lib/utils/formatarData'
 import { useAuth } from '../auth/AuthContext'
+import SeletorCarteira from '../../components/SeletorCarteira'
 
 const COLUNAS = [
   { status: 'prospect', titulo: 'Novo Prospect' },
@@ -90,16 +91,16 @@ export default function PipelinePage() {
         </div>
         <div className="pipeline-header-acoes">
           {ehMaster && (
-            <select
-              value={corretorVisualizado ?? ''}
-              onChange={(e) => setCorretorVisualizado(e.target.value || perfil.id)}
-              title="Ver carteira de outro corretor"
-            >
-              <option value={perfil.id}>👤 Meus clientes</option>
-              {corretores.filter((c) => c.id !== perfil.id).map((c) => (
-                <option key={c.id} value={c.id}>Carteira de: {c.nome_completo}</option>
-              ))}
-            </select>
+            <SeletorCarteira
+              valorSelecionado={corretorVisualizado ?? perfil.id}
+              aoSelecionar={setCorretorVisualizado}
+              opcoes={[
+                { id: perfil.id, rotulo: 'Meus clientes', icone: '👤' },
+                ...corretores
+                  .filter((c) => c.id !== perfil.id)
+                  .map((c, i) => ({ id: c.id, rotulo: `Carteira de: ${c.nome_completo}`, icone: '🗂️', separadorAntes: i === 0 })),
+              ]}
+            />
           )}
           <input
             type="text"
