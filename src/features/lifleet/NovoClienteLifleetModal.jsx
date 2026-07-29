@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { criarClienteProspect } from '../../lib/crm/clientesService'
 import { operacional } from '../../lib/supabaseSchemas'
+import { useAuth } from '../auth/AuthContext'
 
-export default function NovoClienteLifleetModal({ onFechar, onCriado }) {
+export default function NovoClienteLifleetModal({ onFechar, onCriado, corretorAlvoId }) {
   const [tipoPessoa, setTipoPessoa] = useState(null)
 
   return (
@@ -12,7 +13,7 @@ export default function NovoClienteLifleetModal({ onFechar, onCriado }) {
           <EscolhaTipoPessoa onEscolher={setTipoPessoa} onFechar={onFechar} />
         )}
         {tipoPessoa && (
-          <Formulario tipoPessoa={tipoPessoa} onFechar={onFechar} onCriado={onCriado} onVoltar={() => setTipoPessoa(null)} />
+          <Formulario tipoPessoa={tipoPessoa} onFechar={onFechar} onCriado={onCriado} onVoltar={() => setTipoPessoa(null)} corretorAlvoId={corretorAlvoId} />
         )}
       </div>
     </div>
@@ -42,7 +43,8 @@ function EscolhaTipoPessoa({ onEscolher, onFechar }) {
 }
 
 /** Formulário enxuto — comum aos dois tipos, só troca o rótulo/campo de identificação */
-function Formulario({ tipoPessoa, onFechar, onCriado, onVoltar }) {
+function Formulario({ tipoPessoa, onFechar, onCriado, onVoltar, corretorAlvoId }) {
+  const { perfil } = useAuth()
   const ehPessoaFisica = tipoPessoa === 'fisica'
   const [form, setForm] = useState({
     razao_social: '',
@@ -69,6 +71,7 @@ function Formulario({ tipoPessoa, onFechar, onCriado, onVoltar }) {
 
       await criarClienteProspect({
         organizacao_id: org.id,
+        corretor_id: corretorAlvoId ?? perfil.id,
         modulo: 'auto',
         tipo_pessoa: tipoPessoa,
         razao_social: form.razao_social,

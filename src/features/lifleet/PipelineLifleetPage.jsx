@@ -5,8 +5,10 @@ import {
   atualizarStatusClienteProspect,
   listarVigenciasProximas,
 } from '../../lib/crm/clientesService'
+import { listarCorretores } from '../../lib/crm/apolicesService'
 import { formatarDataBR, dataLocalISO } from '../../lib/utils/formatarData'
 import NovoClienteLifleetModal from './NovoClienteLifleetModal'
+import { useAuth } from '../auth/AuthContext'
 
 const COLUNAS = [
   { status: 'prospect', titulo: 'Novo Prospect' },
@@ -23,23 +25,31 @@ const TRADUZIR_SITUACAO = {
 }
 
 export default function PipelineLifleetPage() {
+  const { perfil } = useAuth()
+  const ehMaster = perfil?.papel === 'master'
   const [itens, setItens] = useState([])
   const [vigencias, setVigencias] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [modalAberto, setModalAberto] = useState(false)
   const [mostrarFuturas, setMostrarFuturas] = useState(false)
   const [busca, setBusca] = useState('')
+  const [corretores, setCorretores] = useState([])
+  const [corretorVisualizado, setCorretorVisualizado] = useState(perfil?.id ?? null)
   const navigate = useNavigate()
 
   useEffect(() => {
+    if (ehMaster) listarCorretores().then(setCorretores).catch(() => {})
+  }, [ehMaster])
+
+  useEffect(() => {
     carregar()
-  }, [mostrarFuturas, busca])
+  }, [mostrarFuturas, busca, corretorVisualizado])
 
   async function carregar() {
     setCarregando(true)
     const [lista, vigenciasProximas] = await Promise.all([
-      listarClientesProspects({ mostrarFuturas: mostrarFuturas || busca.trim().length > 0, modulo: 'auto' }),
-      listarVigenciasProximas(90, 'auto'),
+      listarClientesProspects({ mostrarFuturas: mostrarFuturas || busca.trim().length > 0, modulo: 'auto', corretorId: corretorVisualizado }),
+      listarVigenciasProximas(90, 'auto', corretorVisualizado),
     ])
     setItens(lista)
     setVigencias(vigenciasProximas)
@@ -79,6 +89,18 @@ export default function PipelineLifleetPage() {
           </p>
         </div>
         <div className="pipeline-header-acoes">
+          {ehMaster && (
+            <select
+              value={corretorVisualizado ?? ''}
+              onChange={(e) => setCorretorVisualizado(e.target.value || perfil.id)}
+              title="Ver carteira de outro corretor"
+            >
+              <option value={perfil.id}>👤 Meus clientes</option>
+              {corretores.filter((c) => c.id !== perfil.id).map((c) => (
+                <option key={c.id} value={c.id}>Carteira de: {c.nome_completo}</option>
+              ))}
+            </select>
+          )}
           <input
             type="text"
             className="pipeline-busca"
@@ -168,6 +190,7 @@ export default function PipelineLifleetPage() {
 
       {modalAberto && (
         <NovoClienteLifleetModal
+          corretorAlvoId={corretorVisualizado}
           onFechar={() => setModalAberto(false)}
           onCriado={() => {
             setModalAberto(false)

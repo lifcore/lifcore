@@ -7,6 +7,13 @@ export default function PerfilPage() {
   const { perfil } = useAuth()
   const [nome, setNome] = useState(perfil?.nome_completo ?? '')
   const [telefone, setTelefone] = useState(perfil?.telefone ?? '')
+  const [cpf, setCpf] = useState(perfil?.cpf ?? '')
+  const [endereco, setEndereco] = useState(perfil?.endereco ?? '')
+  const [banco, setBanco] = useState(perfil?.banco ?? '')
+  const [agencia, setAgencia] = useState(perfil?.agencia ?? '')
+  const [conta, setConta] = useState(perfil?.conta ?? '')
+  const [tipoConta, setTipoConta] = useState(perfil?.tipo_conta ?? 'corrente')
+  const [chavePix, setChavePix] = useState(perfil?.chave_pix ?? '')
   const [salvandoPerfil, setSalvandoPerfil] = useState(false)
   const [sucessoPerfil, setSucessoPerfil] = useState(null)
 
@@ -31,7 +38,17 @@ export default function PerfilPage() {
     setSucessoPerfil(null)
     const { error } = await supabase
       .from('perfis')
-      .update({ nome_completo: nome, telefone })
+      .update({
+        nome_completo: nome,
+        telefone,
+        cpf,
+        endereco,
+        banco,
+        agencia,
+        conta,
+        tipo_conta: tipoConta,
+        chave_pix: chavePix,
+      })
       .eq('id', perfil.id)
     setSalvandoPerfil(false)
     if (!error) setSucessoPerfil('Perfil atualizado com sucesso.')
@@ -63,11 +80,38 @@ export default function PerfilPage() {
         <label>E-mail (login)</label>
         <input value={perfil?.email ?? ''} disabled />
 
-        <label>Telefone</label>
+        <label>Telefone / Celular</label>
         <input value={telefone ?? ''} onChange={(e) => setTelefone(e.target.value)} placeholder="(11) 91234-5678" />
+
+        <label>CPF</label>
+        <input value={cpf ?? ''} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" />
+
+        <label>Endereço (opcional)</label>
+        <input value={endereco ?? ''} onChange={(e) => setEndereco(e.target.value)} placeholder="Rua, número, cidade..." />
 
         <label>Papel</label>
         <input value={perfil?.papel ?? ''} disabled />
+
+        <h4 style={{ marginTop: '1.5rem' }}>Dados Bancários</h4>
+        <p className="config-instrucao">Usados para pagamento de comissão.</p>
+
+        <label>Banco</label>
+        <input value={banco ?? ''} onChange={(e) => setBanco(e.target.value)} placeholder="Ex: Itaú, Nubank..." />
+
+        <label>Agência</label>
+        <input value={agencia ?? ''} onChange={(e) => setAgencia(e.target.value)} />
+
+        <label>Conta</label>
+        <input value={conta ?? ''} onChange={(e) => setConta(e.target.value)} />
+
+        <label>Tipo de Conta</label>
+        <select value={tipoConta} onChange={(e) => setTipoConta(e.target.value)}>
+          <option value="corrente">Corrente</option>
+          <option value="poupanca">Poupança</option>
+        </select>
+
+        <label>Chave PIX (opcional)</label>
+        <input value={chavePix ?? ''} onChange={(e) => setChavePix(e.target.value)} placeholder="CPF, e-mail, telefone ou chave aleatória" />
 
         {sucessoPerfil && <p className="config-sucesso">{sucessoPerfil}</p>}
 

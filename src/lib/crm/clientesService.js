@@ -14,12 +14,18 @@ function dataLocalHoje(diasAFrente = 0) {
  * janela de tempo — são as mais urgentes de todas.
  * mostrarFuturas=true remove esse limite e traz tudo.
  */
-export async function listarClientesProspects({ mostrarFuturas = false, modulo = 'saude' } = {}) {
-  const { data, error } = await operacional
+export async function listarClientesProspects({ mostrarFuturas = false, modulo = 'saude', corretorId = null } = {}) {
+  let query = operacional
     .from('clientes_prospects')
     .select('*, contatos(*)')
     .eq('modulo', modulo)
     .order('proxima_acao_data', { ascending: true, nullsFirst: false })
+
+  if (corretorId) {
+    query = query.eq('corretor_id', corretorId)
+  }
+
+  const { data, error } = await query
 
   if (error) throw new Error(`Erro ao listar clientes/prospects: ${error.message}`)
 
@@ -501,8 +507,8 @@ export async function recalcularProximaAcaoCliente(clienteProspectId) {
     })
     .eq('id', clienteProspectId)
 }
-export async function listarVigenciasProximas(diasLimite = 90, modulo = 'saude') {
-  const { data, error } = await operacional
+export async function listarVigenciasProximas(diasLimite = 90, modulo = 'saude', corretorId = null) {
+  let query = operacional
     .from('clientes_prospects')
     .select('id, razao_social, status, data_vigencia')
     .eq('modulo', modulo)
@@ -510,6 +516,12 @@ export async function listarVigenciasProximas(diasLimite = 90, modulo = 'saude')
     .lte('data_vigencia', dataLocalISO(diasLimite))
     .gte('data_vigencia', dataLocalISO())
     .order('data_vigencia')
+
+  if (corretorId) {
+    query = query.eq('corretor_id', corretorId)
+  }
+
+  const { data, error } = await query
 
   if (error) throw new Error(`Erro ao consultar vigências: ${error.message}`)
   return data ?? []

@@ -5,8 +5,10 @@ import {
   atualizarStatusClienteProspect,
   listarVigenciasProximas,
 } from '../../lib/crm/clientesService'
+import { listarCorretores } from '../../lib/crm/apolicesService'
 import NovoClienteModal from './NovoClienteModal'
 import { formatarDataBR, dataLocalISO } from '../../lib/utils/formatarData'
+import { useAuth } from '../auth/AuthContext'
 
 const COLUNAS = [
   { status: 'prospect', titulo: 'Novo Prospect' },
@@ -23,23 +25,31 @@ const TRADUZIR_SITUACAO = {
 }
 
 export default function PipelinePage() {
+  const { perfil } = useAuth()
+  const ehMaster = perfil?.papel === 'master'
   const [itens, setItens] = useState([])
   const [vigencias, setVigencias] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [modalAberto, setModalAberto] = useState(false)
   const [mostrarFuturas, setMostrarFuturas] = useState(false)
   const [busca, setBusca] = useState('')
+  const [corretores, setCorretores] = useState([])
+  const [corretorVisualizado, setCorretorVisualizado] = useState(perfil?.id ?? null)
   const navigate = useNavigate()
 
   useEffect(() => {
+    if (ehMaster) listarCorretores().then(setCorretores).catch(() => {})
+  }, [ehMaster])
+
+  useEffect(() => {
     carregar()
-  }, [mostrarFuturas, busca])
+  }, [mostrarFuturas, busca, corretorVisualizado])
 
   async function carregar() {
     setCarregando(true)
     const [lista, vigenciasProximas] = await Promise.all([
-      listarClientesProspects({ mostrarFuturas: mostrarFuturas || busca.trim().length > 0 }),
-      listarVigenciasProximas(90),
+      listarClientesProspects({ mostrarFuturas: mostrarFuturas || busca.trim().length > 0, corretorId: corretorVisualizado }),
+      listarVigenciasProximas(90, 'saude', corretorVisualizado),
     ])
     setItens(lista)
     setVigencias(vigenciasProximas)
@@ -51,7 +61,8 @@ export default function PipelinePage() {
       ? itens.filter(
           (i) =>
             i.razao_social?.toLowerCase().includes(busca.toLowerCase()) ||
-            i.cnpj?.toLowerCase().includes(busca.toLowerCase())
+            i.cnpj?.toLowerCase().includes(busca.toLowerCase()) ||
+            i.cpf?.toLowerCase().includes(busca.toLowerCase())
         )
       : itens
     return filtrados.filter((i) => i.status === status)
@@ -78,10 +89,22 @@ export default function PipelinePage() {
           </p>
         </div>
         <div className="pipeline-header-acoes">
+          {ehMaster && (
+            <select
+              value={corretorVisualizado ?? ''}
+              onChange={(e) => setCorretorVisualizado(e.target.value || perfil.id)}
+              title="Ver carteira de outro corretor"
+            >
+              <option value={perfil.id}>👤 Meus clientes</option>
+              {corretores.filter((c) => c.id !== perfil.id).map((c) => (
+                <option key={c.id} value={c.id}>Carteira de: {c.nome_completo}</option>
+              ))}
+            </select>
+          )}
           <input
             type="text"
             className="pipeline-busca"
-            placeholder="🔍 Buscar por nome ou CNPJ..."
+            placeholder="🔍 Buscar por nome, CNPJ ou CPF..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
@@ -167,6 +190,7 @@ export default function PipelinePage() {
 
       {modalAberto && (
         <NovoClienteModal
+          corretorAlvoId={corretorVisualizado}
           onFechar={() => setModalAberto(false)}
           onCriado={() => {
             setModalAberto(false)

@@ -44,6 +44,15 @@ export function AuthProvider({ children }) {
 
     if (error) {
       console.error('Erro ao buscar perfil:', error.message)
+      setPerfil(null)
+    } else if (data && data.ativo === false) {
+      // Conta desativada (ex: corretor que saiu da empresa) — encerra a
+      // sessão imediatamente, mesmo que o login no Supabase Auth ainda
+      // exista. Sem isso, "desativar" um corretor não bloqueava nada de
+      // verdade, só escondia telas.
+      await supabase.auth.signOut()
+      setUser(null)
+      setPerfil(null)
     } else {
       setPerfil(data)
     }

@@ -1,16 +1,21 @@
 import { NavLink } from 'react-router-dom'
+import { useAuth } from '../features/auth/AuthContext'
 
 const ITENS = [
   { path: '/', icone: '🏠', titulo: 'Início (Pipeline)' },
   { path: '/perfil', icone: '👤', titulo: 'Meu Perfil' },
   { path: '/mensagens', icone: '💬', titulo: 'Mensagens Padrão' },
-  { path: '/configuracoes', icone: '⚙️', titulo: 'Configurações' },
+  { path: '/configuracoes', icone: '⚙️', titulo: 'Configurações', somenteMasterAdmin: true },
 ]
 
 export default function SideIconMenu() {
+  const { perfil } = useAuth()
+  const podeVerConfiguracoes = perfil?.papel === 'master' || perfil?.papel === 'administrador'
+  const itensVisiveis = ITENS.filter((item) => !item.somenteMasterAdmin || podeVerConfiguracoes)
+
   return (
     <nav className="side-icon-menu">
-      {ITENS.map((item) => (
+      {itensVisiveis.map((item) => (
         <NavLink
           key={item.path}
           to={item.path}
