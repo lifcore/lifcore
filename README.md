@@ -1,19 +1,34 @@
-# CoreON
+# Lifcore
 
-Plataforma cognitiva da LifitSeg Consultoria de Benefícios.
+Plataforma inteligente para corretores de seguros — LifitSeg.
+
+Módulos: **Lifcare** (Saúde/Odonto — ativo), Lifleet (Auto/Frota — em breve),
+Lifplan (Consórcio/Previdência — em breve), Lifsure (Seguros Gerais — em breve).
 
 ## Estrutura do projeto
 
 ```
 src/
   lib/
-    supabaseClient.js   → conexão com o banco de dados (Supabase)
-    aiProvider.js       → camada de IA desacoplada (Anthropic hoje, outro provedor amanhã)
+    supabaseClient.js       → conexão com o banco (Supabase)
+    supabaseSchemas.js      → clients para os schemas institucional/operacional
+    aiProvider.js           → camada de IA desacoplada (Anthropic hoje, outro provedor amanhã)
+    crm/                    → serviços de Clientes, Contratos, Cotações, Demandas, Mensagens
+    especialista/           → motor do Especialista de Saúde (classificação, playbooks, chat)
+  components/
+    TopNav.jsx              → menu superior (módulos)
+    SideIconMenu.jsx        → menu lateral (Perfil, Mensagens, Configurações)
+    EspecialistaFlutuante.jsx → botão flutuante de Consulta Rápida
   features/
-    auth/               → login e contexto de autenticação
-    layout/             → tela principal pós-login
+    auth/                   → login e contexto de autenticação
+    crm/                    → Pipeline, Ficha do Cliente, Contratos, Cotações, Demandas
+    especialista/           → tela de chat do Especialista de Saúde
+    configuracoes/          → cadastro de corretor
+    perfil/                 → dados do usuário e da corretora
+    mensagens/              → templates de mensagem (WhatsApp)
   styles/
-    index.css           → estilos base
+    tokens.css              → identidade visual (cores, tipografia)
+    crm.css                 → estilos das telas de CRM
 ```
 
 ## Como rodar localmente
@@ -48,17 +63,30 @@ no futuro apenas mudando a variável `VITE_AI_PROVIDER`, sem reescrever
 lógica de negócio.
 
 **Importante:** a chamada direta do navegador é apenas para validar a
-integração nesta fase inicial. Antes de ir para produção com usuários
-reais, essa chamada deve migrar para um backend (Supabase Edge Function,
-por exemplo), para não expor a chave de API publicamente.
+integração nesta fase. Antes de produção com usuários reais, essa chamada
+deve migrar para um backend (Supabase Edge Function), para não expor a
+chave de API publicamente.
 
 ## Perfis de usuário
 
-O sistema reconhece 4 papéis (definidos na tabela `perfis` do Supabase):
+O sistema reconhece 4 papéis (tabela `perfis` do Supabase):
 `master`, `administrador`, `corretor`, `assistente`.
 
-## Próximos passos
+## Schemas do banco de dados
 
-Aguardando as especificações do Kit de Engenharia (Constituição, Blueprint,
-Framework dos Especialistas) para modelar os módulos de negócio
-(Knowledge Engine, Decision Engine, Especialista de Saúde).
+- **`institucional`** — patrimônio da LifitSeg: Biblioteca (ANS, Operadoras,
+  Regulamentação), Modelos de Raciocínio, Playbooks, Casos Fundamentais.
+  Evolui só por validação humana explícita.
+- **`operacional`** — dia a dia: Clientes/Prospects, Contratos, Cotações,
+  Demandas, Eventos, Consultas Rápidas, Candidatos a Conhecimento.
+
+## Especialista de Saúde
+
+- **Consulta Rápida** (botão flutuante, sem cliente vinculado): registro
+  leve, sem ciclo de vida — pode ser vinculada a um cliente depois.
+- **Demanda** (dentro da ficha de um cliente): ciclo de vida completo
+  (aberta → em andamento → encerrada), com Especialista como ação opcional
+  dentro dela.
+- Ao encerrar uma Demanda, o sistema sugere um resumo (via IA) para virar
+  Caso Real — mas só vira conhecimento institucional com aprovação humana
+  explícita (tabela `candidatos_conhecimento`).

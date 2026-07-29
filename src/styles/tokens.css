@@ -1,0 +1,131 @@
+/* ============================================================
+   LifitSeg — Tokens de Design
+   ============================================================
+   Identidade: consultoria de benefícios — confiança, precisão,
+   cuidado. Fugimos do "azul corporativo genérico" e do laranja
+   terracota (tique visual comum em IA) em favor de um verde-azulado
+   profundo (saúde + estabilidade financeira) com um dourado quente
+   como acento — remete a "cuidado" sem parecer clínico/frio.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Cor */
+  --ls-primary: #0e2a3d;       /* verde-azulado profundo — headers, textos de destaque */
+  --ls-primary-light: #163f59; /* variação para hover/estados */
+  --ls-bg: #f7f5ef;            /* fundo geral, quente e claro (não branco puro) */
+  --ls-surface: #ffffff;       /* cards, painéis */
+  --ls-accent: #c98a3e;        /* dourado quente — CTAs, destaques */
+  --ls-accent-soft: #f3e4cc;   /* fundo suave do accent (badges, hover leve) */
+  --ls-success: #2f8f6e;       /* verde — estados positivos, "fechado" */
+  --ls-warning: #d97706;       /* atenção — vigência próxima */
+  --ls-danger: #b3432f;        /* erro, urgente */
+  --ls-border: #e4ded2;        /* bordas sutis */
+  --ls-text: #1c2a2f;          /* texto principal */
+  --ls-text-muted: #6b6459;    /* texto secundário */
+
+  /* Tipografia */
+  --ls-font-display: 'Fraunces', Georgia, serif;
+  --ls-font-body: 'Inter', system-ui, sans-serif;
+  --ls-font-mono: 'IBM Plex Mono', monospace;
+
+  /* Espaçamento e forma */
+  --ls-radius: 10px;
+  --ls-radius-sm: 6px;
+  --ls-shadow: 0 2px 16px rgba(14, 42, 61, 0.08);
+  --ls-shadow-lift: 0 8px 28px rgba(14, 42, 61, 0.14);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--ls-bg);
+  color: var(--ls-text);
+  font-family: var(--ls-font-body);
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--ls-font-display);
+  color: var(--ls-primary);
+  font-weight: 600;
+  margin: 0;
+}
+
+.ls-mono {
+  font-family: var(--ls-font-mono);
+}
+
+.ls-card {
+  background: var(--ls-surface);
+  border: 1px solid var(--ls-border);
+  border-radius: var(--ls-radius);
+  box-shadow: var(--ls-shadow);
+}
+
+.ls-btn {
+  font-family: var(--ls-font-body);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: var(--ls-radius-sm);
+  border: none;
+  cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.15s ease;
+}
+
+.ls-btn:active {
+  transform: scale(0.98);
+}
+
+.ls-btn-primary {
+  background: var(--ls-primary);
+  color: white;
+}
+
+.ls-btn-primary:hover {
+  background: var(--ls-primary-light);
+}
+
+.ls-btn-accent {
+  background: var(--ls-accent);
+  color: white;
+}
+
+.ls-btn-ghost {
+  background: transparent;
+  color: var(--ls-primary);
+  border: 1px solid var(--ls-border);
+}
+
+.ls-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ls-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.ls-badge-prospect { background: var(--ls-accent-soft); color: var(--ls-accent); }
+.ls-badge-cliente { background: #dff2ea; color: var(--ls-success); }
+.ls-badge-inativo { background: #eee; color: var(--ls-text-muted); }
+
+:focus-visible {
+  outline: 2px solid var(--ls-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

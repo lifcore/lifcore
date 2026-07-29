@@ -1,4 +1,6 @@
 import { useAuth } from '../auth/AuthContext'
+import EspecialistaSaude from '../especialista/EspecialistaSaude'
+import '../especialista/especialista.css'
 
 export default function DashboardPage() {
   const { perfil, logout } = useAuth()
@@ -16,10 +18,7 @@ export default function DashboardPage() {
       </header>
 
       <main>
-        <p>
-          Fundação criada com sucesso. Aqui entrarão os módulos do CoreON
-          conforme forem especificados.
-        </p>
+        <EspecialistaSaude />
       </main>
     </div>
   )

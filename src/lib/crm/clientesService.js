@@ -1,0 +1,523 @@
+import { institucional, operacional } from '../supabaseSchemas'
+import { supabase } from '../supabaseClient'
+
+/** Retorna a data de hoje no formato YYYY-MM-DD, usando o horário LOCAL (não UTC) */
+function dataLocalHoje(diasAFrente = 0) {
+  const data = new Date()
+  data.setDate(data.getDate() + diasAFrente)
+  const ano = data.getFullYear()
+  const mes = String(data.getMonth() + 1).padStart(2, '0')
+  const dia = String(data.getDate()).padStart(2, '0')
+  return `${ano}-${mes}-${dia}`
+}
+
+/**
+ * Lista clientes/prospects — por padrão mostra uma janela de 15 dias
+ * (hoje até +15 dias), sempre ordenados por data de ação mais próxima.
+ * Ações atrasadas (data no passado) SEMPRE aparecem, mesmo além da
+ * janela de tempo — são as mais urgentes de todas.
+ * mostrarFuturas=true remove esse limite e traz tudo.
+ */
+export async function listarClientesProspects({ mostrarFuturas = false } = {}) {
+  const { data, error } = await operacional
+    .from('clientes_prospects')
+    .select('*, contatos(*)')
+    .order('proxima_acao_data', { ascending: true, nullsFirst: false })
+
+  if (error) throw new Error(`Erro ao listar clientes/prospects: ${error.message}`)
+
+  const hoje = dataLocalHoje()
+  const limiteJanela = dataLocalHoje(15)
+
+  const semInativos = (data ?? []).filter((c) => c.status !== 'inativo')
+
+  const listaFinal = mostrarFuturas
+    ? semInativos
+    : semInativos.filter((c) => !c.proxima_acao_data || c.proxima_acao_data <= limiteJanela)
+
+  // Busca a demanda em aberto mais próxima de cada cliente, para exibir
+  // o status real (Em andamento, Aguardando cliente, etc.) no card —
+  // não só se está "no prazo" ou "atrasada".
+  const idsClientes = listaFinal.map((c) => c.id)
+  if (idsClientes.length > 0) {
+    const { data: demandasAbertas } = await operacional
+      .from('casos')
+      .select('cliente_prospect_id, situacao, data_proxima_acao')
+      .in('cliente_prospect_id', idsClientes)
+      .neq('situacao', 'encerrado')
+      .order('data_proxima_acao', { ascending: true, nullsFirst: false })
+
+    const situacaoPorCliente = {}
+    for (const d of demandasAbertas ?? []) {
+      if (!situacaoPorCliente[d.cliente_prospect_id]) {
+        situacaoPorCliente[d.cliente_prospect_id] = d.situacao
+      }
+    }
+    for (const cliente of listaFinal) {
+      cliente.situacaoDemandaAtual = situacaoPorCliente[cliente.id] ?? null
+    }
+  }
+
+  return listaFinal
+}
+
+/** Define/atualiza a próxima ação de um cliente/prospect */
+export async function definirProximaAcao(id, data, descricao) {
+  const { error } = await operacional
+    .from('clientes_prospects')
+    .update({ proxima_acao_data: data, proxima_acao_descricao: descricao, atualizado_em: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw new Error(`Erro ao definir próxima ação: ${error.message}`)
+}
+
+/** Busca um cliente/prospect específico, com contatos, contratos e cotações */
+export async function buscarClienteProspectCompleto(id) {
+  const { data: cliente, error: erroCliente } = await operacional
+    .from('clientes_prospects')
+    .select('*')
+    .eq('id', id)
+    .single()
+  if (erroCliente) throw new Error(`Erro ao buscar cliente: ${erroCliente.message}`)
+
+  const { data: contatos } = await operacional
+    .from('contatos')
+    .select('*')
+    .eq('cliente_prospect_id', id)
+    .order('tipo')
+
+  const { data: contratos } = await operacional
+    .from('contratos')
+    .select('*, itens_contrato(*)')
+    .eq('cliente_prospect_id', id)
+
+  const { data: cotacoes } = await operacional
+    .from('cotacoes')
+    .select('*, itens_cotacao(*)')
+    .eq('cliente_prospect_id', id)
+    .order('data_cotacao', { ascending: false })
+
+  const { data: demandas } = await operacional
+    .from('casos')
+    .select('*')
+    .eq('cliente_prospect_id', id)
+    .order('criado_em', { ascending: false })
+
+  let grupoInfo = null
+  if (cliente.grupo_economico_id) {
+    const { membros, totalVidas } = await buscarMembrosDoGrupo(cliente.grupo_economico_id, id)
+    const { data: grupo } = await operacional
+      .from('grupos_economicos')
+      .select('nome_grupo')
+      .eq('id', cliente.grupo_economico_id)
+      .single()
+    grupoInfo = { nomeGrupo: grupo?.nome_grupo, outrosMembros: membros, totalVidasGrupo: totalVidas + (cliente.numero_colaboradores ?? 0) }
+  }
+
+  return { cliente, contatos: contatos ?? [], contratos: contratos ?? [], cotacoes: cotacoes ?? [], demandas: demandas ?? [], grupoInfo }
+}
+
+/**
+ * Exclui um cliente/prospect e todo o histórico vinculado (contratos,
+ * cotações, demandas/eventos).
+ *
+ * ATENÇÃO — MODO ATUAL: FASE DE TESTES.
+ * Por decisão explícita do Raphael (fase de validação do sistema),
+ * esta função exclui de verdade, sem restrição, para permitir limpar
+ * cadastros de teste sem acumular lixo na base.
+ *
+ * ANTES DE IR PARA PRODUÇÃO REAL: reintroduzir a trava que impede
+ * excluir clientes com histórico real (bloquear quando houver
+ * contratos/cotações/casos, sugerindo "Marcar Inativo" em vez disso).
+ * Isso preserva o princípio de rastreabilidade da Constituição.
+ */
+export async function excluirClienteProspect(id) {
+  // Ordem importa: cotações (e seus itens, via cascade) e casos (e seus
+  // eventos, via cascade) precisam sair antes do cliente, para não
+  // esbarrar em restrição de chave estrangeira.
+  await operacional.from('itens_cotacao').delete().in(
+    'cotacao_id',
+    (await operacional.from('cotacoes').select('id').eq('cliente_prospect_id', id)).data?.map((c) => c.id) ?? []
+  )
+  await operacional.from('cotacoes').delete().eq('cliente_prospect_id', id)
+  await operacional.from('eventos').delete().in(
+    'caso_id',
+    (await operacional.from('casos').select('id').eq('cliente_prospect_id', id)).data?.map((c) => c.id) ?? []
+  )
+  await operacional.from('casos').delete().eq('cliente_prospect_id', id)
+  await operacional.from('contratos').delete().eq('cliente_prospect_id', id)
+  await operacional.from('contatos').delete().eq('cliente_prospect_id', id)
+
+  const { error } = await operacional.from('clientes_prospects').delete().eq('id', id)
+  if (error) throw new Error(`Erro ao excluir: ${error.message}`)
+}
+
+/** Atualiza dados cadastrais do cliente/prospect (CNPJ, segmento, vigência, etc.) */
+export async function atualizarClienteProspect(id, dados) {
+  const { error } = await operacional
+    .from('clientes_prospects')
+    .update({ ...dados, atualizado_em: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw new Error(`Erro ao atualizar cliente: ${error.message}`)
+}
+
+/** Lista todos os grupos econômicos cadastrados (para sugestão/autocomplete) */
+export async function listarGruposEconomicos() {
+  const { data, error } = await operacional
+    .from('grupos_economicos')
+    .select('*')
+    .order('nome_grupo')
+  if (error) throw new Error(`Erro ao listar grupos econômicos: ${error.message}`)
+  return data ?? []
+}
+
+/** Busca um grupo pelo nome, ou cria um novo se não existir (evita duplicar) */
+export async function buscarOuCriarGrupoEconomico(nomeGrupo, organizacaoId) {
+  const { data: existente } = await operacional
+    .from('grupos_economicos')
+    .select('*')
+    .ilike('nome_grupo', nomeGrupo.trim())
+    .maybeSingle()
+
+  if (existente) return existente
+
+  const { data: novoGrupo, error } = await operacional
+    .from('grupos_economicos')
+    .insert({ nome_grupo: nomeGrupo.trim(), organizacao_id: organizacaoId })
+    .select()
+    .single()
+  if (error) throw new Error(`Erro ao criar grupo econômico: ${error.message}`)
+  return novoGrupo
+}
+
+/** Busca todos os CNPJs/clientes de um grupo econômico, com total de vidas somado */
+export async function buscarMembrosDoGrupo(grupoEconomicoId, excluirClienteId = null) {
+  const { data, error } = await operacional
+    .from('clientes_prospects')
+    .select('id, razao_social, cnpj, numero_colaboradores, porte, status')
+    .eq('grupo_economico_id', grupoEconomicoId)
+  if (error) throw new Error(`Erro ao buscar membros do grupo: ${error.message}`)
+
+  const membros = data ?? []
+  const totalVidas = membros.reduce((soma, m) => soma + (m.numero_colaboradores ?? 0), 0)
+  const outros = excluirClienteId ? membros.filter((m) => m.id !== excluirClienteId) : membros
+
+  return { membros: outros, totalVidas }
+}
+
+/** Cria um novo cliente/prospect */
+export async function criarClienteProspect(dados) {
+  const { data, error } = await operacional
+    .from('clientes_prospects')
+    .insert(dados)
+    .select()
+    .single()
+  if (error) throw new Error(`Erro ao criar cliente/prospect: ${error.message}`)
+  return data
+}
+
+/** Atualiza status (usado pelo Kanban ao arrastar entre colunas) */
+export async function atualizarStatusClienteProspect(id, status) {
+  const { error } = await operacional
+    .from('clientes_prospects')
+    .update({ status, atualizado_em: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw new Error(`Erro ao atualizar status: ${error.message}`)
+}
+
+/** Salva (cria ou atualiza) um contato primário/secundário */
+export async function salvarContato(clienteProspectId, tipo, dados) {
+  const { data: existente } = await operacional
+    .from('contatos')
+    .select('id')
+    .eq('cliente_prospect_id', clienteProspectId)
+    .eq('tipo', tipo)
+    .maybeSingle()
+
+  if (existente) {
+    const { error } = await operacional
+      .from('contatos')
+      .update({ ...dados, atualizado_em: new Date().toISOString() })
+      .eq('id', existente.id)
+    if (error) throw new Error(`Erro ao atualizar contato: ${error.message}`)
+  } else {
+    const { error } = await operacional
+      .from('contatos')
+      .insert({ cliente_prospect_id: clienteProspectId, tipo, ...dados })
+    if (error) throw new Error(`Erro ao criar contato: ${error.message}`)
+  }
+}
+
+/** Calcula o porte automaticamente a partir do número de vidas (regra da LifitSeg) */
+export function calcularPorte(numeroVidas) {
+  if (numeroVidas >= 2 && numeroVidas <= 29) return 'PME1'
+  if (numeroVidas >= 30 && numeroVidas <= 99) return 'PME2'
+  if (numeroVidas >= 100) return 'Negociado'
+  return null
+}
+
+/**
+ * Interpreta um valor digitado em formato brasileiro (vírgula OU ponto
+ * como decimal) — evita perder valores quando o campo aceita texto livre
+ * em vez de <input type="number">, que rejeita vírgula silenciosamente.
+ */
+export function parseValorBR(texto) {
+  if (texto === '' || texto === null || texto === undefined) return 0
+  const normalizado = String(texto).trim().replace(',', '.')
+  const valor = parseFloat(normalizado)
+  return isNaN(valor) ? 0 : valor
+}
+
+/** Lista o catálogo institucional de operadoras (para sugestão/autocomplete, reduz erro de digitação) */
+export async function listarCatalogoOperadoras() {
+  const { data, error } = await institucional
+    .from('operadoras')
+    .select('codigo, nome')
+    .eq('status', 'ativa')
+    .order('nome')
+  if (error) throw new Error(`Erro ao listar operadoras: ${error.message}`)
+  return data ?? []
+}
+
+/** Cria um novo contrato, com itens por faixa etária e sincroniza a vigência do cliente */
+export async function criarContrato(clienteProspectId, dados, itens = []) {
+  const { data: contrato, error } = await operacional
+    .from('contratos')
+    .insert({ cliente_prospect_id: clienteProspectId, ...dados })
+    .select()
+    .single()
+  if (error) throw new Error(`Erro ao criar contrato: ${error.message}`)
+
+  if (itens.length) {
+    const itensComId = itens.map((item) => ({ ...item, contrato_id: contrato.id }))
+    const { error: erroItens } = await operacional.from('itens_contrato').insert(itensComId)
+    if (erroItens) throw new Error(`Erro ao salvar itens do contrato: ${erroItens.message}`)
+  }
+
+  // A vigência do cliente reflete sempre o contrato ativo mais recente —
+  // evita ter que atualizar o mesmo dado em dois lugares manualmente.
+  if (dados.vigencia_fim) {
+    await atualizarClienteProspect(clienteProspectId, { data_vigencia: dados.vigencia_fim })
+  }
+
+  // Um contrato ativo significa que o prospect virou cliente de verdade —
+  // move automaticamente para a coluna "Cliente Ativo" do pipeline.
+  if (dados.status === 'ativo') {
+    await atualizarStatusClienteProspect(clienteProspectId, 'cliente')
+  }
+
+  return contrato
+}
+
+/** Atualiza um contrato existente, incluindo re-sincronizar itens por faixa e vigência do cliente */
+export async function atualizarContrato(contratoId, dados, itens = null) {
+  const { data: contratoAtualizado, error } = await operacional
+    .from('contratos')
+    .update(dados)
+    .eq('id', contratoId)
+    .select()
+    .single()
+  if (error) throw new Error(`Erro ao atualizar contrato: ${error.message}`)
+
+  if (itens !== null) {
+    await operacional.from('itens_contrato').delete().eq('contrato_id', contratoId)
+    if (itens.length) {
+      const itensComId = itens.map((item) => ({ ...item, contrato_id: contratoId }))
+      const { error: erroItens } = await operacional.from('itens_contrato').insert(itensComId)
+      if (erroItens) throw new Error(`Erro ao salvar itens do contrato: ${erroItens.message}`)
+    }
+  }
+
+  if (dados.vigencia_fim && contratoAtualizado.cliente_prospect_id) {
+    await atualizarClienteProspect(contratoAtualizado.cliente_prospect_id, { data_vigencia: dados.vigencia_fim })
+  }
+
+  if (dados.status === 'ativo' && contratoAtualizado.cliente_prospect_id) {
+    await atualizarStatusClienteProspect(contratoAtualizado.cliente_prospect_id, 'cliente')
+  }
+}
+
+/** Exclui um contrato (sem histórico próprio vinculado além de beneficiários, que ficam órfãos — atenção) */
+export async function excluirContrato(contratoId) {
+  const { error } = await operacional.from('contratos').delete().eq('id', contratoId)
+  if (error) throw new Error(`Erro ao excluir contrato: ${error.message}`)
+}
+
+/** Cria (ou atualiza status/registro) um novo Corretor — perfil já deve existir no Supabase Auth */
+export async function cadastrarCorretor({ email, nomeCompleto, papel }) {
+  const { data, error } = await supabase.rpc('criar_perfil_por_email', {
+    p_email: email,
+    p_nome: nomeCompleto,
+    p_papel: papel,
+  })
+  if (error) throw new Error(`Erro ao cadastrar corretor: ${error.message}`)
+  return data
+}
+export async function criarCotacao({ clienteProspectId, casoId, dados, itens }) {
+  const { data: cotacao, error } = await operacional
+    .from('cotacoes')
+    .insert({
+      cliente_prospect_id: clienteProspectId,
+      caso_id: casoId ?? null,
+      ...dados,
+    })
+    .select()
+    .single()
+
+  if (error) throw new Error(`Erro ao criar cotação: ${error.message}`)
+
+  if (itens?.length) {
+    const itensComId = itens.map((item) => ({ ...item, cotacao_id: cotacao.id }))
+    const { error: erroItens } = await operacional.from('itens_cotacao').insert(itensComId)
+    if (erroItens) throw new Error(`Erro ao salvar itens da cotação: ${erroItens.message}`)
+  }
+
+  // Toda cotação gerada agenda automaticamente uma próxima ação em 7
+  // dias. O status só avança para "Em Negociação" se o cliente ainda
+  // for um prospect novo — nunca REBAIXA quem já é "Cliente Ativo"
+  // (ex: cotação de renovação para um cliente que já está ativo).
+  const emSeteDias = new Date()
+  emSeteDias.setDate(emSeteDias.getDate() + 7)
+
+  const { data: clienteAtual } = await operacional
+    .from('clientes_prospects')
+    .select('status')
+    .eq('id', clienteProspectId)
+    .maybeSingle()
+
+  const patchCliente = {
+    proxima_acao_data: emSeteDias.toISOString().slice(0, 10),
+    proxima_acao_descricao: `Retomar cotação (${dados.operadora_nome_livre ?? 'operadora'})`,
+    atualizado_em: new Date().toISOString(),
+  }
+  if (clienteAtual?.status === 'prospect') {
+    patchCliente.status = 'em_negociacao'
+  }
+
+  await operacional.from('clientes_prospects').update(patchCliente).eq('id', clienteProspectId)
+
+  return cotacao
+}
+
+/** Atualiza uma cotação existente, substituindo os itens por faixa etária */
+export async function atualizarCotacao(cotacaoId, dados, itens = null) {
+  const { error } = await operacional.from('cotacoes').update(dados).eq('id', cotacaoId)
+  if (error) throw new Error(`Erro ao atualizar cotação: ${error.message}`)
+
+  if (itens !== null) {
+    await operacional.from('itens_cotacao').delete().eq('cotacao_id', cotacaoId)
+    if (itens.length) {
+      const itensComId = itens.map((item) => ({ ...item, cotacao_id: cotacaoId }))
+      const { error: erroItens } = await operacional.from('itens_cotacao').insert(itensComId)
+      if (erroItens) throw new Error(`Erro ao salvar itens da cotação: ${erroItens.message}`)
+    }
+  }
+}
+
+/** Exclui uma cotação (e seus itens, via cascade) */
+export async function excluirCotacao(cotacaoId) {
+  const { error } = await operacional.from('cotacoes').delete().eq('id', cotacaoId)
+  if (error) throw new Error(`Erro ao excluir cotação: ${error.message}`)
+}
+
+/** Abre uma demanda manual (sem passar pelo Especialista) — usado no botão "Nova Demanda" da aba Demandas */
+export async function criarDemandaManual({ clienteProspectId, organizacaoId, descricao, dataProximaAcao }) {
+  const { data: codigo } = await operacional.rpc('gerar_codigo_demanda_saude')
+
+  const { data, error } = await operacional
+    .from('casos')
+    .insert({
+      codigo,
+      organizacao_id: organizacaoId,
+      cliente_prospect_id: clienteProspectId,
+      demanda_original: descricao,
+      situacao: 'aberto',
+      data_proxima_acao: dataProximaAcao || null,
+    })
+    .select()
+    .single()
+
+  if (error) throw new Error(`Erro ao abrir demanda: ${error.message}`)
+
+  // Também atualiza a próxima ação do cliente, se informada
+  if (dataProximaAcao) {
+    await definirProximaAcao(clienteProspectId, dataProximaAcao, descricao)
+  }
+
+  return data
+}
+
+/** Registra uma atualização manual (nota do corretor, sem IA) na linha do tempo da demanda */
+export async function adicionarAtualizacaoManual(casoId, texto, usuarioId) {
+  const { error } = await operacional.from('eventos').insert({
+    caso_id: casoId,
+    tipo: 'atualizacao_manual',
+    descricao: texto,
+    usuario_responsavel: usuarioId,
+  })
+  if (error) throw new Error(`Erro ao registrar atualização: ${error.message}`)
+}
+
+/** Atualiza o status (situação) e/ou a data de próxima ação de uma demanda existente */
+export async function atualizarDemanda(casoId, { situacao, dataProximaAcao }) {
+  const patch = {}
+  if (situacao) patch.situacao = situacao
+  if (dataProximaAcao !== undefined) patch.data_proxima_acao = dataProximaAcao || null
+
+  const { data: casoAtualizado, error } = await operacional
+    .from('casos')
+    .update(patch)
+    .eq('id', casoId)
+    .select('cliente_prospect_id')
+    .single()
+  if (error) throw new Error(`Erro ao atualizar demanda: ${error.message}`)
+
+  // Sempre que o status muda (finalizar, reabrir, etc.), recalcula a
+  // próxima ação do cliente a partir das demandas que ainda estão
+  // abertas — evita "ação fantasma" de uma demanda já encerrada.
+  if (situacao && casoAtualizado?.cliente_prospect_id) {
+    await recalcularProximaAcaoCliente(casoAtualizado.cliente_prospect_id)
+  }
+}
+
+/**
+ * Recalcula a próxima ação de um cliente com base nas demandas ainda
+ * em aberto (a mais próxima "vence"). Se não houver nenhuma demanda
+ * aberta com data marcada, limpa o campo (sem deixar ação fantasma).
+ */
+export async function recalcularProximaAcaoCliente(clienteProspectId) {
+  const { data: demandasAbertas } = await operacional
+    .from('casos')
+    .select('data_proxima_acao, demanda_original')
+    .eq('cliente_prospect_id', clienteProspectId)
+    .neq('situacao', 'encerrado')
+    .not('data_proxima_acao', 'is', null)
+    .order('data_proxima_acao', { ascending: true })
+    .limit(1)
+
+  const proxima = demandasAbertas?.[0]
+
+  await operacional
+    .from('clientes_prospects')
+    .update({
+      proxima_acao_data: proxima?.data_proxima_acao ?? null,
+      proxima_acao_descricao: proxima?.demanda_original ?? null,
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq('id', clienteProspectId)
+}
+export async function listarVigenciasProximas(diasLimite = 90) {
+  const hoje = new Date()
+  const limite = new Date()
+  limite.setDate(hoje.getDate() + diasLimite)
+
+  const { data, error } = await operacional
+    .from('clientes_prospects')
+    .select('id, razao_social, status, data_vigencia')
+    .not('data_vigencia', 'is', null)
+    .lte('data_vigencia', limite.toISOString().slice(0, 10))
+    .gte('data_vigencia', hoje.toISOString().slice(0, 10))
+    .order('data_vigencia')
+
+  if (error) throw new Error(`Erro ao consultar vigências: ${error.message}`)
+  return data ?? []
+}

@@ -1,0 +1,106 @@
+.topnav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 2rem;
+  background: var(--ls-primary);
+  color: white;
+  gap: 2rem;
+}
+
+.topnav-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.topnav-logo {
+  font-family: var(--ls-font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: white;
+}
+
+.topnav-tagline {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.topnav-modulos {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.topnav-modulo {
+  padding: 0.5rem 1rem;
+  border-radius: var(--ls-radius-sm);
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.topnav-modulo:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.topnav-modulo-ativo {
+  background: rgba(255, 255, 255, 0.14);
+  color: white;
+  font-weight: 600;
+}
+
+.topnav-modulo-em-breve {
+  color: rgba(255, 255, 255, 0.3);
+  cursor: default;
+}
+
+.topnav-modulo-em-breve:hover {
+  background: none;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.topnav-usuario {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  white-space: nowrap;
+}
+
+.topnav-usuario-nome {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.topnav-usuario-papel {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+}
+
+.topnav .ls-btn-ghost {
+  border-color: rgba(255, 255, 255, 0.25);
+  color: white;
+}
+
+.topnav .ls-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 860px) {
+  .topnav {
+    flex-wrap: wrap;
+    padding: 0.75rem 1rem;
+  }
+  .topnav-modulos {
+    order: 3;
+    width: 100%;
+  }
+}

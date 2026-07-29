@@ -1,0 +1,54 @@
+.side-icon-menu {
+  position: fixed;
+  left: 0;
+  top: 64px; /* abaixo do topnav */
+  bottom: 0;
+  width: 56px;
+  background: var(--ls-primary, #0e2a3d);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 1rem;
+  gap: 0.5rem;
+  z-index: 50;
+}
+
+.side-icon-item {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  text-decoration: none;
+  opacity: 0.65;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.side-icon-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  opacity: 1;
+}
+
+.side-icon-item-ativo {
+  background: rgba(255, 255, 255, 0.15);
+  opacity: 1;
+}
+
+.side-icon-emoji {
+  font-size: 1.15rem;
+}
+
+/* Empurra o conteúdo principal para não ficar embaixo do menu lateral */
+.app-main {
+  margin-left: 56px;
+}
+
+@media (max-width: 700px) {
+  .side-icon-menu {
+    display: none;
+  }
+  .app-main {
+    margin-left: 0;
+  }
+}

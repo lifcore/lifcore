@@ -27,19 +27,42 @@ const API_KEY = import.meta.env.VITE_AI_API_KEY
  * { text: string, raw: object }
  */
 
-async function callAnthropic({ systemPrompt, messages, maxTokens = 1000 }) {
+async function callAnthropic({ systemPrompt, messages, maxTokens = 1000, images = [] }) {
+  // Se houver imagens, a última mensagem do usuário passa a ter
+  // conteúdo em blocos (imagem + texto), em vez de string simples —
+  // formato multimodal exigido pela API da Anthropic.
+  const mensagensFinais = messages.map((msg, index) => {
+    const ehUltimaDoUsuario = index === messages.length - 1 && msg.role === 'user'
+    if (!ehUltimaDoUsuario || images.length === 0) return msg
+
+    return {
+      role: msg.role,
+      content: [
+        ...images.map((img) => ({
+          type: 'image',
+          source: { type: 'base64', media_type: img.mediaType, data: img.base64 },
+        })),
+        { type: 'text', text: msg.content },
+      ],
+    }
+  })
+
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': API_KEY,
       'anthropic-version': '2023-06-01',
+      // ATENÇÃO: este header só existe para permitir testes locais direto do
+      // navegador. Em produção, essa chamada deve vir de um backend, e este
+      // header NUNCA deve ser usado nesse contexto.
+      'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
       max_tokens: maxTokens,
       system: systemPrompt,
-      messages,
+      messages: mensagensFinais,
     }),
   })
 
@@ -71,7 +94,7 @@ const adapters = {
  * Função pública única que o resto do sistema deve usar.
  * Nunca importe um adapter específico diretamente fora deste arquivo.
  */
-export async function askAI({ systemPrompt, messages, maxTokens }) {
+export async function askAI({ systemPrompt, messages, maxTokens, images }) {
   const adapter = adapters[PROVIDER]
 
   if (!adapter) {
@@ -80,7 +103,7 @@ export async function askAI({ systemPrompt, messages, maxTokens }) {
     )
   }
 
-  return adapter({ systemPrompt, messages, maxTokens })
+  return adapter({ systemPrompt, messages, maxTokens, images })
 }
 
 export const currentProvider = PROVIDER

@@ -24,7 +24,7 @@ export default function LoginPage() {
   return (
     <div className="login-container">
       <div className="login-card">
-        <h1>CoreON</h1>
+        <h1>Lifcore</h1>
         <p className="login-subtitle">LifitSeg Consultoria de Benefícios</p>
 
         <form onSubmit={handleSubmit}>
