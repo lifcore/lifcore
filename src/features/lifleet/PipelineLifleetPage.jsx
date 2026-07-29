@@ -5,8 +5,8 @@ import {
   atualizarStatusClienteProspect,
   listarVigenciasProximas,
 } from '../../lib/crm/clientesService'
-import NovoClienteModal from './NovoClienteModal'
 import { formatarDataBR, dataLocalISO } from '../../lib/utils/formatarData'
+import NovoClienteLifleetModal from './NovoClienteLifleetModal'
 
 const COLUNAS = [
   { status: 'prospect', titulo: 'Novo Prospect' },
@@ -17,12 +17,12 @@ const COLUNAS = [
 const TRADUZIR_SITUACAO = {
   aberto: 'Aberta',
   em_andamento: 'Em andamento',
-  aguardando_operadora: 'Aguard. operadora',
+  aguardando_operadora: 'Aguard. seguradora',
   aguardando_cliente: 'Aguard. cliente',
   resolvido: 'Resolvida',
 }
 
-export default function PipelinePage() {
+export default function PipelineLifleetPage() {
   const [itens, setItens] = useState([])
   const [vigencias, setVigencias] = useState([])
   const [carregando, setCarregando] = useState(true)
@@ -38,8 +38,8 @@ export default function PipelinePage() {
   async function carregar() {
     setCarregando(true)
     const [lista, vigenciasProximas] = await Promise.all([
-      listarClientesProspects({ mostrarFuturas: mostrarFuturas || busca.trim().length > 0 }),
-      listarVigenciasProximas(90),
+      listarClientesProspects({ mostrarFuturas: mostrarFuturas || busca.trim().length > 0, modulo: 'auto' }),
+      listarVigenciasProximas(90, 'auto'),
     ])
     setItens(lista)
     setVigencias(vigenciasProximas)
@@ -51,7 +51,8 @@ export default function PipelinePage() {
       ? itens.filter(
           (i) =>
             i.razao_social?.toLowerCase().includes(busca.toLowerCase()) ||
-            i.cnpj?.toLowerCase().includes(busca.toLowerCase())
+            i.cnpj?.toLowerCase().includes(busca.toLowerCase()) ||
+            i.cpf?.toLowerCase().includes(busca.toLowerCase())
         )
       : itens
     return filtrados.filter((i) => i.status === status)
@@ -70,7 +71,7 @@ export default function PipelinePage() {
     <div className="pipeline-page">
       <div className="pipeline-header">
         <div>
-          <h2>Pipeline — Saúde</h2>
+          <h2>Pipeline — Auto/Frota</h2>
           <p className="pipeline-subtitulo">
             {mostrarFuturas
               ? 'Mostrando todos os clientes e prospects, com ações futuras.'
@@ -81,7 +82,7 @@ export default function PipelinePage() {
           <input
             type="text"
             className="pipeline-busca"
-            placeholder="🔍 Buscar por nome ou CNPJ..."
+            placeholder="🔍 Buscar por nome, CNPJ ou CPF..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
@@ -102,7 +103,7 @@ export default function PipelinePage() {
               <span
                 key={v.id}
                 className="pipeline-alerta-item"
-                onClick={() => navigate(`/clientes/${v.id}`)}
+                onClick={() => navigate(`/lifleet/clientes/${v.id}`)}
               >
                 {v.razao_social} — {formatarDataBR(v.data_vigencia)}
               </span>
@@ -137,7 +138,7 @@ export default function PipelinePage() {
                       className={`pipeline-card ${atrasada ? 'pipeline-card-atrasada' : ''}`}
                       draggable
                       onDragStart={(e) => e.dataTransfer.setData('text/plain', item.id)}
-                      onClick={() => navigate(`/clientes/${item.id}`)}
+                      onClick={() => navigate(`/lifleet/clientes/${item.id}`)}
                     >
                       <div className="pipeline-card-topo">
                         <span className={`pipeline-card-data ${atrasada ? 'pipeline-card-data-atrasada' : ''}`}>
@@ -166,7 +167,7 @@ export default function PipelinePage() {
       )}
 
       {modalAberto && (
-        <NovoClienteModal
+        <NovoClienteLifleetModal
           onFechar={() => setModalAberto(false)}
           onCriado={() => {
             setModalAberto(false)

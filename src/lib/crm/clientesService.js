@@ -14,10 +14,11 @@ function dataLocalHoje(diasAFrente = 0) {
  * janela de tempo — são as mais urgentes de todas.
  * mostrarFuturas=true remove esse limite e traz tudo.
  */
-export async function listarClientesProspects({ mostrarFuturas = false } = {}) {
+export async function listarClientesProspects({ mostrarFuturas = false, modulo = 'saude' } = {}) {
   const { data, error } = await operacional
     .from('clientes_prospects')
     .select('*, contatos(*)')
+    .eq('modulo', modulo)
     .order('proxima_acao_data', { ascending: true, nullsFirst: false })
 
   if (error) throw new Error(`Erro ao listar clientes/prospects: ${error.message}`)
@@ -367,10 +368,12 @@ export async function criarCotacao({ clienteProspectId, casoId, dados, itens }) 
     if (erroItens) throw new Error(`Erro ao salvar itens da cotação: ${erroItens.message}`)
   }
 
-  // Toda cotação gerada agenda automaticamente uma próxima ação em 7
-  // dias. O status só avança para "Em Negociação" se o cliente ainda
-  // for um prospect novo — nunca REBAIXA quem já é "Cliente Ativo"
-  // (ex: cotação de renovação para um cliente que já está ativo).
+  // Toda cotação gerada agenda automaticamente uma próxima ação — usa o
+  // prazo de validade da própria cotação, se informado (faz mais sentido
+  // retomar exatamente quando a proposta vence); cai para +7 dias como
+  // padrão caso a validade não tenha sido preenchida. O status só avança
+  // para "Em Negociação" se o cliente ainda for um prospect novo — nunca
+  // REBAIXA quem já é "Cliente Ativo" (ex: cotação de renovação).
   const { data: clienteAtual } = await operacional
     .from('clientes_prospects')
     .select('status')
@@ -378,7 +381,7 @@ export async function criarCotacao({ clienteProspectId, casoId, dados, itens }) 
     .maybeSingle()
 
   const patchCliente = {
-    proxima_acao_data: dataLocalISO(7),
+    proxima_acao_data: dados.validade || dataLocalISO(7),
     proxima_acao_descricao: `Retomar cotação (${dados.operadora_nome_livre ?? 'operadora'})`,
     atualizado_em: new Date().toISOString(),
   }
@@ -498,10 +501,11 @@ export async function recalcularProximaAcaoCliente(clienteProspectId) {
     })
     .eq('id', clienteProspectId)
 }
-export async function listarVigenciasProximas(diasLimite = 90) {
+export async function listarVigenciasProximas(diasLimite = 90, modulo = 'saude') {
   const { data, error } = await operacional
     .from('clientes_prospects')
     .select('id, razao_social, status, data_vigencia')
+    .eq('modulo', modulo)
     .not('data_vigencia', 'is', null)
     .lte('data_vigencia', dataLocalISO(diasLimite))
     .gte('data_vigencia', dataLocalISO())

@@ -45,17 +45,28 @@ export async function atualizarObservacaoSeguradora(operadoraId, observacoesComi
 
 /** Cria uma nova apólice — corretor_id é sempre o usuário logado, nunca escolhido manualmente */
 export async function criarApolice({ corretorId, organizacaoId, dados }) {
-  const { error } = await operacional.from('apolices').insert({
-    corretor_id: corretorId,
-    organizacao_id: organizacaoId,
-    ...dados,
-  })
+  const { data, error } = await operacional
+    .from('apolices')
+    .insert({
+      corretor_id: corretorId,
+      organizacao_id: organizacaoId,
+      ...dados,
+    })
+    .select()
+    .single()
   if (error) throw new Error(`Erro ao lançar apólice: ${error.message}`)
+  return data
 }
 
 export async function excluirApolice(id) {
   const { error } = await operacional.from('apolices').delete().eq('id', id)
   if (error) throw new Error(`Erro ao excluir apólice: ${error.message}`)
+}
+
+/** Atualiza uma apólice existente */
+export async function atualizarApolice(id, dados) {
+  const { error } = await operacional.from('apolices').update(dados).eq('id', id)
+  if (error) throw new Error(`Erro ao atualizar apólice: ${error.message}`)
 }
 
 /**

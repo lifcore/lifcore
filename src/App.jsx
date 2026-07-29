@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './features/auth/AuthContext'
 import LoginPage from './features/auth/LoginPage'
 import TopNav from './components/TopNav'
@@ -10,6 +10,8 @@ import ConfiguracoesPage from './features/configuracoes/ConfiguracoesPage'
 import PerfilPage from './features/perfil/PerfilPage'
 import MensagensPage from './features/mensagens/MensagensPage'
 import ApolicesPage from './features/administracao/ApolicesPage'
+import PipelineLifleetPage from './features/lifleet/PipelineLifleetPage'
+import ClienteDetailLifleetPage from './features/lifleet/ClienteDetailLifleetPage'
 import './components/sideiconmenu.css'
 
 function AppShell() {
@@ -31,15 +33,24 @@ function AppShell() {
         <Routes>
           <Route path="/" element={<PipelinePage />} />
           <Route path="/clientes/:id" element={<ClienteDetailPage />} />
+          <Route path="/lifleet" element={<PipelineLifleetPage />} />
+          <Route path="/lifleet/clientes/:id" element={<ClienteDetailLifleetPage />} />
           <Route path="/configuracoes" element={<ConfiguracoesPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
           <Route path="/mensagens" element={<MensagensPage />} />
           <Route path="/apolices" element={<ApolicesPage />} />
         </Routes>
       </main>
-      <EspecialistaFlutuante />
+      <EspecialistaFlutuanteCondicional />
     </BrowserRouter>
   )
+}
+
+/** O Especialista (IA de Saúde) só faz sentido dentro do Lifcare — o Lifleet ainda não tem uma IA própria */
+function EspecialistaFlutuanteCondicional() {
+  const location = useLocation()
+  if (location.pathname.startsWith('/lifleet')) return null
+  return <EspecialistaFlutuante />
 }
 
 export default function App() {
