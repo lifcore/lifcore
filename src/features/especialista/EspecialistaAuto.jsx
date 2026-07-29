@@ -144,6 +144,14 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
       <div className="especialista-chat-corpo">
         {carregandoHistorico && <p className="especialista-carregando-historico">Carregando conversa...</p>}
 
+        {!carregandoHistorico && mensagens.length === 0 && (
+          <p className="especialista-vazio">
+            {modoDemanda
+              ? 'Descreva a demanda abaixo para começar.'
+              : 'Faça sua pergunta abaixo — sem cliente vinculado, só para tirar dúvidas.'}
+          </p>
+        )}
+
         {mensagens.map((msg, i) => (
           <div key={i} className={`especialista-bolha especialista-bolha-${msg.autor}`}>
             <span className="especialista-bolha-autor">
