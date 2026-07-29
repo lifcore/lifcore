@@ -138,22 +138,7 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
   return (
     <div className="especialista-container especialista-chat-container">
       <div className="especialista-chat-header">
-        <div>
-          <h2>Especialista de Auto/Frota</h2>
-        </div>
-        <div className="especialista-chat-header-botoes">
-          {mensagens.length > 0 && (
-            <button className="ls-btn ls-btn-ghost" onClick={handleImprimir}>🖨️ Imprimir</button>
-          )}
-          {!modoDemanda && consultaAtualId && !conversaEncerrada && (
-            <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarVincular(true)}>
-              Vincular a um cliente
-            </button>
-          )}
-          {casoAtualId && !conversaEncerrada && (
-            <button className="especialista-btn-encerrar" onClick={handleEncerrar}>Encerrar conversa</button>
-          )}
-        </div>
+        <h2>Especialista de Auto/Frota</h2>
       </div>
 
       <div className="especialista-chat-corpo">
@@ -196,9 +181,18 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
             rows={3}
           />
 
-          <div className="especialista-anexo-linha">
-            <label className="especialista-anexo-label">
-              📎 {arquivo ? arquivo.name : 'Anexar documento (opcional)'}
+          <div className="especialista-acoes-linha">
+            {arquivo && (
+              <span className="especialista-anexo-nome">
+                📎 {arquivo.name}
+                <button className="especialista-anexo-remover" onClick={() => setArquivo(null)}>✕</button>
+              </span>
+            )}
+            {mensagens.length > 0 && (
+              <button className="especialista-icone-btn" onClick={handleImprimir} title="Imprimir conversa">🖨️</button>
+            )}
+            <label className="especialista-icone-btn" title="Anexar documento">
+              📎
               <input
                 type="file"
                 accept="image/*,application/pdf"
@@ -206,14 +200,30 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
                 hidden
               />
             </label>
-            {arquivo && (
-              <button className="especialista-anexo-remover" onClick={() => setArquivo(null)}>✕</button>
-            )}
+            <button
+              className="especialista-icone-btn especialista-icone-enviar"
+              onClick={handleEnviar}
+              disabled={carregando}
+              title="Enviar (Enter)"
+            >
+              {carregando ? '…' : '↵'}
+            </button>
           </div>
 
-          <button onClick={handleEnviar} disabled={carregando}>
-            {carregando ? 'Enviando...' : 'Enviar'}
-          </button>
+          {(( !modoDemanda && consultaAtualId) || casoAtualId) && !conversaEncerrada && (
+            <div className="especialista-links-secundarios">
+              {!modoDemanda && consultaAtualId && (
+                <button className="especialista-link-secundario" onClick={() => setMostrarVincular(true)}>
+                  Vincular a um cliente
+                </button>
+              )}
+              {casoAtualId && (
+                <button className="especialista-link-secundario especialista-link-perigo" onClick={handleEncerrar}>
+                  Encerrar conversa
+                </button>
+              )}
+            </div>
+          )}
         </>
       )}
 
