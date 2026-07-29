@@ -19,6 +19,7 @@ import ContratoForm from './ContratoForm'
 import EspecialistaSaude from '../especialista/EspecialistaSaude'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
 import { useAuth } from '../auth/AuthContext'
+import { formatarDataBR } from '../../lib/utils/formatarData'
 
 const ABAS = ['Dados Cadastrais', 'Contratos', 'Cotações', 'Demandas']
 
@@ -72,7 +73,7 @@ export default function ClienteDetailPage() {
         <div className="cliente-detail-header-direita">
           {cliente.data_vigencia && (
             <div className="cliente-vigencia">
-              Vigência: <strong>{new Date(cliente.data_vigencia).toLocaleDateString('pt-BR')}</strong>
+              Vigência: <strong>{formatarDataBR(cliente.data_vigencia)}</strong>
             </div>
           )}
           <div className="cliente-acoes-perigo">
@@ -171,7 +172,7 @@ function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario, grupo
           <CampoView label="CNPJ" valor={empresa.cnpj || '—'} />
           <CampoView label="Segmento" valor={empresa.segmento || '—'} />
           <CampoView label="Nº Colaboradores" valor={empresa.numero_colaboradores || '—'} />
-          <CampoView label="Vigência" valor={empresa.data_vigencia ? new Date(empresa.data_vigencia).toLocaleDateString('pt-BR') : '—'} />
+          <CampoView label="Vigência" valor={empresa.data_vigencia ? formatarDataBR(empresa.data_vigencia) : '—'} />
           <CampoView label="Porte (calculado)" valor={cliente.porte ?? '—'} />
         </div>
         <h4>Contato Primário</h4>
@@ -359,7 +360,7 @@ function ContratosTab({ contratos, clienteProspectId, onAtualizado }) {
                   <span>{c.plano ?? ''}</span>
                   <span className={`ls-badge ls-badge-${c.status === 'ativo' ? 'cliente' : 'inativo'}`}>{c.status}</span>
                   {c.numero_apolice && <span className="ls-mono">Apólice: {c.numero_apolice}</span>}
-                  <span>Vigência: {c.vigencia_fim ? new Date(c.vigencia_fim).toLocaleDateString('pt-BR') : '—'}</span>
+                  <span>Vigência: {c.vigencia_fim ? formatarDataBR(c.vigencia_fim) : '—'}</span>
                 </div>
                 {totalVidas > 0 && (
                   <div className="cotacao-resumo" style={{ marginTop: '0.5rem' }}>
@@ -432,7 +433,7 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado }) {
                 <strong>{cot.operadora_nome_livre}</strong>
                 <span className="ls-badge ls-badge-prospect">{cot.porte}</span>
                 <span>{cot.numero_vidas} vidas</span>
-                <span>{new Date(cot.data_cotacao).toLocaleDateString('pt-BR')}</span>
+                <span>{formatarDataBR(cot.data_cotacao)}</span>
               </div>
               {cot.itens_cotacao?.length > 0 && (
                 <div className="cotacao-item-valores">
@@ -530,7 +531,7 @@ function DemandasTab({ demandas, cliente, onAtualizado }) {
                   <td className="ls-mono">{d.codigo}</td>
                   <td>{d.demanda_original ?? d.categoria ?? '—'}</td>
                   <td><span className="ls-badge ls-badge-prospect">{traduzirSituacao(d.situacao)}</span></td>
-                  <td>{d.data_proxima_acao ? new Date(d.data_proxima_acao).toLocaleDateString('pt-BR') : '—'}</td>
+                  <td>{d.data_proxima_acao ? formatarDataBR(d.data_proxima_acao) : '—'}</td>
                   <td>{new Date(d.criado_em).toLocaleDateString('pt-BR')}</td>
                 </tr>
               ))}

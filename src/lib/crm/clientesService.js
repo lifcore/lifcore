@@ -1,14 +1,10 @@
 import { institucional, operacional } from '../supabaseSchemas'
 import { supabase } from '../supabaseClient'
+import { dataLocalISO } from '../utils/formatarData'
 
 /** Retorna a data de hoje no formato YYYY-MM-DD, usando o horário LOCAL (não UTC) */
 function dataLocalHoje(diasAFrente = 0) {
-  const data = new Date()
-  data.setDate(data.getDate() + diasAFrente)
-  const ano = data.getFullYear()
-  const mes = String(data.getMonth() + 1).padStart(2, '0')
-  const dia = String(data.getDate()).padStart(2, '0')
-  return `${ano}-${mes}-${dia}`
+  return dataLocalISO(diasAFrente)
 }
 
 /**
@@ -375,9 +371,6 @@ export async function criarCotacao({ clienteProspectId, casoId, dados, itens }) 
   // dias. O status só avança para "Em Negociação" se o cliente ainda
   // for um prospect novo — nunca REBAIXA quem já é "Cliente Ativo"
   // (ex: cotação de renovação para um cliente que já está ativo).
-  const emSeteDias = new Date()
-  emSeteDias.setDate(emSeteDias.getDate() + 7)
-
   const { data: clienteAtual } = await operacional
     .from('clientes_prospects')
     .select('status')
@@ -385,7 +378,7 @@ export async function criarCotacao({ clienteProspectId, casoId, dados, itens }) 
     .maybeSingle()
 
   const patchCliente = {
-    proxima_acao_data: emSeteDias.toISOString().slice(0, 10),
+    proxima_acao_data: dataLocalISO(7),
     proxima_acao_descricao: `Retomar cotação (${dados.operadora_nome_livre ?? 'operadora'})`,
     atualizado_em: new Date().toISOString(),
   }
@@ -506,16 +499,12 @@ export async function recalcularProximaAcaoCliente(clienteProspectId) {
     .eq('id', clienteProspectId)
 }
 export async function listarVigenciasProximas(diasLimite = 90) {
-  const hoje = new Date()
-  const limite = new Date()
-  limite.setDate(hoje.getDate() + diasLimite)
-
   const { data, error } = await operacional
     .from('clientes_prospects')
     .select('id, razao_social, status, data_vigencia')
     .not('data_vigencia', 'is', null)
-    .lte('data_vigencia', limite.toISOString().slice(0, 10))
-    .gte('data_vigencia', hoje.toISOString().slice(0, 10))
+    .lte('data_vigencia', dataLocalISO(diasLimite))
+    .gte('data_vigencia', dataLocalISO())
     .order('data_vigencia')
 
   if (error) throw new Error(`Erro ao consultar vigências: ${error.message}`)

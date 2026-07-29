@@ -6,6 +6,7 @@ import {
   listarVigenciasProximas,
 } from '../../lib/crm/clientesService'
 import NovoClienteModal from './NovoClienteModal'
+import { formatarDataBR, dataLocalISO } from '../../lib/utils/formatarData'
 
 const COLUNAS = [
   { status: 'prospect', titulo: 'Novo Prospect' },
@@ -63,11 +64,7 @@ export default function PipelinePage() {
     carregar()
   }
 
-  function dataLocalHoje() {
-    const data = new Date()
-    return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`
-  }
-  const hoje = dataLocalHoje()
+  const hoje = dataLocalISO()
 
   return (
     <div className="pipeline-page">
@@ -107,7 +104,7 @@ export default function PipelinePage() {
                 className="pipeline-alerta-item"
                 onClick={() => navigate(`/clientes/${v.id}`)}
               >
-                {v.razao_social} — {new Date(v.data_vigencia).toLocaleDateString('pt-BR')}
+                {v.razao_social} — {formatarDataBR(v.data_vigencia)}
               </span>
             ))}
           </div>
@@ -145,7 +142,7 @@ export default function PipelinePage() {
                       <div className="pipeline-card-topo">
                         <span className={`pipeline-card-data ${atrasada ? 'pipeline-card-data-atrasada' : ''}`}>
                           {item.proxima_acao_data
-                            ? new Date(item.proxima_acao_data).toLocaleDateString('pt-BR')
+                            ? formatarDataBR(item.proxima_acao_data)
                             : 'Sem data definida'}
                         </span>
                         <span className={`pipeline-card-status-badge ${atrasada ? 'pipeline-card-status-atrasado' : 'pipeline-card-status-ok'}`}>
