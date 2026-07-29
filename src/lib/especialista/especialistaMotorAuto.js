@@ -1,9 +1,9 @@
 import { askAI } from '../aiProvider'
 import {
-  buscarBibliotecaRelevante,
-  buscarCasosRelevantes,
-  buscarRegulamentacaoPorCodigo,
-} from './bibliotecaService'
+  buscarBibliotecaRelevanteAuto,
+  buscarCasosRelevantesAuto,
+  buscarDocumentoAutoPorCodigo,
+} from './bibliotecaServiceAuto'
 
 /**
  * Motor único do Especialista de Auto/Frota (LifAuto/LifFleet).
@@ -38,14 +38,14 @@ export async function gerarRespostaEspecialistaAuto({ demandaTexto, historicoCon
     docsSeguradoras,
     casosRelevantes,
   ] = await Promise.all([
-    buscarRegulamentacaoPorCodigo('REL-001'),
-    buscarBibliotecaRelevante('COM', textoBusca, 3, 'auto'),
-    buscarBibliotecaRelevante('APO', textoBusca, 3, 'auto'),
-    buscarBibliotecaRelevante('REG', textoBusca, 2, 'auto'),
-    buscarBibliotecaRelevante('RES', textoBusca, 2, 'auto'),
-    buscarBibliotecaRelevante('SIN', textoBusca, 3, 'auto'),
-    buscarBibliotecaRelevante('SEG', seguradoraMencionada ?? textoBusca, 2, 'auto'),
-    buscarCasosRelevantes(textoBusca, 4, 'auto'),
+    buscarDocumentoAutoPorCodigo('REL-001'),
+    buscarBibliotecaRelevanteAuto('COM', textoBusca, 3),
+    buscarBibliotecaRelevanteAuto('APO', textoBusca, 3),
+    buscarBibliotecaRelevanteAuto('REG', textoBusca, 2),
+    buscarBibliotecaRelevanteAuto('RES', textoBusca, 2),
+    buscarBibliotecaRelevanteAuto('SIN', textoBusca, 3),
+    buscarBibliotecaRelevanteAuto('SEG', seguradoraMencionada ?? textoBusca, 2),
+    buscarCasosRelevantesAuto(textoBusca, 4),
   ])
 
   const blocoBiblioteca = [...docsComercial, ...docsApolices, ...docsRegulamentacao, ...docsRessarcimento, ...docsSinistro, ...docsSeguradoras]

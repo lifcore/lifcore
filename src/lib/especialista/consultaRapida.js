@@ -15,7 +15,7 @@ export async function atenderConsultaRapida({ demandaTexto, usuarioId, organizac
 
   let consulta
   if (consultaIdExistente) {
-    const { data } = await operacional.from('consultas_rapidas').select('*').eq('id', consultaIdExistente).maybeSingle()
+    const { data } = await operacional.from('consultas_rapidas_saude').select('*').eq('id', consultaIdExistente).maybeSingle()
     consulta = data
   }
 
@@ -25,7 +25,7 @@ export async function atenderConsultaRapida({ demandaTexto, usuarioId, organizac
 
   if (!consulta) {
     const { data: novaConsulta, error } = await operacional
-      .from('consultas_rapidas')
+      .from('consultas_rapidas_saude')
       .insert({ organizacao_id: organizacaoIdFinal, usuario_id: usuarioId, mensagens: [] })
       .select()
       .single()
@@ -63,7 +63,7 @@ export async function atenderConsultaRapida({ demandaTexto, usuarioId, organizac
  */
 export async function vincularConsultaComoDemanda({ consultaId, clienteProspectId, organizacaoId, usuarioId }) {
   const { data: consulta, error: erroConsulta } = await operacional
-    .from('consultas_rapidas')
+    .from('consultas_rapidas_saude')
     .select('*')
     .eq('id', consultaId)
     .single()
@@ -96,7 +96,7 @@ export async function vincularConsultaComoDemanda({ consultaId, clienteProspectI
   }
 
   await operacional
-    .from('consultas_rapidas')
+    .from('consultas_rapidas_saude')
     .update({ vinculada_caso_id: novoCaso.id })
     .eq('id', consultaId)
 
@@ -105,7 +105,7 @@ export async function vincularConsultaComoDemanda({ consultaId, clienteProspectI
 
 async function salvarMensagens(consultaId, mensagens) {
   await operacional
-    .from('consultas_rapidas')
+    .from('consultas_rapidas_saude')
     .update({ mensagens, atualizado_em: new Date().toISOString() })
     .eq('id', consultaId)
 }

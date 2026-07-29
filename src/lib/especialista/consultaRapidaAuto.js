@@ -14,7 +14,7 @@ export async function atenderConsultaRapidaAuto({ demandaTexto, usuarioId, organ
 
   let consulta
   if (consultaIdExistente) {
-    const { data } = await operacional.from('consultas_rapidas').select('*').eq('id', consultaIdExistente).maybeSingle()
+    const { data } = await operacional.from('consultas_rapidas_auto').select('*').eq('id', consultaIdExistente).maybeSingle()
     consulta = data
   }
 
@@ -24,7 +24,7 @@ export async function atenderConsultaRapidaAuto({ demandaTexto, usuarioId, organ
 
   if (!consulta) {
     const { data: novaConsulta, error } = await operacional
-      .from('consultas_rapidas')
+      .from('consultas_rapidas_auto')
       .insert({ organizacao_id: organizacaoIdFinal, usuario_id: usuarioId, mensagens: [] })
       .select()
       .single()
@@ -56,7 +56,7 @@ export async function atenderConsultaRapidaAuto({ demandaTexto, usuarioId, organ
 /** Converte uma Consulta Rápida em Demanda de verdade, vinculando a um cliente do Lifleet */
 export async function vincularConsultaComoDemandaAuto({ consultaId, clienteProspectId, organizacaoId, usuarioId }) {
   const { data: consulta, error: erroConsulta } = await operacional
-    .from('consultas_rapidas')
+    .from('consultas_rapidas_auto')
     .select('*')
     .eq('id', consultaId)
     .single()
@@ -89,7 +89,7 @@ export async function vincularConsultaComoDemandaAuto({ consultaId, clienteProsp
   }
 
   await operacional
-    .from('consultas_rapidas')
+    .from('consultas_rapidas_auto')
     .update({ vinculada_caso_id: novoCaso.id })
     .eq('id', consultaId)
 
@@ -98,7 +98,7 @@ export async function vincularConsultaComoDemandaAuto({ consultaId, clienteProsp
 
 async function salvarMensagens(consultaId, mensagens) {
   await operacional
-    .from('consultas_rapidas')
+    .from('consultas_rapidas_auto')
     .update({ mensagens, atualizado_em: new Date().toISOString() })
     .eq('id', consultaId)
 }

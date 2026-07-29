@@ -1,16 +1,18 @@
 import { institucional } from '../supabaseSchemas'
 
 /**
- * Serviço de consulta à Biblioteca Institucional.
- * Implementa a Etapa 4 do ENG-003: "Consulta à Biblioteca".
- * Nenhuma resposta do Especialista deve ser produzida sem
- * passar por essas consultas primeiro.
+ * Serviço de consulta à Biblioteca Institucional — EXCLUSIVO do
+ * Especialista de Saúde. Aponta sempre para as tabelas "_saude"
+ * (biblioteca_saude, casos_saude), fisicamente separadas das do
+ * Especialista de Auto/Frota (que usa bibliotecaServiceAuto.js).
+ * Isso é proposital: nenhum parâmetro compartilhado, nenhuma chance
+ * de um bug de digitação misturar conhecimento entre os dois.
  */
 
 /** Busca documentos da biblioteca por categoria (ex: 'ANS', 'Operadoras') */
 export async function buscarBibliotecaPorCategoria(categoria, limite = 5) {
   const { data, error } = await institucional
-    .from('biblioteca')
+    .from('biblioteca_saude')
     .select('codigo, titulo, conteudo, categoria')
     .eq('categoria', categoria)
     .limit(limite)
@@ -32,12 +34,11 @@ const PALAVRAS_IRRELEVANTES = new Set([
  * cresce (ex: 24 documentos na categoria ANS): sem isso, o documento
  * realmente relevante para a pergunta pode nunca ser consultado.
  */
-export async function buscarBibliotecaRelevante(categoria, textoDemanda, limite = 5, modulo = 'saude') {
+export async function buscarBibliotecaRelevante(categoria, textoDemanda, limite = 5) {
   const { data, error } = await institucional
-    .from('biblioteca')
+    .from('biblioteca_saude')
     .select('codigo, titulo, conteudo, categoria')
     .eq('categoria', categoria)
-    .eq('modulo', modulo)
     .limit(50) // teto de segurança; categorias hoje têm no máximo ~24 documentos
 
   if (error) throw new Error(`Erro ao consultar biblioteca (${categoria}): ${error.message}`)
@@ -123,7 +124,7 @@ export async function listarPlaybooksAtivos() {
 /** Busca casos fundamentais específicos pelo código (ex: para o REASON-017 citar CASO-SAU-045 a 060) */
 export async function buscarCasosFundamentais(codigos) {
   const { data, error } = await institucional
-    .from('casos_fundamentais')
+    .from('casos_saude')
     .select('codigo, titulo, categoria, contexto, problema, analise, resultado, licoes_aprendidas, conteudo_completo, status_validacao')
     .in('codigo', codigos)
     .neq('status_validacao', 'rejeitado')
@@ -138,11 +139,10 @@ export async function buscarCasosFundamentais(codigos) {
  * pelo motor de raciocínio único (substitui a arquitetura de Playbooks
  * como portão de decisão).
  */
-export async function buscarCasosRelevantes(textoDemanda, limite = 4, modulo = 'saude') {
+export async function buscarCasosRelevantes(textoDemanda, limite = 4) {
   const { data, error } = await institucional
-    .from('casos_fundamentais')
+    .from('casos_saude')
     .select('codigo, titulo, categoria, contexto, problema, resultado, licoes_aprendidas, conteudo_completo, status_validacao')
-    .eq('modulo', modulo)
     .neq('status_validacao', 'rejeitado')
     .limit(100)
 
@@ -196,7 +196,7 @@ export async function buscarRegulamentacaoPorPorte(porte) {
 /** Busca uma regulamentação (REG) diretamente pelo código — usado, por exemplo, quando o tipo de contratante é Pessoa Física (REG-001) */
 export async function buscarRegulamentacaoPorCodigo(codigo) {
   const { data, error } = await institucional
-    .from('biblioteca')
+    .from('biblioteca_saude')
     .select('codigo, titulo, conteudo')
     .eq('codigo', codigo)
     .maybeSingle()

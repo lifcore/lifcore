@@ -71,6 +71,20 @@ export async function criarCandidatoConhecimento(casoId, resumoJson) {
   return data
 }
 
+/** Tabelas de Casos Reais, uma por módulo — nunca compartilhadas entre si */
+const TABELA_CASOS_POR_MODULO = {
+  saude: 'casos_saude',
+  auto: 'casos_auto',
+  lifsure: 'casos_lifsure',
+  lifplan: 'casos_lifplan',
+}
+const PREFIXO_CODIGO_POR_MODULO = {
+  saude: 'CASO-SAU',
+  auto: 'CASO-AUTO',
+  lifsure: 'CASO-LIFSURE',
+  lifplan: 'CASO-LIFPLAN',
+}
+
 /** Aprova um candidato — SÓ acontece com clique humano explícito. Cria o Caso Real de verdade. */
 export async function aprovarCandidatoComoCasoReal(candidatoId, usuarioId) {
   const { data: candidato, error: erroCandidato } = await operacional
@@ -82,9 +96,9 @@ export async function aprovarCandidatoComoCasoReal(candidatoId, usuarioId) {
 
   const resumo = JSON.parse(candidato.resumo_aprendizado)
 
-  // Descobre a qual módulo esse caso pertence (Saúde ou Auto), a partir
-  // do cliente vinculado — assim o Caso Real nasce com o prefixo e a
-  // numeração certos, sem misturar a contagem entre os dois módulos.
+  // Descobre a qual módulo esse caso pertence, a partir do cliente
+  // vinculado — assim o Caso Real vai para a tabela física certa
+  // (casos_saude, casos_auto, etc.), nunca misturando uma com a outra.
   let modulo = 'saude'
   const clienteProspectId = candidato.casos?.cliente_prospect_id
   if (clienteProspectId) {
@@ -96,20 +110,19 @@ export async function aprovarCandidatoComoCasoReal(candidatoId, usuarioId) {
     modulo = cliente?.modulo ?? 'saude'
   }
 
-  const prefixo = modulo === 'auto' ? 'CASO-AUTO' : 'CASO-SAU'
+  const tabelaCasos = TABELA_CASOS_POR_MODULO[modulo] ?? 'casos_saude'
+  const prefixo = PREFIXO_CODIGO_POR_MODULO[modulo] ?? 'CASO-SAU'
 
   const { count } = await institucional
-    .from('casos_fundamentais')
+    .from(tabelaCasos)
     .select('id', { count: 'exact', head: true })
-    .eq('modulo', modulo)
   const proximoNumero = String((count ?? 0) + 1).padStart(3, '0')
   const codigo = `${prefixo}-${proximoNumero}-REAL`
 
   const { data: novoCaso, error: erroCaso } = await institucional
-    .from('casos_fundamentais')
+    .from(tabelaCasos)
     .insert({
       codigo,
-      modulo,
       titulo: resumo.titulo,
       contexto: resumo.contexto,
       problema: resumo.problema,
