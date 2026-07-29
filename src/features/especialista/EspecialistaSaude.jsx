@@ -17,7 +17,7 @@ import './especialista.css'
  *   registro leve, sem burocracia. Pode ser "vinculado a um cliente"
  *   a qualquer momento, virando uma Demanda de verdade.
  */
-export default function EspecialistaSaude({ clienteProspectIdInicial = null, casoIdContinuacao = null }) {
+export default function EspecialistaSaude({ clienteProspectIdInicial = null, casoIdContinuacao = null, perguntaInicial = null, onSolicitarTroca = null }) {
   const { perfil } = useAuth()
   const modoDemanda = !!clienteProspectIdInicial || !!casoIdContinuacao
 
@@ -25,14 +25,19 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
   const [casoAtualId, setCasoAtualId] = useState(casoIdContinuacao)
   const [consultaAtualId, setConsultaAtualId] = useState(null)
   const [conversaEncerrada, setConversaEncerrada] = useState(false)
-  const [demanda, setDemanda] = useState('')
+  const [demanda, setDemanda] = useState(perguntaInicial ?? '')
   const [arquivo, setArquivo] = useState(null)
   const [carregando, setCarregando] = useState(false)
   const [carregandoHistorico, setCarregandoHistorico] = useState(!!casoIdContinuacao)
   const [erro, setErro] = useState(null)
   const [ultimoContexto, setUltimoContexto] = useState(null)
   const [mostrarVincular, setMostrarVincular] = useState(false)
+  const [especialistaSugerido, setEspecialistaSugerido] = useState(null)
   const fimDoChatRef = useRef(null)
+
+  useEffect(() => {
+    if (perguntaInicial) setDemanda(perguntaInicial)
+  }, [perguntaInicial])
 
   useEffect(() => {
     if (casoIdContinuacao) {
@@ -52,6 +57,7 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
     setDemanda('')
     setCarregando(true)
     setErro(null)
+    setEspecialistaSugerido(null)
     setMensagens((msgs) => [...msgs, { autor: 'corretor', texto: textoEnviado, criadoEm: new Date().toISOString() }])
 
     try {
@@ -95,6 +101,10 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
         regulamentacaoAplicavel: resposta.regulamentacaoAplicavel,
         casosRelacionados: resposta.casosRelacionados,
       })
+
+      if (!modoDemanda && resposta.especialistaSugerido) {
+        setEspecialistaSugerido({ modulo: resposta.especialistaSugerido, pergunta: textoEnviado })
+      }
     } catch (err) {
       setErro(err.message)
     } finally {
@@ -190,6 +200,18 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
       {ultimoContexto?.regulamentacaoAplicavel && (
         <div className="especialista-regulamentacao">
           📘 Regulamentação consultada: <strong>{ultimoContexto.regulamentacaoAplicavel.codigo} — {ultimoContexto.regulamentacaoAplicavel.titulo}</strong>
+        </div>
+      )}
+
+      {especialistaSugerido && onSolicitarTroca && (
+        <div className="especialista-sugestao-troca">
+          <span>Essa pergunta parece ser do domínio do Especialista de {especialistaSugerido.modulo === 'auto' ? 'Auto/Frota' : 'Saúde'}.</span>
+          <button
+            className="ls-btn ls-btn-accent"
+            onClick={() => onSolicitarTroca(especialistaSugerido.pergunta)}
+          >
+            Abrir Especialista de {especialistaSugerido.modulo === 'auto' ? 'Auto/Frota' : 'Saúde'} →
+          </button>
         </div>
       )}
 

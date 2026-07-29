@@ -229,6 +229,26 @@
   border-color: var(--ls-accent, #c98a3e);
 }
 
+.especialista-sugestao-troca {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: var(--ls-accent-soft, #f7e8d5);
+  border: 1px solid var(--ls-accent, #c98a3e);
+  border-radius: var(--ls-radius-sm, 8px);
+  padding: 0.6rem 0.85rem;
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
+  color: var(--ls-text, #1c2a2f);
+}
+
+.especialista-sugestao-troca button {
+  margin: 0 !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .especialista-chat-corpo {
   flex: 1;
   overflow-y: auto;

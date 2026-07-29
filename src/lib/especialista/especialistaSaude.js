@@ -54,12 +54,14 @@ export async function atenderDemanda({ demandaTexto, usuarioId, organizacaoId, c
     )
   }
 
-  const porteCliente = clienteProspectId ? await buscarPorteCliente(clienteProspectId) : null
+  const dadosCliente = clienteProspectId ? await buscarDadosClienteParaModalidade(clienteProspectId) : null
 
   const resultado = await gerarRespostaEspecialista({
     demandaTexto,
     historicoContexto: casoExistente?.resumoEventos ?? '',
-    porteCliente,
+    tipoPessoa: dadosCliente?.tipo_pessoa ?? null,
+    porteCliente: dadosCliente?.porte ?? null,
+    graduacaoCliente: dadosCliente?.graduacao ?? null,
     imagens: imagens.map((img) => ({ base64: img.base64, mediaType: img.mediaType })),
   })
 
@@ -194,13 +196,13 @@ async function buscarCasoParaContinuacao(casoId) {
 }
 
 /** Busca o porte (PME1/PME2/Negociado) já calculado no cadastro do cliente vinculado */
-async function buscarPorteCliente(clienteProspectId) {
+async function buscarDadosClienteParaModalidade(clienteProspectId) {
   const { data } = await operacional
     .from('clientes_prospects')
-    .select('porte')
+    .select('porte, tipo_pessoa, graduacao')
     .eq('id', clienteProspectId)
     .maybeSingle()
-  return data?.porte ?? null
+  return data ?? null
 }
 
 /** Fase 1: busca a única organização cadastrada (a própria LifitSeg) */

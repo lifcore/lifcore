@@ -11,7 +11,7 @@ import './especialista.css'
  * de Saúde: Demanda (vinculado a um cliente, ciclo DM-AUTO completo) e
  * Consulta Rápida (solta, pode virar Demanda depois).
  */
-export default function EspecialistaAuto({ clienteProspectIdInicial = null, casoIdContinuacao = null }) {
+export default function EspecialistaAuto({ clienteProspectIdInicial = null, casoIdContinuacao = null, perguntaInicial = null, onSolicitarTroca = null }) {
   const { perfil } = useAuth()
   const modoDemanda = !!clienteProspectIdInicial || !!casoIdContinuacao
 
@@ -19,13 +19,18 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
   const [casoAtualId, setCasoAtualId] = useState(casoIdContinuacao)
   const [consultaAtualId, setConsultaAtualId] = useState(null)
   const [conversaEncerrada, setConversaEncerrada] = useState(false)
-  const [demanda, setDemanda] = useState('')
+  const [demanda, setDemanda] = useState(perguntaInicial ?? '')
   const [arquivo, setArquivo] = useState(null)
   const [carregando, setCarregando] = useState(false)
   const [carregandoHistorico, setCarregandoHistorico] = useState(!!casoIdContinuacao)
   const [erro, setErro] = useState(null)
   const [mostrarVincular, setMostrarVincular] = useState(false)
+  const [especialistaSugerido, setEspecialistaSugerido] = useState(null)
   const fimDoChatRef = useRef(null)
+
+  useEffect(() => {
+    if (perguntaInicial) setDemanda(perguntaInicial)
+  }, [perguntaInicial])
 
   useEffect(() => {
     if (casoIdContinuacao) {
@@ -43,6 +48,7 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
     if (!demanda.trim() || carregando) return
     const textoEnviado = demanda
     setDemanda('')
+    setEspecialistaSugerido(null)
     setCarregando(true)
     setErro(null)
     setMensagens((msgs) => [...msgs, { autor: 'corretor', texto: textoEnviado, criadoEm: new Date().toISOString() }])
@@ -82,6 +88,10 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
         ...msgs,
         { autor: 'especialista', texto: resposta.resposta.textoCompleto, criadoEm: new Date().toISOString() },
       ])
+
+      if (!modoDemanda && resposta.especialistaSugerido) {
+        setEspecialistaSugerido({ modulo: resposta.especialistaSugerido, pergunta: textoEnviado })
+      }
     } catch (err) {
       setErro(err.message)
     } finally {
@@ -173,6 +183,18 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
 
         <div ref={fimDoChatRef} />
       </div>
+
+      {especialistaSugerido && onSolicitarTroca && (
+        <div className="especialista-sugestao-troca">
+          <span>Essa pergunta parece ser do domínio do Especialista de {especialistaSugerido.modulo === 'saude' ? 'Saúde' : 'Auto/Frota'}.</span>
+          <button
+            className="ls-btn ls-btn-accent"
+            onClick={() => onSolicitarTroca(especialistaSugerido.pergunta)}
+          >
+            Abrir Especialista de {especialistaSugerido.modulo === 'saude' ? 'Saúde' : 'Auto/Frota'} →
+          </button>
+        </div>
+      )}
 
       {erro && <p className="especialista-erro">Erro: {erro}</p>}
 

@@ -3,8 +3,7 @@ import { AuthProvider, useAuth } from './features/auth/AuthContext'
 import LoginPage from './features/auth/LoginPage'
 import TopNav from './components/TopNav'
 import SideIconMenu from './components/SideIconMenu'
-import EspecialistaFlutuante from './components/EspecialistaFlutuante'
-import EspecialistaFlutuanteAuto from './components/EspecialistaFlutuanteAuto'
+import EspecialistaSwitcher from './components/EspecialistaSwitcher'
 import PipelinePage from './features/crm/PipelinePage'
 import ClienteDetailPage from './features/crm/ClienteDetailPage'
 import ConfiguracoesPage from './features/configuracoes/ConfiguracoesPage'
@@ -42,16 +41,16 @@ function AppShell() {
           <Route path="/apolices" element={<ApolicesPage />} />
         </Routes>
       </main>
-      <EspecialistaFlutuanteCondicional />
+      <EspecialistaSwitcherCondicional />
     </BrowserRouter>
   )
 }
 
-/** Mostra o Especialista certo conforme o módulo em que se está navegando */
-function EspecialistaFlutuanteCondicional() {
+/** Decide o módulo padrão do Especialista conforme a rota atual (Lifcare → Saúde, Lifleet → Auto) */
+function EspecialistaSwitcherCondicional() {
   const location = useLocation()
-  if (location.pathname.startsWith('/lifleet')) return <EspecialistaFlutuanteAuto />
-  return <EspecialistaFlutuante />
+  const moduloPadrao = location.pathname.startsWith('/lifleet') ? 'auto' : 'saude'
+  return <EspecialistaSwitcher moduloPadrao={moduloPadrao} />
 }
 
 export default function App() {

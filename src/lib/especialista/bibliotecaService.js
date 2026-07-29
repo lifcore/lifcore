@@ -179,16 +179,18 @@ export async function buscarReasonCompactos() {
   return data ?? []
 }
 
-/** Mapeia o porte do cliente (já calculado no cadastro) para o REG correspondente */
-const REG_POR_PORTE = {
-  PME1: 'REG-003',
-  PME2: 'REG-004',
-  Negociado: 'REG-005',
-}
-
-/** Busca a regulamentação (REG) aplicável ao porte do cliente, se houver */
-export async function buscarRegulamentacaoPorPorte(porte) {
-  const codigo = REG_POR_PORTE[porte]
+/** Mapeia o tipo de cliente (PF/Adesão/porte) para o documento MOD correspondente */
+export async function buscarModalidadeAplicavel({ tipoPessoa, porte, graduacao }) {
+  let codigo = null
+  if (tipoPessoa === 'fisica') {
+    codigo = graduacao ? 'MOD-002' : 'MOD-001' // Adesão (tem graduação) vs Individual/Familiar
+  } else if (porte === 'PME1') {
+    codigo = 'MOD-003' // 2 a 29 vidas
+  } else if (porte === 'PME2') {
+    codigo = 'MOD-004' // 30 a 99 vidas
+  } else if (porte === 'Negociado') {
+    codigo = 'MOD-005' // 100+ vidas
+  }
   if (!codigo) return null
   return buscarRegulamentacaoPorCodigo(codigo)
 }

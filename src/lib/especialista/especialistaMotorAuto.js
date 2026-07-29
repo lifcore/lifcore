@@ -98,6 +98,7 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
   "categoria": "Comercial | Apólices | Sinistro | Ressarcimento | Regulamentação",
   "subcategoria": "string curta descrevendo o assunto",
   "precisa_mais_informacao": true ou false,
+  "especialista_sugerido": null, ou "saude" se a pergunta for claramente sobre Plano de Saúde/Odontológico,
   "resposta": "sua resposta completa em português, seguindo as 5 etapas do seu modelo cognitivo de forma natural (sem precisar rotular cada etapa rigidamente). Se precisar de mais dados, faça só a(s) pergunta(s) essencial(is) para ESSE caso. Preço nunca deve ser o único critério em comparações."
 }`
 
@@ -113,13 +114,14 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
     const textoLimpo = resultado.text.replace(/```json|```/g, '').trim()
     parsed = JSON.parse(textoLimpo)
   } catch {
-    parsed = { categoria: null, subcategoria: null, precisa_mais_informacao: false, resposta: resultado.text }
+    parsed = { categoria: null, subcategoria: null, precisa_mais_informacao: false, especialista_sugerido: null, resposta: resultado.text }
   }
 
   return {
     categoria: parsed.categoria ?? null,
     subcategoria: parsed.subcategoria ?? null,
     precisaMaisInformacao: !!parsed.precisa_mais_informacao,
+    especialistaSugerido: parsed.especialista_sugerido ?? null,
     respostaTexto: parsed.resposta ?? resultado.text,
     casosRelacionados: casosRelevantes,
   }
