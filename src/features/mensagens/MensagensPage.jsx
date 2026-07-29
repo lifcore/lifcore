@@ -68,8 +68,10 @@ export default function MensagensPage() {
       <h2>Mensagens Padrão</h2>
       <p className="pipeline-subtitulo">Cadastre mensagens prontas para enviar via WhatsApp direto do sistema.</p>
       <p className="config-instrucao">
-        💡 Use <strong>{'{{nome}}'}</strong> no texto para puxar automaticamente o nome do contato
-        (ex: "Olá {'{{nome}}'}, tudo bem?"), e <strong>{'{{empresa}}'}</strong> para o nome da empresa.
+        💡 Use <strong>{'{{nome}}'}</strong> para o nome do contato, <strong>{'{{empresa}}'}</strong> para
+        o nome da empresa/cliente, <strong>{'{{vigencia}}'}</strong> para a data de vigência, e — no
+        Lifleet — <strong>{'{{veiculo}}'}</strong> para o(s) veículo(s) da apólice mais recente do cliente
+        (ex: "Olá {'{{nome}}'}, sua apólice do veículo {'{{veiculo}}'} vence em {'{{vigencia}}'}").
       </p>
 
       <div className="mensagens-modulos">

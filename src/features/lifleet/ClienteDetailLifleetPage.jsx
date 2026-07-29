@@ -134,6 +134,7 @@ export default function ClienteDetailLifleetPage() {
         <WhatsAppLifleetModal
           contatoPrimario={contatoPrimario}
           nomeEmpresa={cliente.razao_social}
+          apoliceRecente={apolices[0] ?? null}
           onFechar={() => setMostrarWhatsApp(false)}
         />
       )}
@@ -459,12 +460,20 @@ function DemandaDetailLifleetModal({ demanda, onFechar, onAtualizado, onSalvoSem
   )
 }
 
-function WhatsAppLifleetModal({ contatoPrimario, nomeEmpresa, onFechar }) {
+function WhatsAppLifleetModal({ contatoPrimario, nomeEmpresa, apoliceRecente, onFechar }) {
   const { perfil } = useAuth()
   const [templates, setTemplates] = useState([])
   const [templateSelecionado, setTemplateSelecionado] = useState(null)
   const [textoEditavel, setTextoEditavel] = useState('')
   const [carregando, setCarregando] = useState(true)
+
+  const textoVeiculo = (apoliceRecente?.veiculos ?? [])
+    .map((v) => {
+      const marcaModelo = [v.marca, v.modelo].filter(Boolean).join(' ')
+      return marcaModelo ? `${v.placa} (${marcaModelo})` : v.placa
+    })
+    .join(', ')
+  const textoVigencia = apoliceRecente?.vigencia_fim ? formatarDataBR(apoliceRecente.vigencia_fim) : ''
 
   useEffect(() => {
     listarTemplates('lifleet').then((lista) => {
@@ -480,6 +489,8 @@ function WhatsAppLifleetModal({ contatoPrimario, nomeEmpresa, onFechar }) {
         nomeContato: contatoPrimario?.nome,
         nomeEmpresa,
         nomeCorretor: perfil?.nome_completo,
+        veiculo: textoVeiculo,
+        vigencia: textoVigencia,
       })
     )
   }

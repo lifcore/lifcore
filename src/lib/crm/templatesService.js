@@ -49,13 +49,15 @@ export function montarLinkWhatsApp(celular, mensagem) {
  * Se o template não incluir {{corretor}} manualmente, uma assinatura
  * é adicionada automaticamente no final (evita esquecer de assinar).
  */
-export function personalizarMensagem(textoTemplate, { nomeContato, nomeEmpresa, nomeCorretor }) {
+export function personalizarMensagem(textoTemplate, { nomeContato, nomeEmpresa, nomeCorretor, vigencia, veiculo }) {
   const jaTemAssinatura = textoTemplate.includes('{{corretor}}')
 
   let texto = textoTemplate
     .replaceAll('{{nome}}', nomeContato || '')
     .replaceAll('{{empresa}}', nomeEmpresa || '')
     .replaceAll('{{corretor}}', nomeCorretor || '')
+    .replaceAll('{{vigencia}}', vigencia || '')
+    .replaceAll('{{veiculo}}', veiculo || '')
     .replace(/\s{2,}/g, ' ') // limpa espaço duplo que sobra quando o placeholder fica vazio
 
   if (!jaTemAssinatura && nomeCorretor) {

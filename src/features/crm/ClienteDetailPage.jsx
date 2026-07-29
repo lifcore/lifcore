@@ -126,6 +126,7 @@ export default function ClienteDetailPage() {
         <WhatsAppModal
           contatoPrimario={contatoPrimario}
           nomeEmpresa={cliente.razao_social}
+          vigencia={cliente.data_vigencia}
           onFechar={() => setMostrarWhatsApp(false)}
         />
       )}
@@ -769,7 +770,7 @@ function DemandaDetailModal({ demanda, cliente, onFechar, onAtualizado, onSalvoS
   )
 }
 
-function WhatsAppModal({ contatoPrimario, nomeEmpresa, onFechar }) {
+function WhatsAppModal({ contatoPrimario, nomeEmpresa, vigencia, onFechar }) {
   const { perfil } = useAuth()
   const [templates, setTemplates] = useState([])
   const [templateSelecionado, setTemplateSelecionado] = useState(null)
@@ -790,6 +791,7 @@ function WhatsAppModal({ contatoPrimario, nomeEmpresa, onFechar }) {
         nomeContato: contatoPrimario?.nome,
         nomeEmpresa,
         nomeCorretor: perfil?.nome_completo,
+        vigencia: vigencia ? formatarDataBR(vigencia) : '',
       })
     )
   }
