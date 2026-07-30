@@ -12,6 +12,8 @@ import MensagensPage from './features/mensagens/MensagensPage'
 import ApolicesPage from './features/administracao/ApolicesPage'
 import PipelineLifleetPage from './features/lifleet/PipelineLifleetPage'
 import ClienteDetailLifleetPage from './features/lifleet/ClienteDetailLifleetPage'
+import PipelineLifsurePage from './features/lifsure/PipelineLifsurePage'
+import ClienteDetailLifsurePage from './features/lifsure/ClienteDetailLifsurePage'
 import './components/sideiconmenu.css'
 
 function AppShell() {
@@ -35,6 +37,8 @@ function AppShell() {
           <Route path="/clientes/:id" element={<ClienteDetailPage />} />
           <Route path="/lifleet" element={<PipelineLifleetPage />} />
           <Route path="/lifleet/clientes/:id" element={<ClienteDetailLifleetPage />} />
+          <Route path="/lifsure" element={<PipelineLifsurePage />} />
+          <Route path="/lifsure/clientes/:id" element={<ClienteDetailLifsurePage />} />
           <Route path="/configuracoes" element={<ConfiguracoesPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
           <Route path="/mensagens" element={<MensagensPage />} />
@@ -46,9 +50,10 @@ function AppShell() {
   )
 }
 
-/** Decide o módulo padrão do Especialista conforme a rota atual (Lifcare → Saúde, Lifleet → Auto) */
+/** Decide o módulo padrão do Especialista conforme a rota atual — Lifsure ainda não tem IA própria, então não mostra o botão lá */
 function EspecialistaSwitcherCondicional() {
   const location = useLocation()
+  if (location.pathname.startsWith('/lifsure')) return null
   const moduloPadrao = location.pathname.startsWith('/lifleet') ? 'auto' : 'saude'
   return <EspecialistaSwitcher moduloPadrao={moduloPadrao} />
 }
