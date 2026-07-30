@@ -97,10 +97,11 @@ export async function vincularConsultaComoDemandaAuto({ consultaId, clienteProsp
 }
 
 async function salvarMensagens(consultaId, mensagens) {
-  await operacional
+  const { error } = await operacional
     .from('consultas_rapidas_auto')
     .update({ mensagens, atualizado_em: new Date().toISOString() })
     .eq('id', consultaId)
+  if (error) throw new Error(`Erro ao salvar mensagens da conversa: ${error.message}`)
 }
 
 async function buscarOrganizacaoUnica() {

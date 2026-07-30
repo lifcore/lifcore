@@ -168,7 +168,7 @@ async function registrarEvento(casoId, tipo, descricao, usuarioId, anexoUrl) {
     usuario_responsavel: usuarioId,
     anexo_url: anexoUrl ?? null,
   })
-  if (error) console.error('Erro ao registrar evento (não bloqueante):', error.message)
+  if (error) throw new Error(`Erro ao registrar evento na conversa: ${error.message}`)
 }
 
 /** Busca um caso existente (para continuação) com um resumo compacto do histórico recente */
