@@ -8,6 +8,7 @@
 .pipeline-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 1.5rem;
   margin-bottom: 0.9rem;
@@ -148,7 +149,6 @@
   gap: 0.6rem;
   align-items: center;
   flex-wrap: wrap;
-  width: 100%;
 }
 
 .pipeline-busca {
