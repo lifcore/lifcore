@@ -81,6 +81,15 @@ na própria mensagem (ou no histórico da conversa) e pergunte SÓ o que for rea
 responder ESSE caso específico. Nunca repita uma pergunta sobre algo que o corretor já disse — releia a
 mensagem inteira antes de decidir o que perguntar.
 
+## Calibre o tamanho da resposta ao peso real da pergunta — importante
+Nem toda mensagem merece uma análise completa nas cinco etapas do seu modelo cognitivo. Se a mensagem
+for social, trivial, um teste, uma pergunta solta sem substância técnica (ex: "qual meu nome?", "oi,
+tudo bem?", uma curiosidade rápida), responda de forma BREVE e direta — uma ou duas frases, sem
+estrutura de parecer técnico. Reserve respostas longas e estruturadas SOMENTE para demandas técnicas
+de verdade dentro do seu domínio (Auto/Frota), onde essa profundidade realmente agrega valor. Gastar
+um texto extenso numa pergunta sem substância é desperdício — tanto pro corretor que precisa ler,
+quanto em custo de processamento.
+
 ## Limite de escopo — importante
 Você é especialista em Seguro Auto e Seguro Frota, ponto. Você NÃO é especialista em plano de saúde,
 odontológico, vida, residencial, previdência, consórcio ou qualquer outro ramo. Se a pergunta do
@@ -120,7 +129,7 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
   const resultado = await askAI({
     systemPrompt,
     messages: [...turnosAnteriores, { role: 'user', content: demandaTexto }],
-    maxTokens: 2000,
+    maxTokens: 4000,
     images: imagens,
   })
 
@@ -129,7 +138,17 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
     const textoLimpo = resultado.text.replace(/```json|```/g, '').trim()
     parsed = JSON.parse(textoLimpo)
   } catch {
-    parsed = { categoria: null, subcategoria: null, precisa_mais_informacao: false, especialista_sugerido: null, resposta: resultado.text }
+    // O JSON pode ter vindo cortado (resposta longa demais, truncada
+    // pelo limite de tokens). Em vez de mostrar o JSON quebrado pro
+    // corretor, tenta resgatar só o texto do campo "resposta".
+    const respostaResgatada = extrairRespostaDeJsonQuebrado(resultado.text)
+    parsed = {
+      categoria: null,
+      subcategoria: null,
+      precisa_mais_informacao: false,
+      especialista_sugerido: null,
+      resposta: respostaResgatada ?? resultado.text,
+    }
   }
 
   // Rede de segurança: se a IA esquecer de preencher o campo estruturado
@@ -148,4 +167,19 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
     respostaTexto,
     casosRelacionados: casosRelevantes,
   }
+}
+
+/**
+ * Resgata só o texto do campo "resposta" de um JSON que veio cortado
+ * (truncado antes de fechar) — evita mostrar o JSON quebrado pro
+ * corretor quando a resposta da IA é longa demais e bate no limite
+ * de tokens antes de terminar.
+ */
+function extrairRespostaDeJsonQuebrado(textoBruto) {
+  const match = textoBruto.match(/"resposta"\s*:\s*"((?:[^"\\]|\\.)*)/)
+  if (!match) return null
+  return match[1]
+    .replace(/\\n/g, '\n')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\')
 }

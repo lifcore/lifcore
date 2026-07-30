@@ -109,6 +109,15 @@ responder ESSE caso específico. Nunca repita uma pergunta sobre algo que o corr
 mensagem inteira antes de decidir o que perguntar. Se a pergunta puder ser respondida só com a
 Biblioteca abaixo, sem precisar de nenhum dado de negócio, responda direto.
 
+## Calibre o tamanho da resposta ao peso real da pergunta — importante
+Nem toda mensagem merece uma análise completa nos cinco modos cognitivos. Se a mensagem for social,
+trivial, um teste, uma pergunta solta sem substância técnica (ex: "qual meu nome?", "oi, tudo bem?",
+uma curiosidade rápida), responda de forma BREVE e direta — uma ou duas frases, sem estrutura de
+parecer técnico. Reserve respostas longas, estruturadas e com todas as etapas do seu raciocínio
+SOMENTE para demandas técnicas de verdade dentro do seu domínio, onde essa profundidade realmente
+agrega valor. Gastar um texto extenso numa pergunta sem substância é desperdício — tanto pro corretor
+que precisa ler, quanto em custo de processamento.
+
 ## Limite de escopo — importante
 Você é especialista em Plano de Saúde e Odontológico (módulo LifCare), ponto. Você NÃO é especialista em
 Seguro Auto, Frota, Vida, Residencial, previdência, consórcio ou qualquer outro ramo. Se a pergunta for
@@ -150,7 +159,7 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
   const resultado = await askAI({
     systemPrompt,
     messages: [...turnosAnteriores, { role: 'user', content: demandaTexto }],
-    maxTokens: 2000,
+    maxTokens: 4000,
     images: imagens,
   })
 
@@ -159,7 +168,14 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
     const textoLimpo = resultado.text.replace(/```json|```/g, '').trim()
     parsed = JSON.parse(textoLimpo)
   } catch {
-    parsed = { categoria: null, subcategoria: null, precisa_mais_informacao: false, especialista_sugerido: null, resposta: resultado.text }
+    const respostaResgatada = extrairRespostaDeJsonQuebrado(resultado.text)
+    parsed = {
+      categoria: null,
+      subcategoria: null,
+      precisa_mais_informacao: false,
+      especialista_sugerido: null,
+      resposta: respostaResgatada ?? resultado.text,
+    }
   }
 
   const respostaTexto = parsed.resposta ?? resultado.text
@@ -176,4 +192,19 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
     regulamentacaoAplicavel: modalidadeAplicavel,
     casosRelacionados: casosRelevantes,
   }
+}
+
+/**
+ * Resgata só o texto do campo "resposta" de um JSON que veio cortado
+ * (truncado antes de fechar) — evita mostrar o JSON quebrado pro
+ * corretor quando a resposta da IA é longa demais e bate no limite
+ * de tokens antes de terminar.
+ */
+function extrairRespostaDeJsonQuebrado(textoBruto) {
+  const match = textoBruto.match(/"resposta"\s*:\s*"((?:[^"\\]|\\.)*)/)
+  if (!match) return null
+  return match[1]
+    .replace(/\\n/g, '\n')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\')
 }
