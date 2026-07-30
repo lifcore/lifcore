@@ -98,8 +98,8 @@ NÃO tente responder usando conhecimento geral — diga com clareza que isso est
 (Auto/Frota) e oriente o corretor a usar o Especialista correto para aquele ramo. Não invente uma
 resposta só porque você "sabe" algo sobre o assunto de forma genérica — sua responsabilidade técnica
 é estritamente Auto e Frota. **Sempre que isso acontecer, você DEVE também preencher o campo
-"especialista_sugerido": "saude" no JSON de resposta (veja o formato no final) — a explicação em texto
-sozinha não é suficiente, o campo precisa vir preenchido junto.**
+ESPECIALISTA_SUGERIDO: saude no cabeçalho da resposta (veja o formato no final) — a explicação em
+texto sozinha não é suficiente, o campo precisa vir preenchido junto.**
 
 ## Biblioteca técnica relevante para esta demanda (Comercial, Apólices, Regulamentação, Ressarcimento, Sinistro, Seguradoras)
 ${blocoBiblioteca || '(nenhum documento especialmente relevante encontrado — responda com cautela e diga isso se for o caso)'}
@@ -110,14 +110,17 @@ ${blocoCasos || '(nenhum caso relacionado encontrado ainda — a base de casos r
 ${imagens.length > 0 ? '## Documento/imagem anexado\nUm arquivo foi anexado a esta demanda. Analise seu conteúdo com atenção antes de responder, e cite explicitamente o que encontrou nele.\n' : ''}
 
 ## Formato da resposta
-Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no formato exato:
-{
-  "categoria": "Comercial | Apólices | Sinistro | Ressarcimento | Regulamentação",
-  "subcategoria": "string curta descrevendo o assunto",
-  "precisa_mais_informacao": true ou false,
-  "especialista_sugerido": null, ou "saude" se a pergunta for claramente sobre Plano de Saúde/Odontológico,
-  "resposta": "sua resposta completa em português, seguindo as 5 etapas do seu modelo cognitivo de forma natural (sem precisar rotular cada etapa rigidamente). Se precisar de mais dados, faça só a(s) pergunta(s) essencial(is) para ESSE caso. Preço nunca deve ser o único critério em comparações."
-}`
+Responda EXATAMENTE neste formato, sem markdown ao redor, sem texto antes do cabeçalho:
+
+CATEGORIA: Comercial | Apólices | Sinistro | Ressarcimento | Regulamentação
+SUBCATEGORIA: string curta descrevendo o assunto
+PRECISA_MAIS_INFORMACAO: true ou false
+ESPECIALISTA_SUGERIDO: null, ou "saude" se a pergunta for claramente sobre Plano de Saúde/Odontológico
+---RESPOSTA---
+Sua resposta completa em português vem aqui, livre — pode ter parágrafos, quebras de linha, listas,
+emojis, à vontade, sem nenhuma restrição de formato. Siga as 5 etapas do seu modelo cognitivo de forma
+natural (sem precisar rotular cada etapa rigidamente). Se precisar de mais dados, faça só a(s)
+pergunta(s) essencial(is) para ESSE caso. Preço nunca deve ser o único critério em comparações.`
 
   // Monta a conversa de verdade — os turnos anteriores entram como
   // mensagens de usuário/assistente reais, não só como texto de apoio
@@ -133,36 +136,20 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
     images: imagens,
   })
 
-  let parsed
-  try {
-    const textoLimpo = resultado.text.replace(/```json|```/g, '').trim()
-    parsed = JSON.parse(textoLimpo)
-  } catch {
-    // O JSON pode ter vindo cortado (resposta longa demais, truncada
-    // pelo limite de tokens). Em vez de mostrar o JSON quebrado pro
-    // corretor, tenta resgatar só o texto do campo "resposta".
-    const respostaResgatada = extrairRespostaDeJsonQuebrado(resultado.text)
-    parsed = {
-      categoria: null,
-      subcategoria: null,
-      precisa_mais_informacao: false,
-      especialista_sugerido: null,
-      resposta: respostaResgatada ?? resultado.text,
-    }
-  }
+  const parsed = parsearRespostaComSeparador(resultado.text)
 
   // Rede de segurança: se a IA esquecer de preencher o campo estruturado
   // mas a resposta em texto claramente mencionar o outro especialista,
   // detecta por palavra-chave — não depende só da IA seguir o formato à risca.
-  const respostaTexto = parsed.resposta ?? resultado.text
+  const respostaTexto = parsed.resposta
   const especialistaSugeridoDetectado =
-    parsed.especialista_sugerido ??
+    parsed.especialistaSugerido ??
     (/especialista de sa[uú]de/i.test(respostaTexto) ? 'saude' : null)
 
   return {
-    categoria: parsed.categoria ?? null,
-    subcategoria: parsed.subcategoria ?? null,
-    precisaMaisInformacao: !!parsed.precisa_mais_informacao,
+    categoria: parsed.categoria,
+    subcategoria: parsed.subcategoria,
+    precisaMaisInformacao: parsed.precisaMaisInformacao,
     especialistaSugerido: especialistaSugeridoDetectado,
     respostaTexto,
     casosRelacionados: casosRelevantes,
@@ -170,16 +157,34 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
 }
 
 /**
- * Resgata só o texto do campo "resposta" de um JSON que veio cortado
- * (truncado antes de fechar) — evita mostrar o JSON quebrado pro
- * corretor quando a resposta da IA é longa demais e bate no limite
- * de tokens antes de terminar.
+ * Lê o formato "cabeçalho + ---RESPOSTA---+ texto livre" — muito mais
+ * robusto que JSON pra respostas longas com parágrafos, porque o texto
+ * da resposta nunca precisa ser escapado (não vive dentro de uma string
+ * JSON, então uma quebra de linha "de verdade" nunca quebra o formato).
  */
-function extrairRespostaDeJsonQuebrado(textoBruto) {
-  const match = textoBruto.match(/"resposta"\s*:\s*"((?:[^"\\]|\\.)*)/)
-  if (!match) return null
-  return match[1]
-    .replace(/\\n/g, '\n')
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, '\\')
+function parsearRespostaComSeparador(textoBruto) {
+  const marcador = '---RESPOSTA---'
+  const posicaoMarcador = textoBruto.indexOf(marcador)
+
+  if (posicaoMarcador === -1) {
+    return { categoria: null, subcategoria: null, precisaMaisInformacao: false, especialistaSugerido: null, resposta: textoBruto.trim() }
+  }
+
+  const cabecalho = textoBruto.slice(0, posicaoMarcador)
+  const resposta = textoBruto.slice(posicaoMarcador + marcador.length).trim()
+
+  function extrairCampo(nomeCampo) {
+    const m = cabecalho.match(new RegExp(`${nomeCampo}\\s*:\\s*(.+)`, 'i'))
+    return m ? m[1].trim() : null
+  }
+
+  const especialistaSugeridoBruto = (extrairCampo('ESPECIALISTA_SUGERIDO') ?? '').toLowerCase()
+
+  return {
+    categoria: extrairCampo('CATEGORIA'),
+    subcategoria: extrairCampo('SUBCATEGORIA'),
+    precisaMaisInformacao: (extrairCampo('PRECISA_MAIS_INFORMACAO') ?? '').toLowerCase() === 'true',
+    especialistaSugerido: ['null', '', 'none', 'nenhum'].includes(especialistaSugeridoBruto) ? null : especialistaSugeridoBruto,
+    resposta,
+  }
 }

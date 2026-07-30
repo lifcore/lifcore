@@ -122,7 +122,7 @@ que precisa ler, quanto em custo de processamento.
 Você é especialista em Plano de Saúde e Odontológico (módulo LifCare), ponto. Você NÃO é especialista em
 Seguro Auto, Frota, Vida, Residencial, previdência, consórcio ou qualquer outro ramo. Se a pergunta for
 claramente sobre outro ramo, NÃO tente responder usando conhecimento geral — diga com clareza que está
-fora do seu domínio e sinalize isso no campo "especialista_sugerido" da resposta (veja o formato abaixo).
+fora do seu domínio e sinalize isso no campo ESPECIALISTA_SUGERIDO do cabeçalho (veja o formato abaixo).
 
 ## Biblioteca GIN relevante para esta demanda (fonte PRINCIPAL — tem mais peso que os casos abaixo)
 ${blocoBiblioteca || '(nenhum documento especialmente relevante encontrado — responda com cautela e diga isso se for o caso)'}
@@ -143,14 +143,17 @@ corretor não tenha perguntado diretamente.
 ${imagens.length > 0 ? '## Documento/imagem anexado\nUm arquivo foi anexado a esta demanda. Analise seu conteúdo com atenção antes de responder, e cite explicitamente o que encontrou nele.\n' : ''}
 
 ## Formato da resposta
-Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no formato exato:
-{
-  "categoria": "Comercial | Técnico | Concierge | Analítico | Estratégico",
-  "subcategoria": "string curta descrevendo o assunto",
-  "precisa_mais_informacao": true ou false,
-  "especialista_sugerido": null, ou "auto" se a pergunta for claramente sobre Seguro Auto/Frota,
-  "resposta": "sua resposta completa em português, seguindo sua Arquitetura Cognitiva de forma natural (sem precisar rotular cada etapa/modo rigidamente). Se precisar de mais dados, faça só a(s) pergunta(s) essencial(is) para ESSE caso."
-}`
+Responda EXATAMENTE neste formato, sem markdown ao redor, sem texto antes do cabeçalho:
+
+CATEGORIA: Comercial | Técnico | Concierge | Analítico | Estratégico
+SUBCATEGORIA: string curta descrevendo o assunto
+PRECISA_MAIS_INFORMACAO: true ou false
+ESPECIALISTA_SUGERIDO: null, ou "auto" se a pergunta for claramente sobre Seguro Auto/Frota
+---RESPOSTA---
+Sua resposta completa em português vem aqui, livre — pode ter parágrafos, quebras de linha, listas,
+emojis, à vontade, sem nenhuma restrição de formato. Siga sua Arquitetura Cognitiva de forma natural
+(sem precisar rotular cada etapa/modo rigidamente). Se precisar de mais dados, faça só a(s)
+pergunta(s) essencial(is) para ESSE caso.`
 
   const turnosAnteriores = historicoMensagens
     .filter((m) => m.autor === 'corretor' || m.autor === 'especialista')
@@ -163,30 +166,17 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
     images: imagens,
   })
 
-  let parsed
-  try {
-    const textoLimpo = resultado.text.replace(/```json|```/g, '').trim()
-    parsed = JSON.parse(textoLimpo)
-  } catch {
-    const respostaResgatada = extrairRespostaDeJsonQuebrado(resultado.text)
-    parsed = {
-      categoria: null,
-      subcategoria: null,
-      precisa_mais_informacao: false,
-      especialista_sugerido: null,
-      resposta: respostaResgatada ?? resultado.text,
-    }
-  }
+  const parsed = parsearRespostaComSeparador(resultado.text)
 
-  const respostaTexto = parsed.resposta ?? resultado.text
+  const respostaTexto = parsed.resposta
   const especialistaSugeridoDetectado =
-    parsed.especialista_sugerido ??
+    parsed.especialistaSugerido ??
     (/especialista de auto/i.test(respostaTexto) ? 'auto' : null)
 
   return {
-    categoria: parsed.categoria ?? null,
-    subcategoria: parsed.subcategoria ?? null,
-    precisaMaisInformacao: !!parsed.precisa_mais_informacao,
+    categoria: parsed.categoria,
+    subcategoria: parsed.subcategoria,
+    precisaMaisInformacao: parsed.precisaMaisInformacao,
     especialistaSugerido: especialistaSugeridoDetectado,
     respostaTexto,
     regulamentacaoAplicavel: modalidadeAplicavel,
@@ -195,16 +185,36 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
 }
 
 /**
- * Resgata só o texto do campo "resposta" de um JSON que veio cortado
- * (truncado antes de fechar) — evita mostrar o JSON quebrado pro
- * corretor quando a resposta da IA é longa demais e bate no limite
- * de tokens antes de terminar.
+ * Lê o formato "cabeçalho + ---RESPOSTA---+ texto livre" — muito mais
+ * robusto que JSON pra respostas longas com parágrafos, porque o texto
+ * da resposta nunca precisa ser escapado (não vive dentro de uma string
+ * JSON, então uma quebra de linha "de verdade" nunca quebra o formato).
  */
-function extrairRespostaDeJsonQuebrado(textoBruto) {
-  const match = textoBruto.match(/"resposta"\s*:\s*"((?:[^"\\]|\\.)*)/)
-  if (!match) return null
-  return match[1]
-    .replace(/\\n/g, '\n')
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, '\\')
+function parsearRespostaComSeparador(textoBruto) {
+  const marcador = '---RESPOSTA---'
+  const posicaoMarcador = textoBruto.indexOf(marcador)
+
+  if (posicaoMarcador === -1) {
+    // A IA não seguiu o formato esperado — ainda assim entregamos o
+    // texto bruto ao corretor, nunca travamos aqui.
+    return { categoria: null, subcategoria: null, precisaMaisInformacao: false, especialistaSugerido: null, resposta: textoBruto.trim() }
+  }
+
+  const cabecalho = textoBruto.slice(0, posicaoMarcador)
+  const resposta = textoBruto.slice(posicaoMarcador + marcador.length).trim()
+
+  function extrairCampo(nomeCampo) {
+    const m = cabecalho.match(new RegExp(`${nomeCampo}\\s*:\\s*(.+)`, 'i'))
+    return m ? m[1].trim() : null
+  }
+
+  const especialistaSugeridoBruto = (extrairCampo('ESPECIALISTA_SUGERIDO') ?? '').toLowerCase()
+
+  return {
+    categoria: extrairCampo('CATEGORIA'),
+    subcategoria: extrairCampo('SUBCATEGORIA'),
+    precisaMaisInformacao: (extrairCampo('PRECISA_MAIS_INFORMACAO') ?? '').toLowerCase() === 'true',
+    especialistaSugerido: ['null', '', 'none', 'nenhum'].includes(especialistaSugeridoBruto) ? null : especialistaSugeridoBruto,
+    resposta,
+  }
 }
