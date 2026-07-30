@@ -115,7 +115,7 @@ Responda EXATAMENTE neste formato, sem markdown ao redor, sem texto antes do cab
 CATEGORIA: Comercial | Apólices | Sinistro | Ressarcimento | Regulamentação
 SUBCATEGORIA: string curta descrevendo o assunto
 PRECISA_MAIS_INFORMACAO: true ou false
-ESPECIALISTA_SUGERIDO: null, ou "saude" se a pergunta for claramente sobre Plano de Saúde/Odontológico
+ESPECIALISTA_SUGERIDO: escreva exatamente a palavra "null" (sem aspas, sem markdown), ou exatamente a palavra "saude" se a pergunta for claramente sobre Plano de Saúde/Odontológico. Nada mais nessa linha.
 ---RESPOSTA---
 Sua resposta completa em português vem aqui, livre — pode ter parágrafos, quebras de linha, listas,
 emojis, à vontade, sem nenhuma restrição de formato. Siga as 5 etapas do seu modelo cognitivo de forma
@@ -142,9 +142,10 @@ pergunta(s) essencial(is) para ESSE caso. Preço nunca deve ser o único critér
   // mas a resposta em texto claramente mencionar o outro especialista,
   // detecta por palavra-chave — não depende só da IA seguir o formato à risca.
   const respostaTexto = parsed.resposta
+  const respostaTextoSemFormatacao = respostaTexto.replace(/[*_`#]/g, '')
   const especialistaSugeridoDetectado =
     parsed.especialistaSugerido ??
-    (/especialista de sa[uú]de/i.test(respostaTexto) ? 'saude' : null)
+    (/especialista\s+d[eo]\s+sa[uú]de/i.test(respostaTextoSemFormatacao) ? 'saude' : null)
 
   return {
     categoria: parsed.categoria,
@@ -178,13 +179,14 @@ function parsearRespostaComSeparador(textoBruto) {
     return m ? m[1].trim() : null
   }
 
-  const especialistaSugeridoBruto = (extrairCampo('ESPECIALISTA_SUGERIDO') ?? '').toLowerCase()
+  const especialistaSugeridoBruto = extrairCampo('ESPECIALISTA_SUGERIDO') ?? ''
+  const matchEspecialista = /\bsa[uú]de\b/i.test(especialistaSugeridoBruto)
 
   return {
     categoria: extrairCampo('CATEGORIA'),
     subcategoria: extrairCampo('SUBCATEGORIA'),
     precisaMaisInformacao: (extrairCampo('PRECISA_MAIS_INFORMACAO') ?? '').toLowerCase() === 'true',
-    especialistaSugerido: ['null', '', 'none', 'nenhum'].includes(especialistaSugeridoBruto) ? null : especialistaSugeridoBruto,
+    especialistaSugerido: matchEspecialista ? 'saude' : null,
     resposta,
   }
 }

@@ -148,7 +148,7 @@ Responda EXATAMENTE neste formato, sem markdown ao redor, sem texto antes do cab
 CATEGORIA: Comercial | Técnico | Concierge | Analítico | Estratégico
 SUBCATEGORIA: string curta descrevendo o assunto
 PRECISA_MAIS_INFORMACAO: true ou false
-ESPECIALISTA_SUGERIDO: null, ou "auto" se a pergunta for claramente sobre Seguro Auto/Frota
+ESPECIALISTA_SUGERIDO: escreva exatamente a palavra "null" (sem aspas, sem markdown), ou exatamente a palavra "auto" se a pergunta for claramente sobre Seguro Auto/Frota. Nada mais nessa linha.
 ---RESPOSTA---
 Sua resposta completa em português vem aqui, livre — pode ter parágrafos, quebras de linha, listas,
 emojis, à vontade, sem nenhuma restrição de formato. Siga sua Arquitetura Cognitiva de forma natural
@@ -169,9 +169,10 @@ pergunta(s) essencial(is) para ESSE caso.`
   const parsed = parsearRespostaComSeparador(resultado.text)
 
   const respostaTexto = parsed.resposta
+  const respostaTextoSemFormatacao = respostaTexto.replace(/[*_`#]/g, '')
   const especialistaSugeridoDetectado =
     parsed.especialistaSugerido ??
-    (/especialista de auto/i.test(respostaTexto) ? 'auto' : null)
+    (/especialista\s+d[eo]\s+auto/i.test(respostaTextoSemFormatacao) ? 'auto' : null)
 
   return {
     categoria: parsed.categoria,
@@ -208,13 +209,14 @@ function parsearRespostaComSeparador(textoBruto) {
     return m ? m[1].trim() : null
   }
 
-  const especialistaSugeridoBruto = (extrairCampo('ESPECIALISTA_SUGERIDO') ?? '').toLowerCase()
+  const especialistaSugeridoBruto = extrairCampo('ESPECIALISTA_SUGERIDO') ?? ''
+  const matchEspecialista = /\bauto\b/i.test(especialistaSugeridoBruto)
 
   return {
     categoria: extrairCampo('CATEGORIA'),
     subcategoria: extrairCampo('SUBCATEGORIA'),
     precisaMaisInformacao: (extrairCampo('PRECISA_MAIS_INFORMACAO') ?? '').toLowerCase() === 'true',
-    especialistaSugerido: ['null', '', 'none', 'nenhum'].includes(especialistaSugeridoBruto) ? null : especialistaSugeridoBruto,
+    especialistaSugerido: matchEspecialista ? 'auto' : null,
     resposta,
   }
 }
