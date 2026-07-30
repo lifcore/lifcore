@@ -111,23 +111,6 @@ export default function PipelineLifleetPage() {
         </div>
       </div>
 
-      {vigencias.length > 0 && (
-        <div className="pipeline-alertas">
-          <strong>⏰ Vigências próximas (90 dias):</strong>
-          <div className="pipeline-alertas-lista">
-            {vigencias.map((v) => (
-              <span
-                key={v.id}
-                className="pipeline-alerta-item"
-                onClick={() => navigate(`/lifleet/clientes/${v.id}`)}
-              >
-                {v.razao_social} — {formatarDataBR(v.data_vigencia)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
       {carregando ? (
         <p className="pipeline-carregando">Carregando pipeline...</p>
       ) : (
@@ -179,6 +162,30 @@ export default function PipelineLifleetPage() {
               </div>
             </div>
           ))}
+
+          <div className="pipeline-coluna pipeline-coluna-vigencias">
+            <div className="pipeline-coluna-titulo">
+              ⏰ Vigências Próximas
+              <span className="pipeline-coluna-contador">{vigencias.length}</span>
+            </div>
+            <div className="pipeline-coluna-cards">
+              {vigencias.map((v) => (
+                <div
+                  key={v.id}
+                  className="pipeline-card"
+                  onClick={() => navigate(`/lifleet/clientes/${v.id}`)}
+                >
+                  <div className="pipeline-card-topo">
+                    <span className="pipeline-card-data">{formatarDataBR(v.data_vigencia)}</span>
+                  </div>
+                  <div className="pipeline-card-nome">{v.razao_social}</div>
+                </div>
+              ))}
+              {vigencias.length === 0 && (
+                <div className="pipeline-coluna-vazia">Nenhuma vigência nos próximos 90 dias.</div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

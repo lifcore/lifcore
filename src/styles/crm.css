@@ -54,9 +54,18 @@
 
 .pipeline-colunas {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
   align-items: start;
+}
+
+.pipeline-coluna-vigencias {
+  background: var(--ls-accent-soft);
+  border: 1px solid var(--ls-accent);
+}
+
+.pipeline-coluna-vigencias .pipeline-card-data {
+  color: var(--ls-accent);
 }
 
 .pipeline-coluna {
