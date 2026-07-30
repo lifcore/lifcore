@@ -126,8 +126,11 @@ pergunta(s) essencial(is) para ESSE caso. Preço nunca deve ser o único critér
   // mensagens de usuário/assistente reais, não só como texto de apoio
   // pra busca. Sem isso, a IA nunca "vê" o que já foi dito antes.
   const turnosAnteriores = historicoMensagens
-    .filter((m) => m.autor === 'corretor' || m.autor === 'especialista')
-    .map((m) => ({ role: m.autor === 'corretor' ? 'user' : 'assistant', content: m.texto }))
+    .filter((m) => m.autor === 'corretor' || m.autor === 'especialista' || m.autor === 'sistema')
+    .map((m) => ({
+      role: m.autor === 'especialista' ? 'assistant' : 'user',
+      content: m.autor === 'sistema' ? `[Atualização registrada no caso pelo corretor]: ${m.texto}` : m.texto,
+    }))
 
   const resultado = await askAI({
     systemPrompt,

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { criarClienteProspect, calcularPorte, listarGruposEconomicos, buscarOuCriarGrupoEconomico } from '../../lib/crm/clientesService'
+import { useState } from 'react'
+import { criarClienteProspect, calcularPorte } from '../../lib/crm/clientesService'
 import { operacional } from '../../lib/supabaseSchemas'
 import { useAuth } from '../auth/AuthContext'
 
@@ -49,59 +49,69 @@ function EscolhaTipoPessoa({ onEscolher, onFechar }) {
 }
 
 /** Formulário original — cliente Pessoa Jurídica (empresa), sem nenhuma mudança de comportamento */
+function novaLinhaEmpresa() {
+  return { id: crypto.randomUUID(), cnpj: '', nome: '', numero_colaboradores: '' }
+}
+
+/** Formulário original — cliente Pessoa Jurídica (empresa ou grupo econômico com várias empresas) */
 function FormularioEmpresarial({ onFechar, onCriado, onVoltar, corretorAlvoId }) {
   const { perfil } = useAuth()
-  const [form, setForm] = useState({
-    razao_social: '',
-    cnpj: '',
-    segmento: '',
-    numero_colaboradores: '',
-    data_vigencia: '',
-    origem: '',
-    nome_grupo: '',
-  })
-  const [gruposExistentes, setGruposExistentes] = useState([])
+  const [empresas, setEmpresas] = useState([novaLinhaEmpresa()])
+  const [nomeGrupo, setNomeGrupo] = useState('')
+  const [segmento, setSegmento] = useState('')
+  const [dataVigencia, setDataVigencia] = useState('')
+  const [origem, setOrigem] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
 
-  useEffect(() => {
-    listarGruposEconomicos().then(setGruposExistentes).catch(() => {})
-  }, [])
+  const ehGrupo = empresas.length > 1
 
-  function atualizar(campo, valor) {
-    setForm((f) => ({ ...f, [campo]: valor }))
+  function atualizarEmpresa(id, campo, valor) {
+    setEmpresas((lista) => lista.map((e) => (e.id === id ? { ...e, [campo]: valor } : e)))
+  }
+
+  function adicionarEmpresa() {
+    setEmpresas((lista) => [...lista, novaLinhaEmpresa()])
+  }
+
+  function removerEmpresa(id) {
+    setEmpresas((lista) => (lista.length > 1 ? lista.filter((e) => e.id !== id) : lista))
   }
 
   async function handleSalvar() {
-    if (!form.razao_social.trim()) {
-      setErro('Informe ao menos o nome da empresa.')
+    if (!empresas[0].nome.trim()) {
+      setErro('Informe ao menos o nome da primeira empresa.')
+      return
+    }
+    if (ehGrupo && !nomeGrupo.trim()) {
+      setErro('Como este cadastro tem mais de uma empresa, informe um nome pra identificar o grupo.')
       return
     }
     setSalvando(true)
     setErro(null)
     try {
       const { data: org } = await operacional.from('organizacoes').select('id').limit(1).single()
-      const numeroVidas = parseInt(form.numero_colaboradores, 10) || null
 
-      let grupoEconomicoId = null
-      if (form.nome_grupo.trim()) {
-        const grupo = await buscarOuCriarGrupoEconomico(form.nome_grupo, org.id)
-        grupoEconomicoId = grupo.id
-      }
+      const empresasLimpas = empresas.map((e) => ({
+        cnpj: e.cnpj || null,
+        nome: e.nome,
+        numero_colaboradores: parseInt(e.numero_colaboradores, 10) || 0,
+      }))
+      const numeroVidasTotal = empresasLimpas.reduce((soma, e) => soma + e.numero_colaboradores, 0)
 
       await criarClienteProspect({
         organizacao_id: org.id,
         corretor_id: corretorAlvoId ?? perfil.id,
         tipo_pessoa: 'juridica',
-        razao_social: form.razao_social,
-        cnpj: form.cnpj || null,
-        segmento: form.segmento || null,
-        numero_colaboradores: numeroVidas,
-        porte: numeroVidas ? calcularPorte(numeroVidas) : null,
-        data_vigencia: form.data_vigencia || null,
-        origem: form.origem || null,
+        razao_social: ehGrupo ? nomeGrupo : empresasLimpas[0].nome,
+        cnpj: ehGrupo ? null : empresasLimpas[0].cnpj,
+        segmento: segmento || null,
+        numero_colaboradores: numeroVidasTotal || null,
+        porte: numeroVidasTotal ? calcularPorte(numeroVidasTotal) : null,
+        data_vigencia: dataVigencia || null,
+        origem: origem || null,
         status: 'prospect',
-        grupo_economico_id: grupoEconomicoId,
+        empresas_grupo: ehGrupo ? empresasLimpas : null,
       })
       onCriado()
     } catch (err) {
@@ -115,44 +125,74 @@ function FormularioEmpresarial({ onFechar, onCriado, onVoltar, corretorAlvoId })
     <>
       <h3>Novo Prospect — Empresarial</h3>
 
-      <label>Nome da empresa *</label>
-      <input value={form.razao_social} onChange={(e) => atualizar('razao_social', e.target.value)} />
+      {ehGrupo && (
+        <>
+          <label>Nome do grupo *</label>
+          <input
+            value={nomeGrupo}
+            onChange={(e) => setNomeGrupo(e.target.value)}
+            placeholder="Ex: Grupo Silva Participações"
+          />
+        </>
+      )}
 
-      <label>CNPJ</label>
-      <input value={form.cnpj} onChange={(e) => atualizar('cnpj', e.target.value)} placeholder="00.000.000/0001-00" />
+      <h4 style={{ marginTop: '0.9rem' }}>
+        {ehGrupo ? 'Empresas do grupo' : 'Empresa'}
+      </h4>
 
-      <label>Segmento</label>
-      <input value={form.segmento} onChange={(e) => atualizar('segmento', e.target.value)} placeholder="Ex: Tecnologia, Indústria..." />
+      {empresas.map((empresa, index) => (
+        <div key={empresa.id} className="ls-card" style={{ padding: '0.75rem', marginBottom: '0.6rem' }}>
+          {ehGrupo && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+              <strong>Empresa {index + 1}</strong>
+              <button className="cotacao-remover-bloco" onClick={() => removerEmpresa(empresa.id)}>✕</button>
+            </div>
+          )}
+          <div className="cotacao-form-linha">
+            <div>
+              <label>Nome da empresa {index === 0 ? '*' : ''}</label>
+              <input
+                value={empresa.nome}
+                onChange={(e) => atualizarEmpresa(empresa.id, 'nome', e.target.value)}
+              />
+            </div>
+            <div>
+              <label>CNPJ</label>
+              <input
+                value={empresa.cnpj}
+                onChange={(e) => atualizarEmpresa(empresa.id, 'cnpj', e.target.value)}
+                placeholder="00.000.000/0001-00"
+              />
+            </div>
+            <div>
+              <label>Número de colaboradores</label>
+              <input
+                type="number"
+                value={empresa.numero_colaboradores}
+                onChange={(e) => atualizarEmpresa(empresa.id, 'numero_colaboradores', e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      ))}
 
-      <label>Número de colaboradores (vidas deste CNPJ)</label>
-      <input
-        type="number"
-        value={form.numero_colaboradores}
-        onChange={(e) => atualizar('numero_colaboradores', e.target.value)}
-      />
-
-      <label>Grupo Econômico (se este CNPJ for coligado a outros)</label>
-      <input
-        list="lista-grupos-economicos"
-        value={form.nome_grupo}
-        onChange={(e) => atualizar('nome_grupo', e.target.value)}
-        placeholder="Ex: Grupo Silva Participações (deixe em branco se não houver)"
-      />
-      <datalist id="lista-grupos-economicos">
-        {gruposExistentes.map((g) => (
-          <option key={g.id} value={g.nome_grupo} />
-        ))}
-      </datalist>
-      <p className="config-instrucao" style={{ marginTop: '0.3rem', marginBottom: '0.6rem' }}>
-        Se já existir um grupo com esse nome, este CNPJ é vinculado a ele automaticamente
-        (o total de vidas do grupo passa a somar todos os CNPJs coligados).
+      <button className="ls-btn ls-btn-ghost cotacao-add-bloco" onClick={adicionarEmpresa}>
+        + Adicionar outra empresa (grupo econômico)
+      </button>
+      <p className="config-instrucao" style={{ marginTop: '0.3rem', marginBottom: '0.8rem' }}>
+        Adicionar mais de uma empresa cria um único cadastro pro grupo inteiro — o Especialista
+        entende como um só cliente (ex: "50 vidas"), com contratos, cotações e demandas
+        centralizados. Deixe só 1 empresa se não for o caso.
       </p>
 
+      <label>Segmento</label>
+      <input value={segmento} onChange={(e) => setSegmento(e.target.value)} placeholder="Ex: Tecnologia, Indústria..." />
+
       <label>Data de vigência/renovação (se souber)</label>
-      <input type="date" value={form.data_vigencia} onChange={(e) => atualizar('data_vigencia', e.target.value)} />
+      <input type="date" value={dataVigencia} onChange={(e) => setDataVigencia(e.target.value)} />
 
       <label>Origem</label>
-      <input value={form.origem} onChange={(e) => atualizar('origem', e.target.value)} placeholder="Indicação, prospecção ativa..." />
+      <input value={origem} onChange={(e) => setOrigem(e.target.value)} placeholder="Indicação, prospecção ativa..." />
 
       {erro && <p className="ls-modal-erro">{erro}</p>}
 

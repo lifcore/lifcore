@@ -11,6 +11,7 @@ import {
   adicionarAtualizacaoManual,
   excluirContrato,
   excluirCotacao,
+  calcularPorte,
 } from '../../lib/crm/clientesService'
 import { gerarResumoCandidato, criarCandidatoConhecimento, aprovarCandidatoComoCasoReal, rejeitarCandidato } from '../../lib/crm/aprendizadoService'
 import { buscarHistoricoChat } from '../../lib/especialista/especialistaSaude'
@@ -136,6 +137,7 @@ export default function ClienteDetailPage() {
 
 export function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario, grupoInfo, onSalvo }) {
   const ehPessoaFisica = cliente.tipo_pessoa === 'fisica'
+  const ehGrupoNovo = Array.isArray(cliente.empresas_grupo) && cliente.empresas_grupo.length > 0
   const [editando, setEditando] = useState(false)
   const [empresa, setEmpresa] = useState({
     cnpj: cliente.cnpj ?? '',
@@ -145,9 +147,24 @@ export function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario
     cpf: cliente.cpf ?? '',
     graduacao: cliente.graduacao ?? '',
   })
+  const [empresasGrupo, setEmpresasGrupo] = useState(
+    ehGrupoNovo ? cliente.empresas_grupo.map((e) => ({ ...e, id: crypto.randomUUID() })) : []
+  )
   const [primario, setPrimario] = useState(contatoPrimario)
   const [secundario, setSecundario] = useState(contatoSecundario)
   const [salvando, setSalvando] = useState(false)
+
+  function atualizarEmpresaGrupo(id, campo, valor) {
+    setEmpresasGrupo((lista) => lista.map((e) => (e.id === id ? { ...e, [campo]: valor } : e)))
+  }
+
+  function adicionarEmpresaGrupo() {
+    setEmpresasGrupo((lista) => [...lista, { id: crypto.randomUUID(), cnpj: '', nome: '', numero_colaboradores: '' }])
+  }
+
+  function removerEmpresaGrupo(id) {
+    setEmpresasGrupo((lista) => (lista.length > 1 ? lista.filter((e) => e.id !== id) : lista))
+  }
 
   async function handleSalvarTudo() {
     setSalvando(true)
@@ -155,6 +172,20 @@ export function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario
       await atualizarClienteProspect(cliente.id, {
         cpf: empresa.cpf || null,
         graduacao: empresa.graduacao || null,
+        data_vigencia: empresa.data_vigencia || null,
+      })
+    } else if (ehGrupoNovo) {
+      const empresasLimpas = empresasGrupo.map(({ id, ...resto }) => ({
+        cnpj: resto.cnpj || null,
+        nome: resto.nome,
+        numero_colaboradores: parseInt(resto.numero_colaboradores, 10) || 0,
+      }))
+      const numeroVidasTotal = empresasLimpas.reduce((soma, e) => soma + e.numero_colaboradores, 0)
+      await atualizarClienteProspect(cliente.id, {
+        empresas_grupo: empresasLimpas,
+        numero_colaboradores: numeroVidasTotal || null,
+        porte: numeroVidasTotal ? calcularPorte(numeroVidasTotal) : null,
+        segmento: empresa.segmento || null,
         data_vigencia: empresa.data_vigencia || null,
       })
     } else {
@@ -176,16 +207,23 @@ export function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario
     return (
       <div className="ls-card cadastro-card">
         <div className="cadastro-header-view">
-          <h4>{ehPessoaFisica ? 'Pessoa Física' : 'Empresa'}</h4>
+          <h4>{ehPessoaFisica ? 'Pessoa Física' : ehGrupoNovo ? 'Grupo Econômico' : 'Empresa'}</h4>
           <button className="ls-btn ls-btn-ghost" onClick={() => setEditando(true)}>Editar</button>
         </div>
         <div className="cadastro-grid">
-          <CampoView label={ehPessoaFisica ? 'Nome Completo' : 'Razão Social'} valor={cliente.razao_social} />
+          <CampoView label={ehPessoaFisica ? 'Nome Completo' : ehGrupoNovo ? 'Nome do Grupo' : 'Razão Social'} valor={cliente.razao_social} />
           {ehPessoaFisica ? (
             <>
               <CampoView label="CPF" valor={empresa.cpf || '—'} />
               <CampoView label="Graduação" valor={empresa.graduacao || '—'} />
               <CampoView label="Vigência" valor={empresa.data_vigencia ? formatarDataBR(empresa.data_vigencia) : '—'} />
+            </>
+          ) : ehGrupoNovo ? (
+            <>
+              <CampoView label="Segmento" valor={empresa.segmento || '—'} />
+              <CampoView label="Vigência" valor={empresa.data_vigencia ? formatarDataBR(empresa.data_vigencia) : '—'} />
+              <CampoView label="Total de vidas do grupo" valor={cliente.numero_colaboradores ?? '—'} />
+              <CampoView label="Porte (calculado)" valor={cliente.porte ?? '—'} />
             </>
           ) : (
             <>
@@ -197,6 +235,20 @@ export function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario
             </>
           )}
         </div>
+
+        {ehGrupoNovo && (
+          <div className="grupo-economico-bloco">
+            <h4 style={{ marginTop: '1rem' }}>Empresas deste grupo</h4>
+            <ul className="grupo-economico-lista">
+              {cliente.empresas_grupo.map((e, i) => (
+                <li key={i}>
+                  <strong>{e.nome}</strong>{e.cnpj ? ` — ${e.cnpj}` : ''} — {e.numero_colaboradores ?? 0} vidas
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <h4>Contato Primário</h4>
         <ContatoView contato={primario} />
         <h4>Contato Secundário</h4>
@@ -225,9 +277,9 @@ export function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario
 
   return (
     <div className="ls-card cadastro-card">
-      <h4>{ehPessoaFisica ? 'Pessoa Física' : 'Empresa'}</h4>
+      <h4>{ehPessoaFisica ? 'Pessoa Física' : ehGrupoNovo ? 'Grupo Econômico' : 'Empresa'}</h4>
       <div className="cadastro-grid">
-        <Campo label={ehPessoaFisica ? 'Nome Completo' : 'Razão Social'} valor={cliente.razao_social} disabled />
+        <Campo label={ehPessoaFisica ? 'Nome Completo' : ehGrupoNovo ? 'Nome do Grupo' : 'Razão Social'} valor={cliente.razao_social} disabled />
 
         {ehPessoaFisica ? (
           <>
@@ -251,6 +303,22 @@ export function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario
                 onChange={(e) => setEmpresa({ ...empresa, data_vigencia: e.target.value })}
               />
             </div>
+          </>
+        ) : ehGrupoNovo ? (
+          <>
+            <div>
+              <label>Segmento</label>
+              <input value={empresa.segmento} onChange={(e) => setEmpresa({ ...empresa, segmento: e.target.value })} />
+            </div>
+            <div>
+              <label>Data de vigência / renovação</label>
+              <input
+                type="date"
+                value={empresa.data_vigencia ?? ''}
+                onChange={(e) => setEmpresa({ ...empresa, data_vigencia: e.target.value })}
+              />
+            </div>
+            <Campo label="Total de vidas (somado automaticamente)" valor={empresasGrupo.reduce((s, e) => s + (parseInt(e.numero_colaboradores, 10) || 0), 0)} disabled />
           </>
         ) : (
           <>
@@ -282,6 +350,41 @@ export function DadosCadastraisTab({ cliente, contatoPrimario, contatoSecundario
           </>
         )}
       </div>
+
+      {ehGrupoNovo && (
+        <>
+          <h4 style={{ marginTop: '1rem' }}>Empresas do grupo</h4>
+          {empresasGrupo.map((e, index) => (
+            <div key={e.id} className="ls-card" style={{ padding: '0.75rem', marginBottom: '0.6rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                <strong>Empresa {index + 1}</strong>
+                <button className="cotacao-remover-bloco" onClick={() => removerEmpresaGrupo(e.id)}>✕</button>
+              </div>
+              <div className="cotacao-form-linha">
+                <div>
+                  <label>Nome</label>
+                  <input value={e.nome} onChange={(ev) => atualizarEmpresaGrupo(e.id, 'nome', ev.target.value)} />
+                </div>
+                <div>
+                  <label>CNPJ</label>
+                  <input value={e.cnpj ?? ''} onChange={(ev) => atualizarEmpresaGrupo(e.id, 'cnpj', ev.target.value)} />
+                </div>
+                <div>
+                  <label>Nº colaboradores</label>
+                  <input
+                    type="number"
+                    value={e.numero_colaboradores}
+                    onChange={(ev) => atualizarEmpresaGrupo(e.id, 'numero_colaboradores', ev.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+          <button className="ls-btn ls-btn-ghost cotacao-add-bloco" onClick={adicionarEmpresaGrupo}>
+            + Adicionar empresa
+          </button>
+        </>
+      )}
 
       <h4>Contato Primário</h4>
       <ContatoFormInline contato={primario} onChange={setPrimario} />

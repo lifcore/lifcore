@@ -156,8 +156,11 @@ emojis, à vontade, sem nenhuma restrição de formato. Siga sua Arquitetura Cog
 pergunta(s) essencial(is) para ESSE caso.`
 
   const turnosAnteriores = historicoMensagens
-    .filter((m) => m.autor === 'corretor' || m.autor === 'especialista')
-    .map((m) => ({ role: m.autor === 'corretor' ? 'user' : 'assistant', content: m.texto }))
+    .filter((m) => m.autor === 'corretor' || m.autor === 'especialista' || m.autor === 'sistema')
+    .map((m) => ({
+      role: m.autor === 'especialista' ? 'assistant' : 'user',
+      content: m.autor === 'sistema' ? `[Atualização registrada no caso pelo corretor]: ${m.texto}` : m.texto,
+    }))
 
   const resultado = await askAI({
     systemPrompt,

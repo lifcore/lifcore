@@ -63,7 +63,12 @@ export default function PipelinePage() {
           (i) =>
             i.razao_social?.toLowerCase().includes(busca.toLowerCase()) ||
             i.cnpj?.toLowerCase().includes(busca.toLowerCase()) ||
-            i.cpf?.toLowerCase().includes(busca.toLowerCase())
+            i.cpf?.toLowerCase().includes(busca.toLowerCase()) ||
+            i.empresas_grupo?.some(
+              (e) =>
+                e.cnpj?.toLowerCase().includes(busca.toLowerCase()) ||
+                e.nome?.toLowerCase().includes(busca.toLowerCase())
+            )
         )
       : itens
     return filtrados.filter((i) => i.status === status)
