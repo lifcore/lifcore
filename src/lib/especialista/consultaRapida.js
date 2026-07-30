@@ -63,6 +63,8 @@ export async function atenderConsultaRapida({ demandaTexto, usuarioId, organizac
  * na verdade era sobre um caso real.
  */
 export async function vincularConsultaComoDemanda({ consultaId, clienteProspectId, organizacaoId, usuarioId }) {
+  const organizacaoIdFinal = organizacaoId ?? (await buscarOrganizacaoUnica())
+
   const { data: consulta, error: erroConsulta } = await operacional
     .from('consultas_rapidas_saude')
     .select('*')
@@ -77,7 +79,7 @@ export async function vincularConsultaComoDemanda({ consultaId, clienteProspectI
     .from('casos')
     .insert({
       codigo,
-      organizacao_id: organizacaoId,
+      organizacao_id: organizacaoIdFinal,
       cliente_prospect_id: clienteProspectId,
       situacao: 'em_andamento',
       especialista_responsavel: usuarioId,

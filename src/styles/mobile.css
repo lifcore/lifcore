@@ -8,9 +8,9 @@
     padding: 0.85rem;
   }
 
-  .side-icon-menu {
-    display: none;
-  }
+  /* Menu lateral: sideiconmenu.css já cuida da transformação em
+     barra inferior no próprio breakpoint dele (700px) — não repetir
+     aqui pra evitar as duas regras brigarem entre si. */
 
   /* Topo: empilha marca, módulos e usuário */
   .topnav {

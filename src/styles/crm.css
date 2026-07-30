@@ -320,6 +320,14 @@
   background: var(--ls-bg);
 }
 
+.demanda-linha-finalizada {
+  opacity: 0.55;
+}
+
+.demanda-linha-finalizada:hover {
+  opacity: 0.85;
+}
+
 .demanda-detail-modal {
   max-width: 640px;
   display: flex;
@@ -913,10 +921,19 @@
   }
 
   .especialista-flutuante-btn {
-    bottom: 1.1rem;
+    bottom: calc(58px + 0.75rem);
     right: 1.1rem;
     padding: 0.75rem 1.1rem;
     font-size: 0.85rem;
+  }
+}
+
+/* A barra de navegação inferior aparece a partir de 700px (ver
+   sideiconmenu.css) — o botão do Especialista precisa subir um pouco
+   antes desse ponto também, pra nunca ficar embaixo dela. */
+@media (max-width: 700px) {
+  .especialista-flutuante-btn {
+    bottom: calc(58px + 0.75rem);
   }
 }
 

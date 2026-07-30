@@ -511,7 +511,6 @@ function DemandasTab({ demandas, cliente, onAtualizado }) {
   const [descricao, setDescricao] = useState('')
   const [dataAcao, setDataAcao] = useState('')
   const [salvando, setSalvando] = useState(false)
-  const [mostrarFinalizadas, setMostrarFinalizadas] = useState(false)
   const [demandaSelecionada, setDemandaSelecionada] = useState(null)
 
   async function handleAbrirDemanda() {
@@ -533,7 +532,15 @@ function DemandasTab({ demandas, cliente, onAtualizado }) {
     }
   }
 
-  const demandasVisiveis = mostrarFinalizadas ? demandas : demandas.filter((d) => d.situacao !== 'encerrado')
+  // Lista única: ativas primeiro, "Resolvida" e "Encerrado" (as duas
+  // contam como finalizadas) afundam pro fim — sem precisar de um
+  // clique extra pra ver o histórico.
+  const demandasOrdenadas = [...demandas].sort((a, b) => {
+    const aFinalizada = a.situacao === 'resolvido' || a.situacao === 'encerrado'
+    const bFinalizada = b.situacao === 'resolvido' || b.situacao === 'encerrado'
+    if (aFinalizada === bFinalizada) return 0
+    return aFinalizada ? 1 : -1
+  })
 
   return (
     <div>
@@ -543,9 +550,6 @@ function DemandasTab({ demandas, cliente, onAtualizado }) {
             + Abrir Demanda
           </button>
         )}
-        <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarFinalizadas((v) => !v)}>
-          {mostrarFinalizadas ? 'Ocultar finalizadas' : 'Ver finalizadas'}
-        </button>
       </div>
 
       {mostrarForm && (
@@ -567,8 +571,8 @@ function DemandasTab({ demandas, cliente, onAtualizado }) {
         </div>
       )}
 
-      {demandasVisiveis.length === 0 ? (
-        <p className="cliente-vazio">Nenhuma demanda em aberto para este cliente.</p>
+      {demandasOrdenadas.length === 0 ? (
+        <p className="cliente-vazio">Nenhuma demanda para este cliente.</p>
       ) : (
         <div className="ls-card" style={{ marginTop: '1rem', padding: 0 }}>
           <table className="cliente-tabela">
@@ -576,15 +580,22 @@ function DemandasTab({ demandas, cliente, onAtualizado }) {
               <tr><th>Código</th><th>Demanda</th><th>Situação</th><th>Próxima ação</th><th>Aberto em</th></tr>
             </thead>
             <tbody>
-              {demandasVisiveis.map((d) => (
-                <tr key={d.id} className="demanda-linha-clicavel" onClick={() => setDemandaSelecionada(d)}>
-                  <td className="ls-mono">{d.codigo}</td>
-                  <td>{d.demanda_original ?? d.categoria ?? '—'}</td>
-                  <td><span className="ls-badge ls-badge-prospect">{traduzirSituacao(d.situacao)}</span></td>
-                  <td>{d.data_proxima_acao ? formatarDataBR(d.data_proxima_acao) : '—'}</td>
-                  <td>{new Date(d.criado_em).toLocaleDateString('pt-BR')}</td>
-                </tr>
-              ))}
+              {demandasOrdenadas.map((d) => {
+                const finalizada = d.situacao === 'resolvido' || d.situacao === 'encerrado'
+                return (
+                  <tr
+                    key={d.id}
+                    className={`demanda-linha-clicavel ${finalizada ? 'demanda-linha-finalizada' : ''}`}
+                    onClick={() => setDemandaSelecionada(d)}
+                  >
+                    <td className="ls-mono">{d.codigo}</td>
+                    <td>{d.demanda_original ?? d.categoria ?? '—'}</td>
+                    <td><span className="ls-badge ls-badge-prospect">{traduzirSituacao(d.situacao)}</span></td>
+                    <td>{d.data_proxima_acao ? formatarDataBR(d.data_proxima_acao) : '—'}</td>
+                    <td>{new Date(d.criado_em).toLocaleDateString('pt-BR')}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

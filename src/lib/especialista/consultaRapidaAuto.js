@@ -56,6 +56,8 @@ export async function atenderConsultaRapidaAuto({ demandaTexto, usuarioId, organ
 
 /** Converte uma Consulta Rápida em Demanda de verdade, vinculando a um cliente do Lifleet */
 export async function vincularConsultaComoDemandaAuto({ consultaId, clienteProspectId, organizacaoId, usuarioId }) {
+  const organizacaoIdFinal = organizacaoId ?? (await buscarOrganizacaoUnica())
+
   const { data: consulta, error: erroConsulta } = await operacional
     .from('consultas_rapidas_auto')
     .select('*')
@@ -70,7 +72,7 @@ export async function vincularConsultaComoDemandaAuto({ consultaId, clienteProsp
     .from('casos')
     .insert({
       codigo,
-      organizacao_id: organizacaoId,
+      organizacao_id: organizacaoIdFinal,
       cliente_prospect_id: clienteProspectId,
       situacao: 'em_andamento',
       especialista_responsavel: usuarioId,
