@@ -24,8 +24,10 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Mesma lógica de anexar imagens que já tínhamos no navegador —
-    // só que agora roda aqui, do lado do servidor.
+    // Mesma lógica de anexar imagens/documentos que já tínhamos no
+    // navegador — só que agora roda aqui, do lado do servidor.
+    // IMPORTANTE: a Anthropic exige formatos diferentes — "image" só
+    // vale para jpeg/png/gif/webp; PDF precisa vir como "document".
     const mensagensFinais = (messages ?? []).map((msg, index) => {
       const ehUltimaDoUsuario = index === messages.length - 1 && msg.role === 'user'
       if (!ehUltimaDoUsuario || !images?.length) return msg
@@ -33,10 +35,13 @@ Deno.serve(async (req) => {
       return {
         role: msg.role,
         content: [
-          ...images.map((img) => ({
-            type: 'image',
-            source: { type: 'base64', media_type: img.mediaType, data: img.base64 },
-          })),
+          ...images.map((img) => {
+            const ehPdf = img.mediaType === 'application/pdf'
+            return {
+              type: ehPdf ? 'document' : 'image',
+              source: { type: 'base64', media_type: img.mediaType, data: img.base64 },
+            }
+          }),
           { type: 'text', text: msg.content },
         ],
       }

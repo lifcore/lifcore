@@ -52,8 +52,8 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
   }, [mensagens])
 
   async function handleEnviar() {
-    if (!demanda.trim() || carregando) return
-    const textoEnviado = demanda
+    if ((!demanda.trim() && !arquivo) || carregando) return
+    const textoEnviado = demanda.trim() || 'Segue documento em anexo para análise.'
     setDemanda('')
     setCarregando(true)
     setErro(null)

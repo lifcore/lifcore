@@ -45,8 +45,8 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
   }, [mensagens])
 
   async function handleEnviar() {
-    if (!demanda.trim() || carregando) return
-    const textoEnviado = demanda
+    if ((!demanda.trim() && !arquivo) || carregando) return
+    const textoEnviado = demanda.trim() || 'Segue documento em anexo para análise.'
     setDemanda('')
     setEspecialistaSugerido(null)
     setCarregando(true)
