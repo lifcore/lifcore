@@ -47,7 +47,7 @@ export async function listarClientesProspects({ mostrarFuturas = false, modulo =
       .from('casos')
       .select('cliente_prospect_id, situacao, data_proxima_acao')
       .in('cliente_prospect_id', idsClientes)
-      .neq('situacao', 'encerrado')
+      .not('situacao', 'in', '(encerrado,resolvido)')
       .order('data_proxima_acao', { ascending: true, nullsFirst: false })
 
     const situacaoPorCliente = {}
@@ -491,7 +491,7 @@ export async function recalcularProximaAcaoCliente(clienteProspectId) {
     .from('casos')
     .select('data_proxima_acao, demanda_original')
     .eq('cliente_prospect_id', clienteProspectId)
-    .neq('situacao', 'encerrado')
+    .not('situacao', 'in', '(encerrado,resolvido)')
     .not('data_proxima_acao', 'is', null)
     .order('data_proxima_acao', { ascending: true })
     .limit(1)

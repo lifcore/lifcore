@@ -19,6 +19,7 @@ import CotacaoForm from './CotacaoForm'
 import ContratoForm from './ContratoForm'
 import EspecialistaSaude from '../especialista/EspecialistaSaude'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
+import { listarCorretores } from '../../lib/crm/apolicesService'
 import { useAuth } from '../auth/AuthContext'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 
@@ -27,10 +28,13 @@ const ABAS = ['Dados Cadastrais', 'Contratos', 'Cotações', 'Demandas']
 export default function ClienteDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { perfil } = useAuth()
+  const ehMaster = perfil?.papel === 'master'
   const [dados, setDados] = useState(null)
   const [abaAtiva, setAbaAtiva] = useState('Demandas')
   const [erroExclusao, setErroExclusao] = useState(null)
   const [mostrarWhatsApp, setMostrarWhatsApp] = useState(false)
+  const [mostrarTransferir, setMostrarTransferir] = useState(false)
 
   useEffect(() => {
     carregar()
@@ -79,11 +83,26 @@ export default function ClienteDetailPage() {
           )}
           <div className="cliente-acoes-perigo">
             <button className="ls-btn ls-btn-accent" onClick={() => setMostrarWhatsApp(true)}>💬 WhatsApp</button>
+            {ehMaster && (
+              <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarTransferir(true)}>🔁 Transferir</button>
+            )}
             <button className="ls-btn ls-btn-ghost" onClick={handleMarcarInativo}>Marcar Inativo</button>
             <button className="cliente-btn-excluir" onClick={handleExcluirCliente}>Excluir</button>
           </div>
         </div>
       </div>
+
+      {mostrarTransferir && (
+        <TransferirClienteModal
+          clienteId={cliente.id}
+          corretorAtualId={cliente.corretor_id}
+          onFechar={() => setMostrarTransferir(false)}
+          onTransferido={() => {
+            setMostrarTransferir(false)
+            navigate('/')
+          }}
+        />
+      )}
 
       {erroExclusao && <p className="ls-modal-erro">{erroExclusao}</p>}
 
@@ -842,7 +861,7 @@ function DemandaDetailModal({ demanda, cliente, onFechar, onAtualizado, onSalvoS
   }
 
   return (
-    <div className="ls-modal-overlay" onClick={onFechar}>
+    <div className="ls-modal-overlay" onClick={editando ? undefined : onFechar}>
       <div className="ls-modal demanda-detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="demanda-detail-header">
           <h3>{demanda.codigo}</h3>
@@ -1024,6 +1043,63 @@ function WhatsAppModal({ contatoPrimario, nomeEmpresa, vigencia, onFechar }) {
             disabled={!templateSelecionado}
           >
             Abrir WhatsApp
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TransferirClienteModal({ clienteId, corretorAtualId, onFechar, onTransferido }) {
+  const [corretores, setCorretores] = useState([])
+  const [corretorDestinoId, setCorretorDestinoId] = useState('')
+  const [transferindo, setTransferindo] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  useEffect(() => {
+    listarCorretores().then(setCorretores)
+  }, [])
+
+  async function handleTransferir() {
+    if (!corretorDestinoId) {
+      setErro('Escolha o corretor de destino.')
+      return
+    }
+    setTransferindo(true)
+    setErro(null)
+    try {
+      await atualizarClienteProspect(clienteId, { corretor_id: corretorDestinoId })
+      onTransferido()
+    } catch (err) {
+      setErro(err.message)
+    } finally {
+      setTransferindo(false)
+    }
+  }
+
+  return (
+    <div className="ls-modal-overlay" onClick={onFechar}>
+      <div className="ls-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Transferir Cliente</h3>
+        <p className="config-instrucao">
+          Escolha pra qual corretor este cliente deve passar a ser atendido. O histórico
+          (contratos, cotações, demandas) é mantido, só o dono do cadastro muda.
+        </p>
+
+        <label>Novo corretor responsável</label>
+        <select value={corretorDestinoId} onChange={(e) => setCorretorDestinoId(e.target.value)}>
+          <option value="">Selecione...</option>
+          {corretores.filter((c) => c.id !== corretorAtualId).map((c) => (
+            <option key={c.id} value={c.id}>{c.nome_completo}</option>
+          ))}
+        </select>
+
+        {erro && <p className="ls-modal-erro">{erro}</p>}
+
+        <div className="ls-modal-acoes">
+          <button className="ls-btn ls-btn-ghost" onClick={onFechar}>Cancelar</button>
+          <button className="ls-btn ls-btn-primary" onClick={handleTransferir} disabled={transferindo}>
+            {transferindo ? 'Transferindo...' : 'Transferir'}
           </button>
         </div>
       </div>
