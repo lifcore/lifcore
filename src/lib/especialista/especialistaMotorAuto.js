@@ -25,7 +25,7 @@ import {
  * de atendimento (Demandas encerradas → resumo sugerido → aprovação
  * humana), nunca importados prontos.
  */
-export async function gerarRespostaEspecialistaAuto({ demandaTexto, historicoContexto = '', seguradoraMencionada = null, imagens = [] }) {
+export async function gerarRespostaEspecialistaAuto({ demandaTexto, historicoContexto = '', historicoMensagens = [], seguradoraMencionada = null, imagens = [] }) {
   const textoBusca = historicoContexto ? `${historicoContexto}\n${demandaTexto}` : demandaTexto
 
   const [
@@ -88,7 +88,9 @@ corretor for claramente sobre outro ramo (ex: carência de plano de saúde, cobe
 NÃO tente responder usando conhecimento geral — diga com clareza que isso está fora do seu domínio
 (Auto/Frota) e oriente o corretor a usar o Especialista correto para aquele ramo. Não invente uma
 resposta só porque você "sabe" algo sobre o assunto de forma genérica — sua responsabilidade técnica
-é estritamente Auto e Frota.
+é estritamente Auto e Frota. **Sempre que isso acontecer, você DEVE também preencher o campo
+"especialista_sugerido": "saude" no JSON de resposta (veja o formato no final) — a explicação em texto
+sozinha não é suficiente, o campo precisa vir preenchido junto.**
 
 ## Biblioteca técnica relevante para esta demanda (Comercial, Apólices, Regulamentação, Ressarcimento, Sinistro, Seguradoras)
 ${blocoBiblioteca || '(nenhum documento especialmente relevante encontrado — responda com cautela e diga isso se for o caso)'}
@@ -108,9 +110,16 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
   "resposta": "sua resposta completa em português, seguindo as 5 etapas do seu modelo cognitivo de forma natural (sem precisar rotular cada etapa rigidamente). Se precisar de mais dados, faça só a(s) pergunta(s) essencial(is) para ESSE caso. Preço nunca deve ser o único critério em comparações."
 }`
 
+  // Monta a conversa de verdade — os turnos anteriores entram como
+  // mensagens de usuário/assistente reais, não só como texto de apoio
+  // pra busca. Sem isso, a IA nunca "vê" o que já foi dito antes.
+  const turnosAnteriores = historicoMensagens
+    .filter((m) => m.autor === 'corretor' || m.autor === 'especialista')
+    .map((m) => ({ role: m.autor === 'corretor' ? 'user' : 'assistant', content: m.texto }))
+
   const resultado = await askAI({
     systemPrompt,
-    messages: [{ role: 'user', content: demandaTexto }],
+    messages: [...turnosAnteriores, { role: 'user', content: demandaTexto }],
     maxTokens: 2000,
     images: imagens,
   })
@@ -123,12 +132,20 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
     parsed = { categoria: null, subcategoria: null, precisa_mais_informacao: false, especialista_sugerido: null, resposta: resultado.text }
   }
 
+  // Rede de segurança: se a IA esquecer de preencher o campo estruturado
+  // mas a resposta em texto claramente mencionar o outro especialista,
+  // detecta por palavra-chave — não depende só da IA seguir o formato à risca.
+  const respostaTexto = parsed.resposta ?? resultado.text
+  const especialistaSugeridoDetectado =
+    parsed.especialista_sugerido ??
+    (/especialista de sa[uú]de/i.test(respostaTexto) ? 'saude' : null)
+
   return {
     categoria: parsed.categoria ?? null,
     subcategoria: parsed.subcategoria ?? null,
     precisaMaisInformacao: !!parsed.precisa_mais_informacao,
-    especialistaSugerido: parsed.especialista_sugerido ?? null,
-    respostaTexto: parsed.resposta ?? resultado.text,
+    especialistaSugerido: especialistaSugeridoDetectado,
+    respostaTexto,
     casosRelacionados: casosRelevantes,
   }
 }

@@ -53,6 +53,7 @@ export async function atenderDemandaAuto({ demandaTexto, usuarioId, organizacaoI
   const resultado = await gerarRespostaEspecialistaAuto({
     demandaTexto,
     historicoContexto: casoExistente?.resumoEventos ?? '',
+    historicoMensagens: casoExistente?.mensagensEstruturadas ?? [],
     imagens: imagens.map((img) => ({ base64: img.base64, mediaType: img.mediaType })),
   })
 
@@ -172,12 +173,26 @@ async function buscarCasoParaContinuacao(casoId) {
     .order('criado_em', { ascending: true })
     .limit(20)
 
-  const resumoEventos = (eventos ?? [])
-    .filter((e) => e.tipo === 'mensagem_corretor' || e.tipo === 'mensagem_especialista' || e.tipo === 'atualizacao_manual')
+  const eventosRelevantes = (eventos ?? []).filter(
+    (e) => e.tipo === 'mensagem_corretor' || e.tipo === 'mensagem_especialista' || e.tipo === 'atualizacao_manual'
+  )
+
+  const resumoEventos = eventosRelevantes
     .map((e) => `[${e.tipo === 'mensagem_corretor' ? 'Consultor' : e.tipo === 'atualizacao_manual' ? 'Atualização' : 'Especialista'}]: ${e.descricao}`)
     .join('\n\n')
 
-  return { ...caso, resumoEventos: resumoEventos ? `Histórico da conversa até agora:\n${resumoEventos}` : '' }
+  // Array estruturado — usado pra IA realmente "ver" a conversa como
+  // conversa de verdade (não só como texto de apoio pra busca).
+  const mensagensEstruturadas = eventosRelevantes.map((e) => ({
+    autor: e.tipo === 'mensagem_corretor' ? 'corretor' : e.tipo === 'atualizacao_manual' ? 'sistema' : 'especialista',
+    texto: e.descricao,
+  }))
+
+  return {
+    ...caso,
+    resumoEventos: resumoEventos ? `Histórico da conversa até agora:\n${resumoEventos}` : '',
+    mensagensEstruturadas,
+  }
 }
 
 async function buscarOrganizacaoUnica() {

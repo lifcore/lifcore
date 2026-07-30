@@ -39,6 +39,7 @@ export async function atenderConsultaRapida({ demandaTexto, usuarioId, organizac
   const resultado = await gerarRespostaEspecialista({
     demandaTexto,
     historicoContexto: historicoTexto,
+    historicoMensagens: consulta.mensagens ?? [],
     porteCliente: null,
     imagens: imagens.map((img) => ({ base64: img.base64, mediaType: img.mediaType })),
   })

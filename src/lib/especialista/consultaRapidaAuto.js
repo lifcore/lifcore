@@ -38,6 +38,7 @@ export async function atenderConsultaRapidaAuto({ demandaTexto, usuarioId, organ
   const resultado = await gerarRespostaEspecialistaAuto({
     demandaTexto,
     historicoContexto: historicoTexto,
+    historicoMensagens: consulta.mensagens ?? [],
     imagens: imagens.map((img) => ({ base64: img.base64, mediaType: img.mediaType })),
   })
 

@@ -28,6 +28,7 @@ import {
 export async function gerarRespostaEspecialista({
   demandaTexto,
   historicoContexto = '',
+  historicoMensagens = [],
   tipoPessoa = null,
   porteCliente = null,
   graduacaoCliente = null,
@@ -142,9 +143,13 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
   "resposta": "sua resposta completa em português, seguindo sua Arquitetura Cognitiva de forma natural (sem precisar rotular cada etapa/modo rigidamente). Se precisar de mais dados, faça só a(s) pergunta(s) essencial(is) para ESSE caso."
 }`
 
+  const turnosAnteriores = historicoMensagens
+    .filter((m) => m.autor === 'corretor' || m.autor === 'especialista')
+    .map((m) => ({ role: m.autor === 'corretor' ? 'user' : 'assistant', content: m.texto }))
+
   const resultado = await askAI({
     systemPrompt,
-    messages: [{ role: 'user', content: demandaTexto }],
+    messages: [...turnosAnteriores, { role: 'user', content: demandaTexto }],
     maxTokens: 2000,
     images: imagens,
   })
@@ -157,12 +162,17 @@ Responda APENAS em JSON válido, sem markdown, sem texto antes ou depois, no for
     parsed = { categoria: null, subcategoria: null, precisa_mais_informacao: false, especialista_sugerido: null, resposta: resultado.text }
   }
 
+  const respostaTexto = parsed.resposta ?? resultado.text
+  const especialistaSugeridoDetectado =
+    parsed.especialista_sugerido ??
+    (/especialista de auto/i.test(respostaTexto) ? 'auto' : null)
+
   return {
     categoria: parsed.categoria ?? null,
     subcategoria: parsed.subcategoria ?? null,
     precisaMaisInformacao: !!parsed.precisa_mais_informacao,
-    especialistaSugerido: parsed.especialista_sugerido ?? null,
-    respostaTexto: parsed.resposta ?? resultado.text,
+    especialistaSugerido: especialistaSugeridoDetectado,
+    respostaTexto,
     regulamentacaoAplicavel: modalidadeAplicavel,
     casosRelacionados: casosRelevantes,
   }

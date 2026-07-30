@@ -59,6 +59,7 @@ export async function atenderDemanda({ demandaTexto, usuarioId, organizacaoId, c
   const resultado = await gerarRespostaEspecialista({
     demandaTexto,
     historicoContexto: casoExistente?.resumoEventos ?? '',
+    historicoMensagens: casoExistente?.mensagensEstruturadas ?? [],
     tipoPessoa: dadosCliente?.tipo_pessoa ?? null,
     porteCliente: dadosCliente?.porte ?? null,
     graduacaoCliente: dadosCliente?.graduacao ?? null,
@@ -187,12 +188,24 @@ async function buscarCasoParaContinuacao(casoId) {
     .order('criado_em', { ascending: true })
     .limit(20)
 
-  const resumoEventos = (eventos ?? [])
-    .filter((e) => e.tipo === 'mensagem_corretor' || e.tipo === 'mensagem_especialista' || e.tipo === 'atualizacao_manual')
+  const eventosRelevantes = (eventos ?? []).filter(
+    (e) => e.tipo === 'mensagem_corretor' || e.tipo === 'mensagem_especialista' || e.tipo === 'atualizacao_manual'
+  )
+
+  const resumoEventos = eventosRelevantes
     .map((e) => `[${e.tipo === 'mensagem_corretor' ? 'Consultor' : e.tipo === 'atualizacao_manual' ? 'Atualização' : 'Especialista'}]: ${e.descricao}`)
     .join('\n\n')
 
-  return { ...caso, resumoEventos: resumoEventos ? `Histórico da conversa até agora:\n${resumoEventos}` : '' }
+  const mensagensEstruturadas = eventosRelevantes.map((e) => ({
+    autor: e.tipo === 'mensagem_corretor' ? 'corretor' : e.tipo === 'atualizacao_manual' ? 'sistema' : 'especialista',
+    texto: e.descricao,
+  }))
+
+  return {
+    ...caso,
+    resumoEventos: resumoEventos ? `Histórico da conversa até agora:\n${resumoEventos}` : '',
+    mensagensEstruturadas,
+  }
 }
 
 /** Busca o porte (PME1/PME2/Negociado) já calculado no cadastro do cliente vinculado */
