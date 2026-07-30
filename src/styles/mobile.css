@@ -55,6 +55,14 @@
     grid-template-columns: 1fr;
   }
 
+  .pipeline-coluna {
+    max-height: none;
+  }
+
+  .pipeline-coluna-cards {
+    overflow-y: visible;
+  }
+
   /* Formulários com múltiplas colunas viram 1 coluna */
   .cotacao-form-linha,
   .cadastro-grid {

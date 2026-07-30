@@ -10,7 +10,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 1.5rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.9rem;
 }
 
 .pipeline-header h2 {
@@ -28,8 +28,8 @@
   background: var(--ls-accent-soft);
   border: 1px solid var(--ls-accent);
   border-radius: var(--ls-radius);
-  padding: 0.75rem 1rem;
-  margin-bottom: 1.25rem;
+  padding: 0.55rem 0.9rem;
+  margin-bottom: 0.9rem;
   font-size: 0.85rem;
 }
 
@@ -54,15 +54,23 @@
 
 .pipeline-colunas {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
+  align-items: start;
 }
 
 .pipeline-coluna {
   background: rgba(14, 42, 61, 0.03);
   border-radius: var(--ls-radius);
-  padding: 0.75rem;
-  min-height: 320px;
+  padding: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  /* Altura travada ao tamanho da tela (não à quantidade de cards) — cada
+     coluna rola por dentro. Essencial quando tiver muitos casos reais
+     rodando: a página não fica gigante, e dá pra comparar as 3 colunas
+     lado a lado sem perder o contexto do topo. */
+  max-height: calc(100vh - 15rem);
+  min-height: 140px;
 }
 
 .pipeline-coluna-titulo {
@@ -71,8 +79,9 @@
   font-weight: 600;
   font-size: 0.85rem;
   color: var(--ls-primary);
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.55rem;
   padding: 0 0.25rem;
+  flex-shrink: 0;
 }
 
 .pipeline-coluna-contador {
@@ -86,16 +95,21 @@
 .pipeline-coluna-cards {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.45rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding-right: 0.15rem;
 }
 
 .pipeline-card {
   background: white;
   border-radius: var(--ls-radius-sm);
-  padding: 0.65rem 0.75rem;
+  padding: 0.55rem 0.65rem;
   box-shadow: var(--ls-shadow);
   cursor: grab;
   border: 1px solid var(--ls-border);
+  flex-shrink: 0;
 }
 
 .pipeline-card:hover {
