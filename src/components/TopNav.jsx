@@ -4,8 +4,8 @@ import { useAuth } from '../features/auth/AuthContext'
 const MODULOS = [
   { id: 'lifcare', label: 'Lifcare', path: '/', ativo: true },
   { id: 'lifleet', label: 'Lifleet', path: '/lifleet', ativo: true },
-  { id: 'lifplan', label: 'Lifplan', path: '#', ativo: false },
   { id: 'lifsure', label: 'Lifsure', path: '#', ativo: false },
+  { id: 'lifplan', label: 'Lifplan', path: '#', ativo: false },
 ]
 
 export default function TopNav() {
