@@ -4,6 +4,7 @@ import { atenderDemandaAuto, buscarHistoricoChatAuto, encerrarConversaAuto } fro
 import { atenderConsultaRapidaAuto, vincularConsultaComoDemandaAuto } from '../../lib/especialista/consultaRapidaAuto'
 import { listarClientesProspects } from '../../lib/crm/clientesService'
 import { enviarAnexo } from '../../lib/especialista/uploadService'
+import { renderizarTextoComMarkdown } from '../../lib/utils/renderizarMarkdown'
 import './especialista.css'
 
 /**
@@ -12,6 +13,12 @@ import './especialista.css'
  * Consulta Rápida (solta, pode virar Demanda depois).
  */
 const ROTULOS_MODULO = { saude: 'Saúde', auto: 'Auto/Frota', lifsure: 'LifSure' }
+
+/** Escapa HTML e converte **negrito** em <strong> — usado só na função de Imprimir (gera HTML puro, não JSX) */
+function escaparEConverterNegrito(texto) {
+  const escapado = (texto || '').replace(/</g, '&lt;')
+  return escapado.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+}
 
 export default function EspecialistaAuto({ clienteProspectIdInicial = null, casoIdContinuacao = null, perguntaInicial = null, onSolicitarTroca = null }) {
   const { perfil } = useAuth()
@@ -108,7 +115,7 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
         (m) => `
         <div style="margin-bottom:14px; padding:10px 14px; border-radius:8px; background:${m.autor === 'corretor' ? '#0e2a3d' : '#f5f7fa'}; color:${m.autor === 'corretor' ? 'white' : '#1c2a2f'}; max-width:80%; margin-left:${m.autor === 'corretor' ? 'auto' : '0'};">
           <strong style="font-size:11px; text-transform:uppercase; opacity:0.7;">${m.autor === 'corretor' ? 'Consultor' : 'Especialista'}</strong>
-          <p style="white-space:pre-wrap; margin:4px 0 0;">${(m.texto || '').replace(/</g, '&lt;')}</p>
+          <p style="white-space:pre-wrap; margin:4px 0 0;">${escaparEConverterNegrito(m.texto)}</p>
         </div>`
       )
       .join('')
@@ -169,7 +176,7 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
             <span className="especialista-bolha-autor">
               {msg.autor === 'corretor' ? 'Você' : msg.autor === 'sistema' ? 'Sistema' : 'Especialista'}
             </span>
-            <p>{msg.texto}</p>
+            <p>{renderizarTextoComMarkdown(msg.texto)}</p>
             {msg.anexoUrl && (
               <a href={msg.anexoUrl} target="_blank" rel="noreferrer" className="especialista-bolha-anexo">📎 Ver anexo</a>
             )}
