@@ -5,7 +5,7 @@ const MODULOS = [
   { id: 'lifcare', label: 'Lifcare', path: '/', ativo: true },
   { id: 'lifleet', label: 'Lifleet', path: '/lifleet', ativo: true },
   { id: 'lifsure', label: 'Lifsure', path: '/lifsure', ativo: true },
-  { id: 'lifplan', label: 'Lifplan', path: '#', ativo: false },
+  { id: 'lifplan', label: 'Lifplan', path: '/lifplan', ativo: true },
 ]
 
 export default function TopNav() {
