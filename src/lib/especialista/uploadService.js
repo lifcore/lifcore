@@ -2,6 +2,28 @@ import { supabase } from '../supabaseClient'
 
 const BUCKET = 'anexos'
 
+// Formatos que são texto puro por baixo dos panos — não fazem sentido
+// virar "imagem" pra IA (é assim que a Anthropic aceita anexo binário:
+// só imagem ou PDF). E-mail (.eml), texto simples e afins entram direto
+// como texto na própria mensagem, sem precisar de base64/upload.
+const EXTENSOES_TEXTO = ['eml', 'txt', 'msg', 'csv', 'log']
+
+/** Verifica se o arquivo é de um formato que deve ser lido como texto puro */
+export function ehArquivoDeTexto(arquivo) {
+  const extensao = (arquivo.name.split('.').pop() ?? '').toLowerCase()
+  return EXTENSOES_TEXTO.includes(extensao) || arquivo.type === 'message/rfc822' || arquivo.type === 'text/plain'
+}
+
+/** Lê o conteúdo de um arquivo de texto (e-mail, txt, etc.) — trunca se vier muito grande */
+export async function lerConteudoTexto(arquivo) {
+  const texto = await arquivo.text()
+  const LIMITE = 12000
+  if (texto.length > LIMITE) {
+    return `${texto.slice(0, LIMITE)}\n\n[...conteúdo truncado por tamanho, arquivo maior que ${LIMITE} caracteres...]`
+  }
+  return texto
+}
+
 /**
  * Faz upload de um arquivo para o Supabase Storage e retorna a URL
  * pública, além de já convertê-lo em base64 (necessário para a IA

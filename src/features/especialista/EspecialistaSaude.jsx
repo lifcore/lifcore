@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthContext'
 import { atenderDemanda, buscarHistoricoChat, encerrarConversa } from '../../lib/especialista/especialistaSaude'
 import { atenderConsultaRapida, vincularConsultaComoDemanda } from '../../lib/especialista/consultaRapida'
 import { listarClientesProspects } from '../../lib/crm/clientesService'
-import { enviarAnexo } from '../../lib/especialista/uploadService'
+import { enviarAnexo, ehArquivoDeTexto, lerConteudoTexto } from '../../lib/especialista/uploadService'
 import { renderizarTextoComMarkdown } from '../../lib/utils/renderizarMarkdown'
 import './especialista.css'
 
@@ -71,15 +71,21 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
 
     try {
       let imagens = []
+      let textoParaEnviar = textoEnviado
       if (arquivo) {
-        const anexo = await enviarAnexo(arquivo, casoAtualId ?? consultaAtualId ?? 'temp-' + Date.now())
-        imagens = [anexo]
+        if (ehArquivoDeTexto(arquivo)) {
+          const conteudoTexto = await lerConteudoTexto(arquivo)
+          textoParaEnviar = `${textoEnviado}\n\n[Conteúdo do arquivo anexado — ${arquivo.name}]\n${conteudoTexto}`
+        } else {
+          const anexo = await enviarAnexo(arquivo, casoAtualId ?? consultaAtualId ?? 'temp-' + Date.now())
+          imagens = [anexo]
+        }
       }
 
       let resposta
       if (modoDemanda) {
         resposta = await atenderDemanda({
-          demandaTexto: textoEnviado,
+          demandaTexto: textoParaEnviar,
           usuarioId: perfil?.id,
           organizacaoId: perfil?.organizacao_id ?? null,
           clienteProspectId: clienteProspectIdInicial,
@@ -89,7 +95,7 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
         if (!casoAtualId) setCasoAtualId(resposta.caso.id)
       } else {
         resposta = await atenderConsultaRapida({
-          demandaTexto: textoEnviado,
+          demandaTexto: textoParaEnviar,
           usuarioId: perfil?.id,
           organizacaoId: perfil?.organizacao_id ?? null,
           consultaIdExistente: consultaAtualId,
@@ -253,7 +259,7 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
               📎
               <input
                 type="file"
-                accept="image/*,application/pdf"
+                accept="image/*,application/pdf,.eml,.txt,.msg,.csv,message/rfc822,text/plain"
                 onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
                 hidden
               />
