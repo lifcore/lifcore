@@ -30,6 +30,7 @@ export async function gerarRespostaEspecialistaAuto({ demandaTexto, historicoCon
 
   const [
     relatorioCognitivo,
+    docsMobilidade,
     docsComercial,
     docsApolices,
     docsRegulamentacao,
@@ -39,6 +40,7 @@ export async function gerarRespostaEspecialistaAuto({ demandaTexto, historicoCon
     casosRelevantes,
   ] = await Promise.all([
     buscarDocumentoAutoPorCodigo('REL-001'),
+    buscarBibliotecaRelevanteAuto('MOB', textoBusca, 4),
     buscarBibliotecaRelevanteAuto('COM', textoBusca, 3),
     buscarBibliotecaRelevanteAuto('APO', textoBusca, 3),
     buscarBibliotecaRelevanteAuto('REG', textoBusca, 2),
@@ -48,7 +50,7 @@ export async function gerarRespostaEspecialistaAuto({ demandaTexto, historicoCon
     buscarCasosRelevantesAuto(textoBusca, 4),
   ])
 
-  const blocoBiblioteca = [...docsComercial, ...docsApolices, ...docsRegulamentacao, ...docsRessarcimento, ...docsSinistro, ...docsSeguradoras]
+  const blocoBiblioteca = [...docsMobilidade, ...docsComercial, ...docsApolices, ...docsRegulamentacao, ...docsRessarcimento, ...docsSinistro, ...docsSeguradoras]
     .map((d) => `### [${d.codigo}] ${d.titulo}\n${d.conteudo.slice(0, 900)}`)
     .join('\n\n')
 
