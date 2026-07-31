@@ -1,19 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import { atenderDemandaAuto, buscarHistoricoChatAuto, encerrarConversaAuto } from '../../lib/especialista/especialistaAuto'
-import { atenderConsultaRapidaAuto, vincularConsultaComoDemandaAuto } from '../../lib/especialista/consultaRapidaAuto'
+import { atenderDemandaLifsure, buscarHistoricoChatLifsure, encerrarConversaLifsure } from '../../lib/especialista/especialistaLifsure'
+import { atenderConsultaRapidaLifsure, vincularConsultaComoDemandaLifsure } from '../../lib/especialista/consultaRapidaLifsure'
 import { listarClientesProspects } from '../../lib/crm/clientesService'
 import { enviarAnexo } from '../../lib/especialista/uploadService'
 import './especialista.css'
 
-/**
- * Especialista de Auto/Frota — mesmo padrão de dois modos do Especialista
- * de Saúde: Demanda (vinculado a um cliente, ciclo DM-AUTO completo) e
- * Consulta Rápida (solta, pode virar Demanda depois).
- */
 const ROTULOS_MODULO = { saude: 'Saúde', auto: 'Auto/Frota', lifsure: 'LifSure' }
 
-export default function EspecialistaAuto({ clienteProspectIdInicial = null, casoIdContinuacao = null, perguntaInicial = null, onSolicitarTroca = null }) {
+export default function EspecialistaLifsure({ clienteProspectIdInicial = null, casoIdContinuacao = null, perguntaInicial = null, onSolicitarTroca = null }) {
   const { perfil } = useAuth()
   const modoDemanda = !!clienteProspectIdInicial || !!casoIdContinuacao
 
@@ -36,7 +31,7 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
 
   useEffect(() => {
     if (casoIdContinuacao) {
-      buscarHistoricoChatAuto(casoIdContinuacao)
+      buscarHistoricoChatLifsure(casoIdContinuacao)
         .then((historico) => setMensagens(historico))
         .finally(() => setCarregandoHistorico(false))
     }
@@ -64,7 +59,7 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
 
       let resposta
       if (modoDemanda) {
-        resposta = await atenderDemandaAuto({
+        resposta = await atenderDemandaLifsure({
           demandaTexto: textoEnviado,
           usuarioId: perfil?.id,
           organizacaoId: perfil?.organizacao_id ?? null,
@@ -74,7 +69,7 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
         })
         if (!casoAtualId) setCasoAtualId(resposta.caso.id)
       } else {
-        resposta = await atenderConsultaRapidaAuto({
+        resposta = await atenderConsultaRapidaLifsure({
           demandaTexto: textoEnviado,
           usuarioId: perfil?.id,
           organizacaoId: perfil?.organizacao_id ?? null,
@@ -116,14 +111,14 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
     janela.document.write(`
       <html>
         <head>
-          <title>Conversa com o Especialista de Auto</title>
+          <title>Conversa com o Especialista LifSure</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; max-width: 700px; margin: 0 auto; }
             h1 { font-size: 18px; color: #0e2a3d; }
           </style>
         </head>
         <body>
-          <h1>Especialista de Auto/Frota — Registro da Conversa</h1>
+          <h1>Especialista LifSure — Registro da Conversa</h1>
           <p style="color:#666; font-size:12px;">Impresso em ${new Date().toLocaleString('pt-BR')}</p>
           <hr />
           ${conteudoHtml}
@@ -136,7 +131,7 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
   }
 
   async function handleEncerrar() {
-    if (casoAtualId) await encerrarConversaAuto(casoAtualId)
+    if (casoAtualId) await encerrarConversaLifsure(casoAtualId)
     setConversaEncerrada(true)
   }
 
@@ -150,7 +145,7 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
   return (
     <div className="especialista-container especialista-chat-container">
       <div className="especialista-chat-header">
-        <h2>Especialista de Auto/Frota</h2>
+        <h2>Especialista LifSure</h2>
       </div>
 
       <div className="especialista-chat-corpo">
@@ -260,7 +255,7 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
       )}
 
       {mostrarVincular && (
-        <VincularClienteAutoModal
+        <VincularClienteLifsureModal
           consultaId={consultaAtualId}
           usuarioId={perfil?.id}
           organizacaoId={perfil?.organizacao_id}
@@ -282,14 +277,14 @@ export default function EspecialistaAuto({ clienteProspectIdInicial = null, caso
   )
 }
 
-function VincularClienteAutoModal({ consultaId, usuarioId, organizacaoId, onFechar, onVinculado }) {
+function VincularClienteLifsureModal({ consultaId, usuarioId, organizacaoId, onFechar, onVinculado }) {
   const [busca, setBusca] = useState('')
   const [clientes, setClientes] = useState([])
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState(null)
 
   useEffect(() => {
-    listarClientesProspects({ mostrarFuturas: true, modulo: 'auto' }).then(setClientes)
+    listarClientesProspects({ mostrarFuturas: true, modulo: 'lifsure' }).then(setClientes)
   }, [])
 
   const filtrados = clientes.filter((c) => c.razao_social?.toLowerCase().includes(busca.toLowerCase()))
@@ -298,7 +293,7 @@ function VincularClienteAutoModal({ consultaId, usuarioId, organizacaoId, onFech
     setCarregando(true)
     setErro(null)
     try {
-      const novoCaso = await vincularConsultaComoDemandaAuto({
+      const novoCaso = await vincularConsultaComoDemandaLifsure({
         consultaId,
         clienteProspectId: clienteId,
         organizacaoId,

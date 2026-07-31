@@ -91,15 +91,15 @@ um texto extenso numa pergunta sem substância é desperdício — tanto pro cor
 quanto em custo de processamento.
 
 ## Limite de escopo — importante
-Você é especialista em Seguro Auto e Seguro Frota, ponto. Você NÃO é especialista em plano de saúde,
-odontológico, vida, residencial, previdência, consórcio ou qualquer outro ramo. Se a pergunta do
-corretor for claramente sobre outro ramo (ex: carência de plano de saúde, cobertura odontológica),
-NÃO tente responder usando conhecimento geral — diga com clareza que isso está fora do seu domínio
-(Auto/Frota) e oriente o corretor a usar o Especialista correto para aquele ramo. Não invente uma
-resposta só porque você "sabe" algo sobre o assunto de forma genérica — sua responsabilidade técnica
-é estritamente Auto e Frota. **Sempre que isso acontecer, você DEVE também preencher o campo
-ESPECIALISTA_SUGERIDO: saude no cabeçalho da resposta (veja o formato no final) — a explicação em
-texto sozinha não é suficiente, o campo precisa vir preenchido junto.**
+Você é especialista em Seguro Auto e Seguro Frota, ponto. Você NÃO é especialista em plano de saúde/
+odontológico (módulo LifCare) nem em Vida, Patrimonial, Transportes, Responsabilidade Civil e demais
+Seguros Gerais (módulo LifSure). Se a pergunta do corretor for claramente sobre outro ramo, NÃO tente
+responder usando conhecimento geral — diga com clareza que isso está fora do seu domínio (Auto/Frota)
+e oriente o corretor a usar o Especialista correto para aquele ramo. Não invente uma resposta só
+porque você "sabe" algo sobre o assunto de forma genérica — sua responsabilidade técnica é estritamente
+Auto e Frota. **Sempre que isso acontecer, você DEVE também preencher o campo ESPECIALISTA_SUGERIDO no
+cabeçalho da resposta com a palavra exata "saude" ou "lifsure" (sem aspas, sem markdown), conforme o
+caso — a explicação em texto sozinha não é suficiente, o campo precisa vir preenchido junto.**
 
 ## Biblioteca técnica relevante para esta demanda (Comercial, Apólices, Regulamentação, Ressarcimento, Sinistro, Seguradoras)
 ${blocoBiblioteca || '(nenhum documento especialmente relevante encontrado — responda com cautela e diga isso se for o caso)'}
@@ -115,7 +115,7 @@ Responda EXATAMENTE neste formato, sem markdown ao redor, sem texto antes do cab
 CATEGORIA: Comercial | Apólices | Sinistro | Ressarcimento | Regulamentação
 SUBCATEGORIA: string curta descrevendo o assunto
 PRECISA_MAIS_INFORMACAO: true ou false
-ESPECIALISTA_SUGERIDO: escreva exatamente a palavra "null" (sem aspas, sem markdown), ou exatamente a palavra "saude" se a pergunta for claramente sobre Plano de Saúde/Odontológico. Nada mais nessa linha.
+ESPECIALISTA_SUGERIDO: escreva exatamente a palavra "null" (sem aspas, sem markdown), ou "saude" (Plano de Saúde/Odontológico) ou "lifsure" (Vida, Patrimonial, RC, Transportes e demais Seguros Gerais), conforme o caso. Nada mais nessa linha.
 ---RESPOSTA---
 Sua resposta completa em português vem aqui, livre — pode ter parágrafos, quebras de linha, listas,
 emojis, à vontade, sem nenhuma restrição de formato. Siga as 5 etapas do seu modelo cognitivo de forma
@@ -148,7 +148,11 @@ pergunta(s) essencial(is) para ESSE caso. Preço nunca deve ser o único critér
   const respostaTextoSemFormatacao = respostaTexto.replace(/[*_`#]/g, '')
   const especialistaSugeridoDetectado =
     parsed.especialistaSugerido ??
-    (/especialista\s+d[eo]\s+sa[uú]de/i.test(respostaTextoSemFormatacao) ? 'saude' : null)
+    (/especialista\s+d[eo]\s+sa[uú]de/i.test(respostaTextoSemFormatacao)
+      ? 'saude'
+      : /especialista\s+(lifsure|d[eo]\s+seguros?\s+gerais)/i.test(respostaTextoSemFormatacao)
+        ? 'lifsure'
+        : null)
 
   return {
     categoria: parsed.categoria,
@@ -183,13 +187,14 @@ function parsearRespostaComSeparador(textoBruto) {
   }
 
   const especialistaSugeridoBruto = extrairCampo('ESPECIALISTA_SUGERIDO') ?? ''
-  const matchEspecialista = /\bsa[uú]de\b/i.test(especialistaSugeridoBruto)
+  const matchSaude = /\bsa[uú]de\b/i.test(especialistaSugeridoBruto)
+  const matchLifsure = /\blifsure\b/i.test(especialistaSugeridoBruto)
 
   return {
     categoria: extrairCampo('CATEGORIA'),
     subcategoria: extrairCampo('SUBCATEGORIA'),
     precisaMaisInformacao: (extrairCampo('PRECISA_MAIS_INFORMACAO') ?? '').toLowerCase() === 'true',
-    especialistaSugerido: matchEspecialista ? 'saude' : null,
+    especialistaSugerido: matchSaude ? 'saude' : matchLifsure ? 'lifsure' : null,
     resposta,
   }
 }

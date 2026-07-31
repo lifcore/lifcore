@@ -1,29 +1,35 @@
 import { useEffect, useState } from 'react'
 import EspecialistaSaude from '../features/especialista/EspecialistaSaude'
 import EspecialistaAuto from '../features/especialista/EspecialistaAuto'
+import EspecialistaLifsure from '../features/especialista/EspecialistaLifsure'
 
 const ROTULOS = {
   saude: 'Especialista de Saúde',
   auto: 'Especialista de Auto/Frota',
+  lifsure: 'Especialista LifSure',
+}
+
+const COMPONENTES = {
+  saude: EspecialistaSaude,
+  auto: EspecialistaAuto,
+  lifsure: EspecialistaLifsure,
 }
 
 /**
- * Painel único que hospeda os dois especialistas (Saúde e Auto) e sabe
- * trocar de um pro outro — usado quando um deles reconhece que a
- * pergunta é do domínio do outro (campo "especialista_sugerido" na
+ * Painel único que hospeda os três especialistas (Saúde, Auto, LifSure)
+ * e sabe trocar de um pro outro — usado quando um deles reconhece que a
+ * pergunta é do domínio de outro (campo "especialista_sugerido" na
  * resposta) e o corretor confirma que quer abrir o especialista certo.
  *
  * Sempre que o painel é aberto do zero, volta pro especialista padrão
- * do módulo em que o corretor está navegando (Lifcare → Saúde, Lifleet
- * → Auto). Uma troca manual só vale enquanto o painel estiver aberto.
+ * do módulo em que o corretor está navegando. Uma troca manual só vale
+ * enquanto o painel estiver aberto.
  */
 export default function EspecialistaSwitcher({ moduloPadrao, clienteProspectId }) {
   const [aberto, setAberto] = useState(false)
   const [especialistaAtivo, setEspecialistaAtivo] = useState(moduloPadrao)
   const [perguntaTransferida, setPerguntaTransferida] = useState(null)
 
-  // Se o corretor navegar de um módulo pro outro (Lifcare <-> Lifleet)
-  // com o painel fechado, o próximo especialista a abrir já é o certo.
   useEffect(() => {
     if (!aberto) setEspecialistaAtivo(moduloPadrao)
   }, [moduloPadrao, aberto])
@@ -44,6 +50,8 @@ export default function EspecialistaSwitcher({ moduloPadrao, clienteProspectId }
     setPerguntaTransferida(perguntaOriginal ?? null)
   }
 
+  const ComponenteAtivo = COMPONENTES[especialistaAtivo]
+
   return (
     <>
       {!aberto && (
@@ -57,26 +65,18 @@ export default function EspecialistaSwitcher({ moduloPadrao, clienteProspectId }
         </button>
       )}
 
-      {aberto && (
+      {aberto && ComponenteAtivo && (
         <div className="especialista-painel-overlay" onClick={handleFechar}>
           <div className="especialista-painel" onClick={(e) => e.stopPropagation()}>
             <button className="especialista-painel-fechar" onClick={handleFechar} title="Fechar">
               ✕
             </button>
             <div className="especialista-painel-corpo">
-              {especialistaAtivo === 'saude' ? (
-                <EspecialistaSaude
-                  clienteProspectIdInicial={moduloPadrao === 'saude' ? clienteProspectId : null}
-                  perguntaInicial={perguntaTransferida}
-                  onSolicitarTroca={(pergunta) => handleSolicitarTroca('auto', pergunta)}
-                />
-              ) : (
-                <EspecialistaAuto
-                  clienteProspectIdInicial={moduloPadrao === 'auto' ? clienteProspectId : null}
-                  perguntaInicial={perguntaTransferida}
-                  onSolicitarTroca={(pergunta) => handleSolicitarTroca('saude', pergunta)}
-                />
-              )}
+              <ComponenteAtivo
+                clienteProspectIdInicial={especialistaAtivo === moduloPadrao ? clienteProspectId : null}
+                perguntaInicial={perguntaTransferida}
+                onSolicitarTroca={handleSolicitarTroca}
+              />
             </div>
           </div>
         </div>

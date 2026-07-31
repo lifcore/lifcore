@@ -17,6 +17,7 @@ import { formatarDataBR } from '../../lib/utils/formatarData'
 import { DadosCadastraisTab } from '../crm/ClienteDetailPage'
 import CotacaoLifsureForm from './CotacaoLifsureForm'
 import ApoliceLifsureForm from './ApoliceLifsureForm'
+import EspecialistaLifsure from '../especialista/EspecialistaLifsure'
 import { useAuth } from '../auth/AuthContext'
 
 const ABAS = ['Dados Cadastrais', 'Cotações', 'Apólices', 'Demandas']
@@ -406,6 +407,7 @@ function DemandaDetailLifsureModal({ demanda, onFechar, onAtualizado, onSalvoSem
   const [dataProximaAcao, setDataProximaAcao] = useState(demanda.data_proxima_acao ?? '')
   const [novaAtualizacao, setNovaAtualizacao] = useState('')
   const [salvando, setSalvando] = useState(false)
+  const [abrirEspecialista, setAbrirEspecialista] = useState(false)
 
   async function handleSalvar() {
     setSalvando(true)
@@ -426,6 +428,17 @@ function DemandaDetailLifsureModal({ demanda, onFechar, onAtualizado, onSalvoSem
     }
   }
 
+  if (abrirEspecialista) {
+    return (
+      <div className="ls-modal-overlay" onClick={onFechar}>
+        <div className="especialista-modal" onClick={(e) => e.stopPropagation()}>
+          <button className="especialista-modal-fechar" onClick={onFechar}>✕</button>
+          <EspecialistaLifsure clienteProspectIdInicial={demanda.cliente_prospect_id} casoIdContinuacao={demanda.id} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="ls-modal-overlay" onClick={editando ? undefined : onFechar}>
       <div className="ls-modal" onClick={(e) => e.stopPropagation()}>
@@ -438,6 +451,7 @@ function DemandaDetailLifsureModal({ demanda, onFechar, onAtualizado, onSalvoSem
             <p><strong>Próxima ação:</strong> {demanda.data_proxima_acao ? formatarDataBR(demanda.data_proxima_acao) : '—'}</p>
             <div className="ls-modal-acoes">
               <button className="ls-btn ls-btn-ghost" onClick={onFechar}>Fechar</button>
+              <button className="ls-btn ls-btn-accent" onClick={() => setAbrirEspecialista(true)}>🧠 Especialista</button>
               <button className="ls-btn ls-btn-primary" onClick={() => setEditando(true)}>Editar Demanda</button>
             </div>
           </>

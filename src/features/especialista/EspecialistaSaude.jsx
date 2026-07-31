@@ -17,6 +17,8 @@ import './especialista.css'
  *   registro leve, sem burocracia. Pode ser "vinculado a um cliente"
  *   a qualquer momento, virando uma Demanda de verdade.
  */
+const ROTULOS_MODULO = { saude: 'Saúde', auto: 'Auto/Frota', lifsure: 'LifSure' }
+
 export default function EspecialistaSaude({ clienteProspectIdInicial = null, casoIdContinuacao = null, perguntaInicial = null, onSolicitarTroca = null }) {
   const { perfil } = useAuth()
   const modoDemanda = !!clienteProspectIdInicial || !!casoIdContinuacao
@@ -205,12 +207,12 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
 
       {especialistaSugerido && onSolicitarTroca && (
         <div className="especialista-sugestao-troca">
-          <span>Essa pergunta parece ser do domínio do Especialista de {especialistaSugerido.modulo === 'auto' ? 'Auto/Frota' : 'Saúde'}.</span>
+          <span>Essa pergunta parece ser do domínio do Especialista de {ROTULOS_MODULO[especialistaSugerido.modulo] ?? especialistaSugerido.modulo}.</span>
           <button
             className="ls-btn ls-btn-accent"
-            onClick={() => onSolicitarTroca(especialistaSugerido.pergunta)}
+            onClick={() => onSolicitarTroca(especialistaSugerido.modulo, especialistaSugerido.pergunta)}
           >
-            Abrir Especialista de {especialistaSugerido.modulo === 'auto' ? 'Auto/Frota' : 'Saúde'} →
+            Abrir Especialista de {ROTULOS_MODULO[especialistaSugerido.modulo] ?? especialistaSugerido.modulo} →
           </button>
         </div>
       )}

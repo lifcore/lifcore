@@ -120,9 +120,11 @@ que precisa ler, quanto em custo de processamento.
 
 ## Limite de escopo — importante
 Você é especialista em Plano de Saúde e Odontológico (módulo LifCare), ponto. Você NÃO é especialista em
-Seguro Auto, Frota, Vida, Residencial, previdência, consórcio ou qualquer outro ramo. Se a pergunta for
-claramente sobre outro ramo, NÃO tente responder usando conhecimento geral — diga com clareza que está
-fora do seu domínio e sinalize isso no campo ESPECIALISTA_SUGERIDO do cabeçalho (veja o formato abaixo).
+Seguro Auto/Frota (módulo Lifleet) nem em Seguros Gerais — Vida, Patrimonial, Transportes, Responsabilidade
+Civil e demais ramos (módulo LifSure). Se a pergunta for claramente sobre um desses outros ramos, NÃO tente
+responder usando conhecimento geral — diga com clareza que está fora do seu domínio e sinalize isso no
+campo ESPECIALISTA_SUGERIDO do cabeçalho, com a palavra exata "auto" ou "lifsure" (sem aspas, sem markdown),
+conforme o caso (veja o formato abaixo).
 
 ## Biblioteca GIN relevante para esta demanda (fonte PRINCIPAL — tem mais peso que os casos abaixo)
 ${blocoBiblioteca || '(nenhum documento especialmente relevante encontrado — responda com cautela e diga isso se for o caso)'}
@@ -148,7 +150,7 @@ Responda EXATAMENTE neste formato, sem markdown ao redor, sem texto antes do cab
 CATEGORIA: Comercial | Técnico | Concierge | Analítico | Estratégico
 SUBCATEGORIA: string curta descrevendo o assunto
 PRECISA_MAIS_INFORMACAO: true ou false
-ESPECIALISTA_SUGERIDO: escreva exatamente a palavra "null" (sem aspas, sem markdown), ou exatamente a palavra "auto" se a pergunta for claramente sobre Seguro Auto/Frota. Nada mais nessa linha.
+ESPECIALISTA_SUGERIDO: escreva exatamente a palavra "null" (sem aspas, sem markdown), ou "auto" (Seguro Auto/Frota) ou "lifsure" (Vida, Patrimonial, RC, Transportes e demais Seguros Gerais), conforme o caso. Nada mais nessa linha.
 ---RESPOSTA---
 Sua resposta completa em português vem aqui, livre — pode ter parágrafos, quebras de linha, listas,
 emojis, à vontade, sem nenhuma restrição de formato. Siga sua Arquitetura Cognitiva de forma natural
@@ -175,7 +177,11 @@ pergunta(s) essencial(is) para ESSE caso.`
   const respostaTextoSemFormatacao = respostaTexto.replace(/[*_`#]/g, '')
   const especialistaSugeridoDetectado =
     parsed.especialistaSugerido ??
-    (/especialista\s+d[eo]\s+auto/i.test(respostaTextoSemFormatacao) ? 'auto' : null)
+    (/especialista\s+d[eo]\s+auto/i.test(respostaTextoSemFormatacao)
+      ? 'auto'
+      : /especialista\s+(lifsure|d[eo]\s+seguros?\s+gerais)/i.test(respostaTextoSemFormatacao)
+        ? 'lifsure'
+        : null)
 
   return {
     categoria: parsed.categoria,
@@ -213,13 +219,14 @@ function parsearRespostaComSeparador(textoBruto) {
   }
 
   const especialistaSugeridoBruto = extrairCampo('ESPECIALISTA_SUGERIDO') ?? ''
-  const matchEspecialista = /\bauto\b/i.test(especialistaSugeridoBruto)
+  const matchAuto = /\bauto\b/i.test(especialistaSugeridoBruto)
+  const matchLifsure = /\blifsure\b/i.test(especialistaSugeridoBruto)
 
   return {
     categoria: extrairCampo('CATEGORIA'),
     subcategoria: extrairCampo('SUBCATEGORIA'),
     precisaMaisInformacao: (extrairCampo('PRECISA_MAIS_INFORMACAO') ?? '').toLowerCase() === 'true',
-    especialistaSugerido: matchEspecialista ? 'auto' : null,
+    especialistaSugerido: matchAuto ? 'auto' : matchLifsure ? 'lifsure' : null,
     resposta,
   }
 }
