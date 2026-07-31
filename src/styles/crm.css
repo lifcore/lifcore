@@ -491,6 +491,57 @@
   overflow-y: auto;
 }
 
+/* Modal do Especialista quando aberto de dentro de uma Demanda (botão
+   "🧠 Especialista") — nunca teve essa regra de largura no desktop,
+   só a versão mobile; sem isso ele esticava pra quase a tela toda. */
+.especialista-modal {
+  position: relative;
+  background: white;
+  border-radius: var(--ls-radius);
+  box-shadow: var(--ls-shadow-lift);
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.especialista-modal .especialista-container {
+  box-shadow: none;
+  border-radius: 0;
+  padding: 1.35rem 1.35rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.especialista-modal .especialista-chat-container {
+  max-height: none;
+  flex: 1;
+  min-height: 0;
+}
+
+.especialista-modal-fechar {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  background: var(--ls-bg);
+  border: none;
+  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  color: var(--ls-text-muted);
+  font-size: 0.85rem;
+  z-index: 10;
+}
+
+.especialista-modal-fechar:hover {
+  background: var(--ls-accent-soft);
+  color: var(--ls-accent);
+}
+
 .ls-modal label {
   display: block;
   font-size: 0.8rem;

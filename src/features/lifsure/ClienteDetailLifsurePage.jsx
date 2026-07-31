@@ -13,11 +13,13 @@ import {
 import { listarApolicesLifsureDoCliente, excluirApoliceLifsure } from '../../lib/crm/lifsureService'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
+import { gerarResumoCandidato, criarCandidatoConhecimento, aprovarCandidatoComoCasoReal, rejeitarCandidato } from '../../lib/crm/aprendizadoService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 import { DadosCadastraisTab } from '../crm/ClienteDetailPage'
 import CotacaoLifsureForm from './CotacaoLifsureForm'
 import ApoliceLifsureForm from './ApoliceLifsureForm'
 import EspecialistaLifsure from '../especialista/EspecialistaLifsure'
+import { buscarHistoricoChatLifsure } from '../../lib/especialista/especialistaLifsure'
 import { useAuth } from '../auth/AuthContext'
 
 const ABAS = ['Dados Cadastrais', 'Cotações', 'Apólices', 'Demandas']
@@ -406,26 +408,60 @@ function DemandaDetailLifsureModal({ demanda, onFechar, onAtualizado, onSalvoSem
   const [situacao, setSituacao] = useState(demanda.situacao)
   const [dataProximaAcao, setDataProximaAcao] = useState(demanda.data_proxima_acao ?? '')
   const [novaAtualizacao, setNovaAtualizacao] = useState('')
+  const [historico, setHistorico] = useState([])
+  const [carregandoHistorico, setCarregandoHistorico] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [abrirEspecialista, setAbrirEspecialista] = useState(false)
+  const [gerandoResumo, setGerandoResumo] = useState(false)
+  const [candidato, setCandidato] = useState(null)
+
+  useEffect(() => {
+    buscarHistoricoChatLifsure(demanda.id).then((h) => {
+      setHistorico(h)
+      setCarregandoHistorico(false)
+    })
+  }, [demanda.id])
 
   async function handleSalvar() {
     setSalvando(true)
     try {
+      const situacaoMudouParaEncerrado = situacao === 'encerrado' && demanda.situacao !== 'encerrado'
+
       await atualizarDemanda(demanda.id, { situacao, dataProximaAcao })
       if (novaAtualizacao.trim()) {
         await adicionarAtualizacaoManual(demanda.id, novaAtualizacao, perfil?.id)
       }
+
+      if (situacaoMudouParaEncerrado) {
+        // Mesma regra do Lifcare/Lifleet: todo ciclo encerrado gera um
+        // resumo sugerido, mas NUNCA vira Caso Real sem aprovação humana.
+        setGerandoResumo(true)
+        const resumo = await gerarResumoCandidato(demanda.id)
+        const novoCandidato = await criarCandidatoConhecimento(demanda.id, resumo)
+        setCandidato({ ...novoCandidato, resumoObjeto: resumo })
+        setGerandoResumo(false)
+        setEditando(false)
+        return
+      }
+
+      const historicoAtualizado = await buscarHistoricoChatLifsure(demanda.id)
+      setHistorico(historicoAtualizado)
       setNovaAtualizacao('')
       setEditando(false)
-      if (situacao === 'encerrado') {
-        onAtualizado()
-      } else {
-        onSalvoSemFechar?.()
-      }
+      onSalvoSemFechar?.()
     } finally {
       setSalvando(false)
     }
+  }
+
+  async function handleAprovarCandidato() {
+    await aprovarCandidatoComoCasoReal(candidato.id, perfil?.id)
+    onAtualizado()
+  }
+
+  async function handleRejeitarCandidato() {
+    await rejeitarCandidato(candidato.id)
+    onAtualizado()
   }
 
   if (abrirEspecialista) {
@@ -441,22 +477,58 @@ function DemandaDetailLifsureModal({ demanda, onFechar, onAtualizado, onSalvoSem
 
   return (
     <div className="ls-modal-overlay" onClick={editando ? undefined : onFechar}>
-      <div className="ls-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>{demanda.codigo}</h3>
+      <div className="ls-modal demanda-detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="demanda-detail-header">
+          <h3>{demanda.codigo}</h3>
+          <div className="demanda-detail-header-botoes">
+            <button className="ls-btn ls-btn-accent" onClick={() => setAbrirEspecialista(true)}>
+              🧠 Especialista
+            </button>
+          </div>
+        </div>
         <p className="config-instrucao">{demanda.demanda_original}</p>
 
-        {!editando ? (
-          <>
-            <p><strong>Situação:</strong> {traduzirSituacaoLifsure(demanda.situacao)}</p>
-            <p><strong>Próxima ação:</strong> {demanda.data_proxima_acao ? formatarDataBR(demanda.data_proxima_acao) : '—'}</p>
+        <div className="demanda-detail-historico">
+          {carregandoHistorico ? (
+            <p className="especialista-carregando-historico">Carregando histórico...</p>
+          ) : historico.length === 0 ? (
+            <p className="cliente-vazio-inline">Nenhuma interação registrada ainda.</p>
+          ) : (
+            historico.map((m, i) => (
+              <div key={i} className={`especialista-bolha especialista-bolha-${m.autor}`}>
+                <span className="especialista-bolha-autor">
+                  {m.autor === 'corretor' ? 'Corretor' : m.autor === 'sistema' ? 'Atualização' : 'Especialista'}
+                </span>
+                <p>{m.texto}</p>
+              </div>
+            ))
+          )}
+        </div>
+
+        {gerandoResumo && <p className="especialista-carregando-historico">Gerando resumo sugerido...</p>}
+
+        {candidato ? (
+          <div className="candidato-aprovacao">
+            <h4>✅ Demanda encerrada — sugestão de Caso Real gerada</h4>
+            <p className="config-instrucao">
+              <strong>{candidato.resumoObjeto.titulo}</strong><br />
+              {candidato.resumoObjeto.resultado}
+            </p>
+            <p className="config-instrucao">
+              Isso só vira conhecimento institucional se você aprovar — nada acontece sozinho.
+            </p>
             <div className="ls-modal-acoes">
-              <button className="ls-btn ls-btn-ghost" onClick={onFechar}>Fechar</button>
-              <button className="ls-btn ls-btn-accent" onClick={() => setAbrirEspecialista(true)}>🧠 Especialista</button>
-              <button className="ls-btn ls-btn-primary" onClick={() => setEditando(true)}>Editar Demanda</button>
+              <button className="ls-btn ls-btn-ghost" onClick={handleRejeitarCandidato}>Rejeitar</button>
+              <button className="ls-btn ls-btn-primary" onClick={handleAprovarCandidato}>Aprovar como Caso Real</button>
             </div>
-          </>
+          </div>
+        ) : !editando ? (
+          <div className="demanda-detail-rodape">
+            <span className="ls-badge ls-badge-prospect">{traduzirSituacaoLifsure(situacao)}</span>
+            <button className="ls-btn ls-btn-ghost" onClick={() => setEditando(true)}>Editar Demanda</button>
+          </div>
         ) : (
-          <>
+          <div className="demanda-detail-edicao">
             <label>Situação</label>
             <select className="demanda-select-status" value={situacao} onChange={(e) => setSituacao(e.target.value)}>
               <option value="aberto">Aberta</option>
@@ -484,7 +556,7 @@ function DemandaDetailLifsureModal({ demanda, onFechar, onAtualizado, onSalvoSem
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>

@@ -18,6 +18,7 @@ import { DadosCadastraisTab } from '../crm/ClienteDetailPage'
 import CotacaoAutoForm from './CotacaoAutoForm'
 import ApoliceAutoForm from './ApoliceAutoForm'
 import EspecialistaAuto from '../especialista/EspecialistaAuto'
+import { buscarHistoricoChatAuto } from '../../lib/especialista/especialistaAuto'
 import { gerarResumoCandidato, criarCandidatoConhecimento, aprovarCandidatoComoCasoReal, rejeitarCandidato } from '../../lib/crm/aprendizadoService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
 import { useAuth } from '../auth/AuthContext'
@@ -421,10 +422,19 @@ function DemandaDetailLifleetModal({ demanda, cliente, onFechar, onAtualizado, o
   const [situacao, setSituacao] = useState(demanda.situacao)
   const [dataProximaAcao, setDataProximaAcao] = useState(demanda.data_proxima_acao ?? '')
   const [novaAtualizacao, setNovaAtualizacao] = useState('')
+  const [historico, setHistorico] = useState([])
+  const [carregandoHistorico, setCarregandoHistorico] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [abrirEspecialista, setAbrirEspecialista] = useState(false)
   const [gerandoResumo, setGerandoResumo] = useState(false)
   const [candidato, setCandidato] = useState(null)
+
+  useEffect(() => {
+    buscarHistoricoChatAuto(demanda.id).then((h) => {
+      setHistorico(h)
+      setCarregandoHistorico(false)
+    })
+  }, [demanda.id])
 
   async function handleSalvar() {
     setSalvando(true)
@@ -449,6 +459,8 @@ function DemandaDetailLifleetModal({ demanda, cliente, onFechar, onAtualizado, o
         return
       }
 
+      const historicoAtualizado = await buscarHistoricoChatAuto(demanda.id)
+      setHistorico(historicoAtualizado)
       setNovaAtualizacao('')
       setEditando(false)
       onSalvoSemFechar?.()
@@ -480,7 +492,7 @@ function DemandaDetailLifleetModal({ demanda, cliente, onFechar, onAtualizado, o
 
   return (
     <div className="ls-modal-overlay" onClick={editando ? undefined : onFechar}>
-      <div className="ls-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="ls-modal demanda-detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="demanda-detail-header">
           <h3>{demanda.codigo}</h3>
           <div className="demanda-detail-header-botoes">
@@ -490,6 +502,23 @@ function DemandaDetailLifleetModal({ demanda, cliente, onFechar, onAtualizado, o
           </div>
         </div>
         <p className="config-instrucao">{demanda.demanda_original}</p>
+
+        <div className="demanda-detail-historico">
+          {carregandoHistorico ? (
+            <p className="especialista-carregando-historico">Carregando histórico...</p>
+          ) : historico.length === 0 ? (
+            <p className="cliente-vazio-inline">Nenhuma interação registrada ainda.</p>
+          ) : (
+            historico.map((m, i) => (
+              <div key={i} className={`especialista-bolha especialista-bolha-${m.autor}`}>
+                <span className="especialista-bolha-autor">
+                  {m.autor === 'corretor' ? 'Corretor' : m.autor === 'sistema' ? 'Atualização' : 'Especialista'}
+                </span>
+                <p>{m.texto}</p>
+              </div>
+            ))
+          )}
+        </div>
 
         {gerandoResumo && <p className="especialista-carregando-historico">Gerando resumo sugerido...</p>}
 
@@ -509,16 +538,12 @@ function DemandaDetailLifleetModal({ demanda, cliente, onFechar, onAtualizado, o
             </div>
           </div>
         ) : !editando ? (
-          <>
-            <p><strong>Situação:</strong> {traduzirSituacaoLifleet(demanda.situacao)}</p>
-            <p><strong>Próxima ação:</strong> {demanda.data_proxima_acao ? formatarDataBR(demanda.data_proxima_acao) : '—'}</p>
-            <div className="ls-modal-acoes">
-              <button className="ls-btn ls-btn-ghost" onClick={onFechar}>Fechar</button>
-              <button className="ls-btn ls-btn-primary" onClick={() => setEditando(true)}>Editar Demanda</button>
-            </div>
-          </>
+          <div className="demanda-detail-rodape">
+            <span className="ls-badge ls-badge-prospect">{traduzirSituacaoLifleet(situacao)}</span>
+            <button className="ls-btn ls-btn-ghost" onClick={() => setEditando(true)}>Editar Demanda</button>
+          </div>
         ) : (
-          <>
+          <div className="demanda-detail-edicao">
             <label>Situação</label>
             <select className="demanda-select-status" value={situacao} onChange={(e) => setSituacao(e.target.value)}>
               <option value="aberto">Aberta</option>
@@ -546,7 +571,7 @@ function DemandaDetailLifleetModal({ demanda, cliente, onFechar, onAtualizado, o
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>
