@@ -9,7 +9,7 @@ export { PRODUTOS_APOLICE }
 export async function listarCatalogoSeguradoras() {
   const { data, error } = await institucional
     .from('operadoras')
-    .select('id, codigo, nome, categoria_seguro, observacoes_comissionamento')
+    .select('id, codigo, nome, categoria_seguro, observacoes_comissionamento, cnpj, razao_social, site')
     .eq('status', 'ativa')
     .order('nome')
   if (error) throw new Error(`Erro ao listar seguradoras: ${error.message}`)
@@ -17,7 +17,7 @@ export async function listarCatalogoSeguradoras() {
 }
 
 /** Cadastra uma nova seguradora/operadora direto pela tela (sem precisar de SQL) */
-export async function criarSeguradora({ nome, categoriaSeguro, observacoesComissionamento }) {
+export async function criarSeguradora({ nome, categoriaSeguro, observacoesComissionamento, cnpj, razaoSocial, site }) {
   const codigo = `SEG-${Date.now().toString(36).toUpperCase()}`
   const { data, error } = await institucional
     .from('operadoras')
@@ -26,12 +26,22 @@ export async function criarSeguradora({ nome, categoriaSeguro, observacoesComiss
       nome,
       categoria_seguro: categoriaSeguro || null,
       observacoes_comissionamento: observacoesComissionamento || null,
+      cnpj: cnpj || null,
+      razao_social: razaoSocial || null,
+      site: site || null,
       status: 'ativa',
     })
     .select()
     .single()
   if (error) throw new Error(`Erro ao cadastrar seguradora: ${error.message}`)
   return data
+}
+
+/** Atualiza dados gerais de uma seguradora existente (nome, CNPJ, razão social, site) —
+ * complementa atualizarObservacaoSeguradora, que cuida só do campo de comissionamento */
+export async function atualizarDadosSeguradora(operadoraId, dados) {
+  const { error } = await institucional.from('operadoras').update(dados).eq('id', operadoraId)
+  if (error) throw new Error(`Erro ao atualizar seguradora: ${error.message}`)
 }
 
 /** Atualiza as observações de comissionamento de uma seguradora existente */

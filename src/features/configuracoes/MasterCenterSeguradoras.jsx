@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react'
 import {
-  listarSeguradoras,
+  listarCatalogoSeguradoras,
   criarSeguradora,
-  atualizarSeguradora,
-  inativarSeguradora,
-  reativarSeguradora,
-  excluirSeguradora,
+  atualizarDadosSeguradora,
+} from '../../lib/crm/apolicesService'
+import {
+  listarGestoresPorOperadora,
   upsertGestorModulo,
   excluirGestorModulo,
 } from '../../lib/crm/seguradorasService'
-import { operacional } from '../../lib/supabaseSchemas'
 
 const MODULOS_GESTOR = [
   { id: 'saude', label: 'Lifcare (Saúde)' },
@@ -30,7 +29,7 @@ export default function SeguradorasCard() {
 
   async function carregar() {
     setCarregando(true)
-    const lista = await listarSeguradoras()
+    const lista = await listarCatalogoSeguradoras()
     setSeguradoras(lista)
     setCarregando(false)
   }
@@ -39,9 +38,10 @@ export default function SeguradorasCard() {
     <div className="ls-card" style={{ marginTop: '1.5rem' }}>
       <h3>🏢 Seguradoras</h3>
       <p className="config-instrucao">
-        Cadastro central das seguradoras — dados gerais e o gestor de relacionamento
-        responsável por cada módulo (a mesma seguradora pode ter um gestor diferente
-        pra Auto e outro pra Saúde, por exemplo).
+        Cadastro central das seguradoras — mesma tabela já usada nos formulários
+        de Apólice (fonte única, sem duplicidade) — e o gestor de relacionamento
+        responsável por cada módulo (a mesma seguradora pode ter um gestor
+        diferente pra Auto e outro pra Saúde, por exemplo).
       </p>
 
       {!mostrarForm ? (
@@ -50,10 +50,7 @@ export default function SeguradorasCard() {
         </button>
       ) : (
         <NovaSeguradoraForm
-          onSalvo={() => {
-            setMostrarForm(false)
-            carregar()
-          }}
+          onSalvo={() => { setMostrarForm(false); carregar() }}
           onCancelar={() => setMostrarForm(false)}
         />
       )}
@@ -74,29 +71,23 @@ export default function SeguradorasCard() {
 }
 
 function NovaSeguradoraForm({ onSalvo, onCancelar }) {
-  const [nomeFantasia, setNomeFantasia] = useState('')
+  const [nome, setNome] = useState('')
   const [razaoSocial, setRazaoSocial] = useState('')
   const [cnpj, setCnpj] = useState('')
   const [site, setSite] = useState('')
+  const [categoriaSeguro, setCategoriaSeguro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
 
   async function handleSalvar() {
-    if (!nomeFantasia.trim()) {
+    if (!nome.trim()) {
       setErro('Informe o nome da seguradora.')
       return
     }
     setSalvando(true)
     setErro(null)
     try {
-      const { data: org } = await operacional.from('organizacoes').select('id').limit(1).single()
-      await criarSeguradora({
-        organizacaoId: org.id,
-        nomeFantasia,
-        razaoSocial,
-        cnpj,
-        site,
-      })
+      await criarSeguradora({ nome, razaoSocial, cnpj, site, categoriaSeguro })
       onSalvo()
     } catch (err) {
       setErro(err.message)
@@ -107,8 +98,8 @@ function NovaSeguradoraForm({ onSalvo, onCancelar }) {
 
   return (
     <div className="ls-card" style={{ marginTop: '0.75rem' }}>
-      <label>Nome fantasia</label>
-      <input value={nomeFantasia} onChange={(e) => setNomeFantasia(e.target.value)} placeholder="Ex: Bradesco Seguros" />
+      <label>Nome</label>
+      <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Bradesco Seguros" />
 
       <div className="cotacao-form-linha">
         <div>
@@ -121,8 +112,16 @@ function NovaSeguradoraForm({ onSalvo, onCancelar }) {
         </div>
       </div>
 
-      <label>Site</label>
-      <input value={site} onChange={(e) => setSite(e.target.value)} placeholder="https://..." />
+      <div className="cotacao-form-linha">
+        <div>
+          <label>Categoria de seguro</label>
+          <input value={categoriaSeguro} onChange={(e) => setCategoriaSeguro(e.target.value)} placeholder="Ex: Saúde, Auto..." />
+        </div>
+        <div>
+          <label>Site</label>
+          <input value={site} onChange={(e) => setSite(e.target.value)} placeholder="https://..." />
+        </div>
+      </div>
 
       {erro && <p className="ls-modal-erro">{erro}</p>}
 
@@ -138,84 +137,72 @@ function NovaSeguradoraForm({ onSalvo, onCancelar }) {
 
 function SeguradoraItem({ seguradora, onAtualizado }) {
   const [expandido, setExpandido] = useState(false)
+  const [gestores, setGestores] = useState([])
+  const [carregandoGestores, setCarregandoGestores] = useState(false)
 
-  const gestoresPorModulo = new Map(
-    (seguradora.seguradora_gestores || []).map((g) => [g.modulo, g])
-  )
-
-  async function handleInativar() {
-    if (!window.confirm(`Inativar ${seguradora.nome_fantasia}? Ela deixa de aparecer como opção ativa, mas nada é excluído.`)) return
-    await inativarSeguradora(seguradora.id)
-    onAtualizado()
-  }
-
-  async function handleReativar() {
-    await reativarSeguradora(seguradora.id)
-    onAtualizado()
-  }
-
-  async function handleExcluir() {
-    if (!window.confirm(`Excluir DEFINITIVAMENTE ${seguradora.nome_fantasia}? Isso não pode ser desfeito.`)) return
-    try {
-      await excluirSeguradora(seguradora.id)
-      onAtualizado()
-    } catch (err) {
-      alert(err.message)
+  async function toggleExpandir() {
+    if (!expandido) {
+      setCarregandoGestores(true)
+      const lista = await listarGestoresPorOperadora(seguradora.id)
+      setGestores(lista)
+      setCarregandoGestores(false)
     }
+    setExpandido(!expandido)
   }
+
+  async function recarregarGestores() {
+    const lista = await listarGestoresPorOperadora(seguradora.id)
+    setGestores(lista)
+    onAtualizado()
+  }
+
+  const gestoresPorModulo = new Map(gestores.map((g) => [g.modulo, g]))
 
   return (
     <div className="ls-card" style={{ marginTop: '0.75rem', padding: '0.85rem 1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <strong>{seguradora.nome_fantasia}</strong>
+          <strong>{seguradora.nome}</strong>
           {seguradora.cnpj && (
             <span className="config-instrucao" style={{ marginLeft: '0.5rem', fontSize: '0.8rem' }}>
               CNPJ: {seguradora.cnpj}
             </span>
           )}
-          {!seguradora.ativo && (
-            <span className="ls-badge ls-badge-inativo" style={{ marginLeft: '0.5rem' }}>Inativa</span>
-          )}
         </div>
-        <div className="cliente-tabela-acoes">
-          <button className="cliente-tabela-btn" onClick={() => setExpandido(!expandido)}>
-            {expandido ? 'Fechar' : 'Ver gestores'}
-          </button>
-          {seguradora.ativo ? (
-            <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleInativar}>Inativar</button>
-          ) : (
-            <button className="cliente-tabela-btn" onClick={handleReativar}>Reativar</button>
-          )}
-          <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleExcluir}>Excluir</button>
-        </div>
+        <button className="cliente-tabela-btn" onClick={toggleExpandir}>
+          {expandido ? 'Fechar' : 'Ver gestores'}
+        </button>
       </div>
 
       {expandido && (
         <div style={{ marginTop: '0.75rem' }}>
-          <table className="cliente-tabela">
-            <thead>
-              <tr><th>Módulo</th><th>Gestor</th><th>Contato</th><th>Ações</th></tr>
-            </thead>
-            <tbody>
-              {MODULOS_GESTOR.map((m) => (
-                <LinhaGestor
-                  key={m.id}
-                  modulo={m}
-                  seguradoraId={seguradora.id}
-                  gestor={gestoresPorModulo.get(m.id)}
-                  onAtualizado={onAtualizado}
-                />
-              ))}
-            </tbody>
-          </table>
+          {carregandoGestores ? (
+            <p className="cliente-carregando">Carregando gestores...</p>
+          ) : (
+            <table className="cliente-tabela">
+              <thead>
+                <tr><th>Módulo</th><th>Gestor</th><th>Contato</th><th>Ações</th></tr>
+              </thead>
+              <tbody>
+                {MODULOS_GESTOR.map((m) => (
+                  <LinhaGestor
+                    key={m.id}
+                    modulo={m}
+                    operadoraId={seguradora.id}
+                    gestor={gestoresPorModulo.get(m.id)}
+                    onAtualizado={recarregarGestores}
+                  />
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-function LinhaGestor({ modulo, seguradoraId, gestor, onAtualizado }) {
+function LinhaGestor({ modulo, operadoraId, gestor, onAtualizado }) {
   const [editando, setEditando] = useState(false)
   const [nome, setNome] = useState(gestor?.nome ?? '')
   const [telefone, setTelefone] = useState(gestor?.telefone ?? '')
@@ -226,7 +213,7 @@ function LinhaGestor({ modulo, seguradoraId, gestor, onAtualizado }) {
   async function handleSalvar() {
     setSalvando(true)
     try {
-      await upsertGestorModulo({ seguradoraId, modulo: modulo.id, nome, telefone, whatsapp, email })
+      await upsertGestorModulo({ operadoraId, modulo: modulo.id, nome, telefone, whatsapp, email })
       setEditando(false)
       onAtualizado()
     } finally {
@@ -248,24 +235,12 @@ function LinhaGestor({ modulo, seguradoraId, gestor, onAtualizado }) {
           <div className="ls-card" style={{ padding: '0.75rem' }}>
             <strong>{modulo.label}</strong>
             <div className="cotacao-form-linha" style={{ marginTop: '0.5rem' }}>
-              <div>
-                <label>Nome</label>
-                <input value={nome} onChange={(e) => setNome(e.target.value)} />
-              </div>
-              <div>
-                <label>Telefone</label>
-                <input value={telefone} onChange={(e) => setTelefone(e.target.value)} />
-              </div>
+              <div><label>Nome</label><input value={nome} onChange={(e) => setNome(e.target.value)} /></div>
+              <div><label>Telefone</label><input value={telefone} onChange={(e) => setTelefone(e.target.value)} /></div>
             </div>
             <div className="cotacao-form-linha">
-              <div>
-                <label>WhatsApp</label>
-                <input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} />
-              </div>
-              <div>
-                <label>E-mail</label>
-                <input value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
+              <div><label>WhatsApp</label><input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} /></div>
+              <div><label>E-mail</label><input value={email} onChange={(e) => setEmail(e.target.value)} /></div>
             </div>
             <div className="ls-modal-acoes">
               <button className="cliente-tabela-btn" onClick={() => setEditando(false)}>Cancelar</button>
