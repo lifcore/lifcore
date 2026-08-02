@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
 import { cadastrarCorretor } from '../../lib/crm/clientesService'
 import { listarPerfis, atualizarPerfil, desativarPerfil, reativarPerfil, transferirCarteira } from '../../lib/crm/perfisService'
+import {
+  listarConexoesOperadoras,
+  criarConexaoOperadora,
+  atualizarConexaoOperadora,
+  marcarSincronizada,
+  excluirConexaoOperadora,
+} from '../../lib/crm/conexoesService'
+import { operacional } from '../../lib/supabaseSchemas'
 import { useAuth } from '../auth/AuthContext'
 
 export default function ConfiguracoesPage() {
@@ -91,6 +99,8 @@ export default function ConfiguracoesPage() {
       <ListaCorretores />
 
       {ehMaster && <TransferirCarteiraCard />}
+
+      {ehMaster && <ConexoesOperadorasCard />}
     </div>
   )
 }
@@ -278,5 +288,214 @@ function TransferirCarteiraCard() {
         {transferindo ? 'Transferindo...' : 'Transferir Carteira'}
       </button>
     </div>
+  )
+}
+
+const MODULOS_CONEXAO = [
+  { id: 'saude', label: 'Lifcare (Saúde)' },
+  { id: 'auto', label: 'Lifleet (Auto)' },
+  { id: 'lifsure', label: 'LifSure' },
+  { id: 'lishield', label: 'LiShield' },
+  { id: 'lifplan', label: 'LifPlan' },
+]
+
+const ROTULO_TIPO_CONEXAO = { api: '🔌 API', tabela: '📄 Tabela importada', manual: '✍️ Manual' }
+const ROTULO_STATUS_CONEXAO = { ativa: 'Ativa', pendente: 'Pendente', inativa: 'Inativa' }
+
+function ConexoesOperadorasCard() {
+  const [moduloSelecionado, setModuloSelecionado] = useState('auto')
+  const [conexoes, setConexoes] = useState([])
+  const [carregando, setCarregando] = useState(true)
+  const [mostrarForm, setMostrarForm] = useState(false)
+
+  useEffect(() => {
+    carregar()
+  }, [moduloSelecionado])
+
+  async function carregar() {
+    setCarregando(true)
+    const lista = await listarConexoesOperadoras(moduloSelecionado)
+    setConexoes(lista)
+    setCarregando(false)
+  }
+
+  return (
+    <div className="ls-card" style={{ marginTop: '1.5rem' }}>
+      <h3>🔌 Conexões com Operadoras/Seguradoras</h3>
+      <p className="config-instrucao">
+        Acompanhe quais operadoras têm integração ativa, por tabela importada ou totalmente manual —
+        essa tela nunca guarda chave, token ou credencial nenhuma, só o status de cada conexão.
+      </p>
+
+      <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        {MODULOS_CONEXAO.map((m) => (
+          <button
+            key={m.id}
+            className={`ls-btn ${moduloSelecionado === m.id ? 'ls-btn-primary' : 'ls-btn-ghost'}`}
+            onClick={() => setModuloSelecionado(m.id)}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {!mostrarForm ? (
+        <button className="ls-btn ls-btn-accent" onClick={() => setMostrarForm(true)}>
+          + Nova Conexão
+        </button>
+      ) : (
+        <NovaConexaoForm
+          modulo={moduloSelecionado}
+          onSalvo={() => {
+            setMostrarForm(false)
+            carregar()
+          }}
+          onCancelar={() => setMostrarForm(false)}
+        />
+      )}
+
+      {carregando ? (
+        <p className="cliente-carregando">Carregando...</p>
+      ) : conexoes.length === 0 ? (
+        <p className="cliente-vazio" style={{ marginTop: '1rem' }}>Nenhuma conexão cadastrada para este módulo ainda.</p>
+      ) : (
+        <div className="ls-card" style={{ marginTop: '1rem', padding: 0 }}>
+          <table className="cliente-tabela">
+            <thead>
+              <tr><th>Operadora</th><th>Tipo</th><th>Status</th><th>Última sincronização</th><th>Ações</th></tr>
+            </thead>
+            <tbody>
+              {conexoes.map((c) => (
+                <LinhaConexao key={c.id} conexao={c} onAtualizado={carregar} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NovaConexaoForm({ modulo, onSalvo, onCancelar }) {
+  const [nomeOperadora, setNomeOperadora] = useState('')
+  const [tipoConexao, setTipoConexao] = useState('manual')
+  const [observacoes, setObservacoes] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  async function handleSalvar() {
+    if (!nomeOperadora.trim()) {
+      setErro('Informe o nome da operadora.')
+      return
+    }
+    setSalvando(true)
+    setErro(null)
+    try {
+      const { data: org } = await operacional.from('organizacoes').select('id').limit(1).single()
+      await criarConexaoOperadora({
+        organizacaoId: org.id,
+        modulo,
+        nomeOperadora,
+        tipoConexao,
+        observacoes,
+      })
+      onSalvo()
+    } catch (err) {
+      setErro(err.message)
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <div className="ls-card" style={{ marginTop: '0.75rem' }}>
+      <label>Nome da operadora/seguradora</label>
+      <input value={nomeOperadora} onChange={(e) => setNomeOperadora(e.target.value)} placeholder="Ex: Porto Seguro, SulAmérica..." />
+
+      <label>Tipo de conexão</label>
+      <select value={tipoConexao} onChange={(e) => setTipoConexao(e.target.value)}>
+        <option value="manual">✍️ Manual (corretor digita)</option>
+        <option value="tabela">📄 Tabela importada (Excel/CSV)</option>
+        <option value="api">🔌 API</option>
+      </select>
+
+      <label>Observações</label>
+      <input value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Ex: aguardando retorno da operadora sobre disponibilizar tabela" />
+
+      {erro && <p className="ls-modal-erro">{erro}</p>}
+
+      <div className="ls-modal-acoes">
+        <button className="ls-btn ls-btn-ghost" onClick={onCancelar}>Cancelar</button>
+        <button className="ls-btn ls-btn-primary" onClick={handleSalvar} disabled={salvando}>
+          {salvando ? 'Salvando...' : 'Salvar Conexão'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function LinhaConexao({ conexao, onAtualizado }) {
+  const [editando, setEditando] = useState(false)
+  const [status, setStatus] = useState(conexao.status)
+  const [tipoConexao, setTipoConexao] = useState(conexao.tipo_conexao)
+
+  async function handleSalvar() {
+    await atualizarConexaoOperadora(conexao.id, { status, tipo_conexao: tipoConexao })
+    setEditando(false)
+    onAtualizado()
+  }
+
+  async function handleMarcarSincronizada() {
+    await marcarSincronizada(conexao.id)
+    onAtualizado()
+  }
+
+  async function handleExcluir() {
+    if (!window.confirm(`Excluir a conexão com ${conexao.nome_operadora}?`)) return
+    await excluirConexaoOperadora(conexao.id)
+    onAtualizado()
+  }
+
+  if (editando) {
+    return (
+      <tr>
+        <td>{conexao.nome_operadora}</td>
+        <td>
+          <select value={tipoConexao} onChange={(e) => setTipoConexao(e.target.value)}>
+            <option value="manual">Manual</option>
+            <option value="tabela">Tabela importada</option>
+            <option value="api">API</option>
+          </select>
+        </td>
+        <td>
+          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="pendente">Pendente</option>
+            <option value="ativa">Ativa</option>
+            <option value="inativa">Inativa</option>
+          </select>
+        </td>
+        <td>{conexao.ultima_sincronizacao ? new Date(conexao.ultima_sincronizacao).toLocaleString('pt-BR') : '—'}</td>
+        <td>
+          <button className="cliente-tabela-btn" onClick={handleSalvar}>Salvar</button>
+          <button className="cliente-tabela-btn" onClick={() => setEditando(false)}>Cancelar</button>
+        </td>
+      </tr>
+    )
+  }
+
+  return (
+    <tr>
+      <td>{conexao.nome_operadora}</td>
+      <td>{ROTULO_TIPO_CONEXAO[conexao.tipo_conexao]}</td>
+      <td><span className={`ls-badge ls-badge-${conexao.status === 'ativa' ? 'cliente' : 'prospect'}`}>{ROTULO_STATUS_CONEXAO[conexao.status]}</span></td>
+      <td>{conexao.ultima_sincronizacao ? new Date(conexao.ultima_sincronizacao).toLocaleString('pt-BR') : '—'}</td>
+      <td className="cliente-tabela-acoes">
+        <button className="cliente-tabela-btn" onClick={() => setEditando(true)}>Editar</button>
+        {conexao.tipo_conexao === 'tabela' && (
+          <button className="cliente-tabela-btn" onClick={handleMarcarSincronizada}>Marcar sincronizada agora</button>
+        )}
+        <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleExcluir}>Excluir</button>
+      </td>
+    </tr>
   )
 }

@@ -16,6 +16,7 @@ import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../..
 import { formatarDataBR } from '../../lib/utils/formatarData'
 import { DadosCadastraisTab } from '../crm/ClienteDetailPage'
 import CotacaoAutoForm from './CotacaoAutoForm'
+import CotacaoComparativaAutoForm from './CotacaoComparativaAutoForm'
 import ApoliceAutoForm from './ApoliceAutoForm'
 import EspecialistaAuto from '../especialista/EspecialistaAuto'
 import { buscarHistoricoChatAuto } from '../../lib/especialista/especialistaAuto'
@@ -166,6 +167,7 @@ export default function ClienteDetailLifleetPage() {
 
 function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado }) {
   const [mostrarForm, setMostrarForm] = useState(false)
+  const [mostrarComparativo, setMostrarComparativo] = useState(false)
   const [cotacaoEditando, setCotacaoEditando] = useState(null)
 
   async function handleExcluir(cotacaoId) {
@@ -174,12 +176,40 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado }) {
     onAtualizado()
   }
 
+  // Agrupa as cotações por rodada de comparação (grupo_comparacao_id).
+  // Cotações antigas/soltas (sem grupo) continuam aparecendo como cards
+  // individuais, exatamente como já funcionava antes.
+  const semGrupo = cotacoes.filter((c) => !c.grupo_comparacao_id)
+  const grupos = {}
+  for (const c of cotacoes) {
+    if (c.grupo_comparacao_id) {
+      grupos[c.grupo_comparacao_id] = grupos[c.grupo_comparacao_id] ?? []
+      grupos[c.grupo_comparacao_id].push(c)
+    }
+  }
+
   return (
     <div>
-      {!mostrarForm && !cotacaoEditando && (
-        <button className="ls-btn ls-btn-accent" onClick={() => setMostrarForm(true)}>
-          + Registrar Cotação
-        </button>
+      {!mostrarForm && !mostrarComparativo && !cotacaoEditando && (
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="ls-btn ls-btn-accent" onClick={() => setMostrarComparativo(true)}>
+            📊 Cotador Comparativo
+          </button>
+          <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarForm(true)}>
+            + Registrar Cotação Avulsa
+          </button>
+        </div>
+      )}
+
+      {mostrarComparativo && (
+        <CotacaoComparativaAutoForm
+          clienteProspectId={clienteId}
+          onSalvo={() => {
+            setMostrarComparativo(false)
+            onAtualizado()
+          }}
+          onCancelar={() => setMostrarComparativo(false)}
+        />
       )}
 
       {(mostrarForm || cotacaoEditando) && (
@@ -202,7 +232,11 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado }) {
         <p className="cliente-vazio">Nenhuma cotação registrada ainda.</p>
       ) : (
         <div className="cotacoes-historico" style={{ marginTop: '1rem' }}>
-          {cotacoes.map((cot) => (
+          {Object.entries(grupos).map(([grupoId, itensGrupo]) => (
+            <GrupoComparativo key={grupoId} itens={itensGrupo} onEditar={setCotacaoEditando} onExcluir={handleExcluir} />
+          ))}
+
+          {semGrupo.map((cot) => (
             <div key={cot.id} className="ls-card cotacao-item">
               <div className="cotacao-item-header">
                 <strong>{cot.operadora_nome_livre}</strong>
@@ -217,6 +251,75 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function GrupoComparativo({ itens, onEditar, onExcluir }) {
+  const menorValor = Math.min(...itens.map((i) => Number(i.valor_total ?? Infinity)))
+  const contexto = itens[0]?.contexto_veiculo
+
+  function handleImprimir() {
+    const janela = window.open('', '_blank')
+    const linhas = itens
+      .map(
+        (i) => `
+        <tr style="${Number(i.valor_total) === menorValor ? 'background:#eafaf0; font-weight:600;' : ''}">
+          <td style="padding:8px 12px; border-bottom:1px solid #eee;">${i.operadora_nome_livre}</td>
+          <td style="padding:8px 12px; border-bottom:1px solid #eee;">R$ ${Number(i.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+          <td style="padding:8px 12px; border-bottom:1px solid #eee;">${i.observacoes ?? '—'}</td>
+        </tr>`
+      )
+      .join('')
+
+    janela.document.write(`
+      <html>
+        <head><title>Comparativo de Seguros</title>
+          <style>body{font-family:Arial,sans-serif;padding:24px;max-width:700px;margin:0 auto;} h1{font-size:18px;color:#0e2a3d;} table{width:100%;border-collapse:collapse;margin-top:12px;}</style>
+        </head>
+        <body>
+          <h1>Comparativo de Seguro Auto</h1>
+          ${contexto ? `<p><strong>Veículo/perfil:</strong> ${contexto}</p>` : ''}
+          <table>
+            <thead><tr><th style="text-align:left; padding:8px 12px;">Seguradora</th><th style="text-align:left; padding:8px 12px;">Valor</th><th style="text-align:left; padding:8px 12px;">Detalhes</th></tr></thead>
+            <tbody>${linhas}</tbody>
+          </table>
+          <p style="color:#666; font-size:12px; margin-top:16px;">Gerado em ${new Date().toLocaleString('pt-BR')}</p>
+        </body>
+      </html>
+    `)
+    janela.document.close()
+    janela.focus()
+    janela.print()
+  }
+
+  return (
+    <div className="ls-card" style={{ padding: 0, marginBottom: '1rem' }}>
+      <div style={{ padding: '0.75rem 0.9rem', borderBottom: '1px solid var(--ls-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <strong>📊 Comparativo</strong>
+          {contexto && <span className="config-instrucao" style={{ marginLeft: '0.5rem' }}>{contexto}</span>}
+        </div>
+        <button className="cliente-tabela-btn" onClick={handleImprimir}>🖨️ Imprimir/Compartilhar</button>
+      </div>
+      <table className="cliente-tabela">
+        <thead>
+          <tr><th>Seguradora</th><th>Valor</th><th>Detalhes</th><th>Ações</th></tr>
+        </thead>
+        <tbody>
+          {itens.map((i) => (
+            <tr key={i.id} style={Number(i.valor_total) === menorValor ? { background: 'var(--ls-accent-soft)', fontWeight: 600 } : {}}>
+              <td>{i.operadora_nome_livre}{Number(i.valor_total) === menorValor && ' 🏆'}</td>
+              <td>R$ {Number(i.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+              <td>{i.observacoes ?? '—'}</td>
+              <td className="cliente-tabela-acoes">
+                <button className="cliente-tabela-btn" onClick={() => onEditar(i)}>Editar</button>
+                <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => onExcluir(i.id)}>Excluir</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
