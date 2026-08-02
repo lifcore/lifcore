@@ -11,6 +11,7 @@ import {
 } from '../../lib/crm/comissoesService'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
 import { operacional } from '../../lib/supabaseSchemas'
+import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
 
 const MODULOS = [
   { id: 'saude', label: 'Lifcare (Saúde)' },
@@ -390,11 +391,6 @@ function LinhaComissao({ comissao, onAtualizado }) {
     await cancelarComissao(comissao.id, motivo)
     onAtualizado()
   }
-  async function handleExcluir() {
-    if (!window.confirm('Excluir definitivamente este lançamento?')) return
-    await excluirComissao(comissao.id)
-    onAtualizado()
-  }
   async function handleSalvarAjuste() {
     if (!valorAjuste || !motivoAjuste.trim()) return
     await lancarAjuste(comissao.id, Number(valorAjuste), motivoAjuste)
@@ -427,7 +423,14 @@ function LinhaComissao({ comissao, onAtualizado }) {
           {comissao.status_recebimento === 'pendente' && (
             <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleCancelar}>Cancelar</button>
           )}
-          <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleExcluir}>Excluir</button>
+          <BotaoOperacaoCritica
+            label="Excluir"
+            tabelaAfetada="operacional.comissoes"
+            registroId={comissao.id}
+            dadosAntes={comissao}
+            executar={() => excluirComissao(comissao.id)}
+            onSucesso={onAtualizado}
+          />
         </td>
       </tr>
       {mostrarAjuste && (

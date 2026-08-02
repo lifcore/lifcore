@@ -9,6 +9,7 @@ import {
   upsertGestorModulo,
   excluirGestorModulo,
 } from '../../lib/crm/seguradorasService'
+import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
 
 const MODULOS_GESTOR = [
   { id: 'saude', label: 'Lifcare (Saúde)' },
@@ -221,13 +222,6 @@ function LinhaGestor({ modulo, operadoraId, gestor, onAtualizado }) {
     }
   }
 
-  async function handleRemover() {
-    if (!gestor) return
-    if (!window.confirm(`Remover o gestor de ${modulo.label}?`)) return
-    await excluirGestorModulo(gestor.id)
-    onAtualizado()
-  }
-
   if (editando) {
     return (
       <tr>
@@ -268,7 +262,15 @@ function LinhaGestor({ modulo, operadoraId, gestor, onAtualizado }) {
           {gestor ? 'Editar' : 'Definir gestor'}
         </button>
         {gestor && (
-          <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleRemover}>Remover</button>
+          <BotaoOperacaoCritica
+            label="Remover"
+            tabelaAfetada="operacional.seguradora_gestores"
+            registroId={gestor.id}
+            dadosAntes={gestor}
+            executar={() => excluirGestorModulo(gestor.id)}
+            onSucesso={onAtualizado}
+            className="cliente-tabela-btn cliente-tabela-btn-perigo"
+          />
         )}
       </td>
     </tr>
