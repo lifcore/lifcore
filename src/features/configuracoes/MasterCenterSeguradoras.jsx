@@ -5,6 +5,7 @@ import {
   atualizarSeguradora,
   inativarSeguradora,
   reativarSeguradora,
+  excluirSeguradora,
   upsertGestorModulo,
   excluirGestorModulo,
 } from '../../lib/crm/seguradorasService'
@@ -153,6 +154,16 @@ function SeguradoraItem({ seguradora, onAtualizado }) {
     onAtualizado()
   }
 
+  async function handleExcluir() {
+    if (!window.confirm(`Excluir DEFINITIVAMENTE ${seguradora.nome_fantasia}? Isso não pode ser desfeito.`)) return
+    try {
+      await excluirSeguradora(seguradora.id)
+      onAtualizado()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
   return (
     <div className="ls-card" style={{ marginTop: '0.75rem', padding: '0.85rem 1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -176,6 +187,7 @@ function SeguradoraItem({ seguradora, onAtualizado }) {
           ) : (
             <button className="cliente-tabela-btn" onClick={handleReativar}>Reativar</button>
           )}
+          <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleExcluir}>Excluir</button>
         </div>
       </div>
 
