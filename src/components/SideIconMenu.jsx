@@ -5,6 +5,7 @@ const ITENS = [
   { path: '/', icone: '🏠', titulo: 'Início (Pipeline)' },
   { path: '/perfil', icone: '👤', titulo: 'Meu Perfil' },
   { path: '/mensagens', icone: '💬', titulo: 'Mensagens Padrão' },
+  { path: '/financeiro', icone: '💰', titulo: 'Financeiro', somenteMasterAdmin: true },
   { path: '/configuracoes', icone: '⚙️', titulo: 'Configurações', somenteMasterAdmin: true },
 ]
 

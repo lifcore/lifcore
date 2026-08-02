@@ -7,6 +7,7 @@ import EspecialistaSwitcher from './components/EspecialistaSwitcher'
 import PipelinePage from './features/crm/PipelinePage'
 import ClienteDetailPage from './features/crm/ClienteDetailPage'
 import ConfiguracoesPage from './features/configuracoes/ConfiguracoesPage'
+import FinanceiroPage from './features/financeiro/FinanceiroPage'
 import PerfilPage from './features/perfil/PerfilPage'
 import MensagensPage from './features/mensagens/MensagensPage'
 import ApolicesPage from './features/administracao/ApolicesPage'
@@ -48,6 +49,7 @@ function AppShell() {
           <Route path="/lishield" element={<PipelineLishieldPage />} />
           <Route path="/lishield/clientes/:id" element={<ClienteDetailLishieldPage />} />
           <Route path="/configuracoes" element={<ConfiguracoesPage />} />
+          <Route path="/financeiro" element={<FinanceiroPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
           <Route path="/mensagens" element={<MensagensPage />} />
           <Route path="/apolices" element={<ApolicesPage />} />

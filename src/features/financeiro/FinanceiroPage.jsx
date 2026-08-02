@@ -6,9 +6,10 @@ import {
   marcarRepasseComoPago,
   cancelarComissao,
   excluirComissao,
-  resumoComissoes,
+  lancarAjuste,
+  indicadoresOperacionais,
 } from '../../lib/crm/comissoesService'
-import { listarSeguradoras } from '../../lib/crm/seguradorasService'
+import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
 import { operacional } from '../../lib/supabaseSchemas'
 
 const MODULOS = [
@@ -36,33 +37,43 @@ function formatarMoeda(valor) {
 }
 
 export default function FinanceiroPage() {
-  const [comissoes, setComissoes] = useState([])
-  const [resumo, setResumo] = useState(null)
+  const [resultado, setResultado] = useState({ linhas: [], total: 0 })
+  const [indicadores, setIndicadores] = useState(null)
   const [seguradoras, setSeguradoras] = useState([])
+  const [corretores, setCorretores] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
 
   // Filtros
+  const [busca, setBusca] = useState('')
   const [filtroSeguradora, setFiltroSeguradora] = useState('')
   const [filtroModulo, setFiltroModulo] = useState('')
+  const [filtroCorretor, setFiltroCorretor] = useState('')
   const [filtroStatusRecebimento, setFiltroStatusRecebimento] = useState('')
   const [filtroStatusRepasse, setFiltroStatusRepasse] = useState('')
   const [filtroPeriodoInicio, setFiltroPeriodoInicio] = useState('')
   const [filtroPeriodoFim, setFiltroPeriodoFim] = useState('')
+  const [ordenarPor, setOrdenarPor] = useState('created_at')
+  const [ordemAscendente, setOrdemAscendente] = useState(false)
+  const [pagina, setPagina] = useState(1)
+  const TAMANHO_PAGINA = 20
 
   useEffect(() => {
-    listarSeguradoras().then(setSeguradoras)
+    listarCatalogoSeguradoras().then(setSeguradoras)
+    listarCorretores().then(setCorretores)
   }, [])
 
   useEffect(() => {
     carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroSeguradora, filtroModulo, filtroStatusRecebimento, filtroStatusRepasse, filtroPeriodoInicio, filtroPeriodoFim])
+  }, [busca, filtroSeguradora, filtroModulo, filtroCorretor, filtroStatusRecebimento, filtroStatusRepasse, filtroPeriodoInicio, filtroPeriodoFim, ordenarPor, ordemAscendente, pagina])
 
   function filtrosAtivos() {
-    const f = {}
-    if (filtroSeguradora) f.seguradoraId = filtroSeguradora
+    const f = { ordenarPor, ordemAscendente, pagina, tamanhoPagina: TAMANHO_PAGINA }
+    if (busca) f.busca = busca
+    if (filtroSeguradora) f.operadoraId = filtroSeguradora
     if (filtroModulo) f.modulo = filtroModulo
+    if (filtroCorretor) f.corretorId = filtroCorretor
     if (filtroStatusRecebimento) f.statusRecebimento = filtroStatusRecebimento
     if (filtroStatusRepasse) f.statusRepasse = filtroStatusRepasse
     if (filtroPeriodoInicio) f.periodoInicio = filtroPeriodoInicio
@@ -73,84 +84,115 @@ export default function FinanceiroPage() {
   async function carregar() {
     setCarregando(true)
     const filtros = filtrosAtivos()
-    const [lista, res] = await Promise.all([listarComissoes(filtros), resumoComissoes(filtros)])
-    setComissoes(lista)
-    setResumo(res)
+    const [res, ind] = await Promise.all([listarComissoes(filtros), indicadoresOperacionais(filtros)])
+    setResultado(res)
+    setIndicadores(ind)
     setCarregando(false)
   }
 
   function limparFiltros() {
+    setBusca('')
     setFiltroSeguradora('')
     setFiltroModulo('')
+    setFiltroCorretor('')
     setFiltroStatusRecebimento('')
     setFiltroStatusRepasse('')
     setFiltroPeriodoInicio('')
     setFiltroPeriodoFim('')
+    setPagina(1)
   }
+
+  const totalPaginas = Math.max(1, Math.ceil(resultado.total / TAMANHO_PAGINA))
 
   return (
     <div className="config-page">
       <h2>Financeiro — Comissões</h2>
       <p className="config-instrucao">
         Livro-razão de comissões: registro manual do que foi apurado por apólice.
-        Este módulo não calcula comissão automaticamente — cada regra de cálculo
-        varia por seguradora, produto e forma de pagamento, e ainda está sendo
-        mapeada. Lance aqui o valor já apurado.
+        Sem cálculo automático — cada valor é lançado por quem apurou.
       </p>
 
-      {resumo && (
-        <div className="cotacao-form-linha" style={{ marginBottom: '1rem' }}>
-          <div className="ls-card"><strong>Comissão Prevista</strong><div>{formatarMoeda(resumo.comissaoPrevista)}</div></div>
-          <div className="ls-card"><strong>Comissão Recebida</strong><div>{formatarMoeda(resumo.comissaoRecebida)}</div></div>
-          <div className="ls-card"><strong>Comissão Pendente</strong><div>{formatarMoeda(resumo.comissaoPendente)}</div></div>
-          <div className="ls-card"><strong>Comissão Repassada</strong><div>{formatarMoeda(resumo.comissaoRepassada)}</div></div>
+      {indicadores && (
+        <div className="cotacao-form-linha" style={{ marginBottom: '1rem', flexWrap: 'wrap' }}>
+          <div className="ls-card"><strong>Total Previsto</strong><div>{formatarMoeda(indicadores.totalPrevisto)}</div></div>
+          <div className="ls-card"><strong>Total Recebido</strong><div>{formatarMoeda(indicadores.totalRecebido)}</div></div>
+          <div className="ls-card"><strong>Total Pendente</strong><div>{formatarMoeda(indicadores.totalPendente)}</div></div>
+          <div className="ls-card"><strong>Total Repassado</strong><div>{formatarMoeda(indicadores.totalRepassado)}</div></div>
+          <div className="ls-card"><strong>Lançamentos</strong><div>{indicadores.quantidadeLancamentos}</div></div>
         </div>
       )}
 
       <div className="ls-card" style={{ marginBottom: '1rem' }}>
-        <div className="cotacao-form-linha">
+        <label>Pesquisa rápida (observações, forma de pagamento, detalhes do cálculo)</label>
+        <input value={busca} onChange={(e) => { setBusca(e.target.value); setPagina(1) }} placeholder="Buscar..." />
+
+        <div className="cotacao-form-linha" style={{ marginTop: '0.5rem' }}>
           <div>
             <label>Seguradora</label>
-            <select value={filtroSeguradora} onChange={(e) => setFiltroSeguradora(e.target.value)}>
+            <select value={filtroSeguradora} onChange={(e) => { setFiltroSeguradora(e.target.value); setPagina(1) }}>
               <option value="">Todas</option>
-              {seguradoras.map((s) => <option key={s.id} value={s.id}>{s.nome_fantasia}</option>)}
+              {seguradoras.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
             </select>
           </div>
           <div>
             <label>Módulo</label>
-            <select value={filtroModulo} onChange={(e) => setFiltroModulo(e.target.value)}>
+            <select value={filtroModulo} onChange={(e) => { setFiltroModulo(e.target.value); setPagina(1) }}>
               <option value="">Todos</option>
               {MODULOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </div>
+          <div>
+            <label>Corretor</label>
+            <select value={filtroCorretor} onChange={(e) => { setFiltroCorretor(e.target.value); setPagina(1) }}>
+              <option value="">Todos</option>
+              {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome_completo}</option>)}
+            </select>
+          </div>
         </div>
+
         <div className="cotacao-form-linha">
           <div>
             <label>Status recebimento</label>
-            <select value={filtroStatusRecebimento} onChange={(e) => setFiltroStatusRecebimento(e.target.value)}>
+            <select value={filtroStatusRecebimento} onChange={(e) => { setFiltroStatusRecebimento(e.target.value); setPagina(1) }}>
               <option value="">Todos</option>
               {STATUS_RECEBIMENTO.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
           <div>
             <label>Status repasse</label>
-            <select value={filtroStatusRepasse} onChange={(e) => setFiltroStatusRepasse(e.target.value)}>
+            <select value={filtroStatusRepasse} onChange={(e) => { setFiltroStatusRepasse(e.target.value); setPagina(1) }}>
               <option value="">Todos</option>
               {STATUS_REPASSE.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
+          <div>
+            <label>Ordenar por</label>
+            <select value={ordenarPor} onChange={(e) => setOrdenarPor(e.target.value)}>
+              <option value="created_at">Data de lançamento</option>
+              <option value="valor_comissao">Valor da comissão</option>
+              <option value="data_prevista_recebimento">Previsão de recebimento</option>
+              <option value="data_recebimento">Data de recebimento</option>
+            </select>
+          </div>
         </div>
+
         <div className="cotacao-form-linha">
           <div>
             <label>Período — de</label>
-            <input type="date" value={filtroPeriodoInicio} onChange={(e) => setFiltroPeriodoInicio(e.target.value)} />
+            <input type="date" value={filtroPeriodoInicio} onChange={(e) => { setFiltroPeriodoInicio(e.target.value); setPagina(1) }} />
           </div>
           <div>
             <label>Período — até</label>
-            <input type="date" value={filtroPeriodoFim} onChange={(e) => setFiltroPeriodoFim(e.target.value)} />
+            <input type="date" value={filtroPeriodoFim} onChange={(e) => { setFiltroPeriodoFim(e.target.value); setPagina(1) }} />
           </div>
         </div>
-        <button className="cliente-tabela-btn" onClick={limparFiltros}>Limpar filtros</button>
+
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+          <button className="cliente-tabela-btn" onClick={limparFiltros}>Limpar filtros</button>
+          <button className="cliente-tabela-btn" onClick={() => setOrdemAscendente(!ordemAscendente)}>
+            {ordemAscendente ? '↑ Crescente' : '↓ Decrescente'}
+          </button>
+        </div>
       </div>
 
       <button className="ls-btn ls-btn-accent" onClick={() => setMostrarForm(!mostrarForm)} style={{ marginBottom: '1rem' }}>
@@ -160,6 +202,7 @@ export default function FinanceiroPage() {
       {mostrarForm && (
         <FormNovaComissao
           seguradoras={seguradoras}
+          corretores={corretores}
           onSalvo={() => { setMostrarForm(false); carregar() }}
           onCancelar={() => setMostrarForm(false)}
         />
@@ -167,29 +210,40 @@ export default function FinanceiroPage() {
 
       {carregando ? (
         <p className="cliente-carregando">Carregando...</p>
-      ) : comissoes.length === 0 ? (
+      ) : resultado.linhas.length === 0 ? (
         <p className="cliente-vazio">Nenhuma comissão encontrada para os filtros selecionados.</p>
       ) : (
-        <table className="cliente-tabela">
-          <thead>
-            <tr>
-              <th>Seguradora</th><th>Módulo</th><th>Comissão</th><th>Status</th><th>Repasse</th><th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {comissoes.map((c) => (
-              <LinhaComissao key={c.id} comissao={c} onAtualizado={carregar} />
-            ))}
-          </tbody>
-        </table>
+        <>
+          <table className="cliente-tabela">
+            <thead>
+              <tr>
+                <th>Seguradora</th><th>Módulo</th><th>Comissão</th><th>Status</th><th>Repasse</th><th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {resultado.linhas.map((c) => (
+                <LinhaComissao key={c.id} comissao={c} onAtualizado={carregar} />
+              ))}
+            </tbody>
+          </table>
+
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.75rem' }}>
+            <button className="cliente-tabela-btn" disabled={pagina <= 1} onClick={() => setPagina(pagina - 1)}>← Anterior</button>
+            <span>Página {pagina} de {totalPaginas} ({resultado.total} lançamentos)</span>
+            <button className="cliente-tabela-btn" disabled={pagina >= totalPaginas} onClick={() => setPagina(pagina + 1)}>Próxima →</button>
+          </div>
+        </>
       )}
     </div>
   )
 }
 
-function FormNovaComissao({ seguradoras, onSalvo, onCancelar }) {
-  const [seguradoraId, setSeguradoraId] = useState('')
+function FormNovaComissao({ seguradoras, corretores, onSalvo, onCancelar }) {
+  const [operadoraId, setOperadoraId] = useState('')
   const [modulo, setModulo] = useState('auto')
+  const [corretorId, setCorretorId] = useState('')
+  const [apoliceId, setApoliceId] = useState('')
+  const [apolicesDoCorretor, setApolicesDoCorretor] = useState([])
   const [valorPremio, setValorPremio] = useState('')
   const [valorComissao, setValorComissao] = useState('')
   const [formaPagamento, setFormaPagamento] = useState('')
@@ -198,6 +252,15 @@ function FormNovaComissao({ seguradoras, onSalvo, onCancelar }) {
   const [detalhesCalculo, setDetalhesCalculo] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
+
+  useEffect(() => {
+    if (corretorId) {
+      listarApolices({ corretorId }).then(setApolicesDoCorretor)
+    } else {
+      setApolicesDoCorretor([])
+    }
+    setApoliceId('')
+  }, [corretorId])
 
   async function handleSalvar() {
     if (!valorComissao) {
@@ -210,7 +273,9 @@ function FormNovaComissao({ seguradoras, onSalvo, onCancelar }) {
       const { data: org } = await operacional.from('organizacoes').select('id').limit(1).single()
       await criarComissao({
         organizacaoId: org.id,
-        seguradoraId: seguradoraId || null,
+        operadoraId: operadoraId || null,
+        apoliceId: apoliceId || null,
+        corretorId: corretorId || null,
         modulo,
         valorPremio: valorPremio || null,
         valorComissao,
@@ -232,15 +297,36 @@ function FormNovaComissao({ seguradoras, onSalvo, onCancelar }) {
       <div className="cotacao-form-linha">
         <div>
           <label>Seguradora</label>
-          <select value={seguradoraId} onChange={(e) => setSeguradoraId(e.target.value)}>
+          <select value={operadoraId} onChange={(e) => setOperadoraId(e.target.value)}>
             <option value="">— Selecione —</option>
-            {seguradoras.map((s) => <option key={s.id} value={s.id}>{s.nome_fantasia}</option>)}
+            {seguradoras.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
           </select>
         </div>
         <div>
           <label>Módulo</label>
           <select value={modulo} onChange={(e) => setModulo(e.target.value)}>
             {MODULOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="cotacao-form-linha">
+        <div>
+          <label>Corretor</label>
+          <select value={corretorId} onChange={(e) => setCorretorId(e.target.value)}>
+            <option value="">— Selecione —</option>
+            {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome_completo}</option>)}
+          </select>
+        </div>
+        <div>
+          <label>Apólice (do corretor selecionado)</label>
+          <select value={apoliceId} onChange={(e) => setApoliceId(e.target.value)} disabled={!corretorId}>
+            <option value="">— Selecione —</option>
+            {apolicesDoCorretor.map((ap) => (
+              <option key={ap.id} value={ap.id}>
+                {ap.produto} — {formatarMoeda(ap.premio)} ({new Date(ap.criado_em).toLocaleDateString('pt-BR')})
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -270,13 +356,8 @@ function FormNovaComissao({ seguradoras, onSalvo, onCancelar }) {
       <label>Repasse ao corretor (deixe em branco se não houver)</label>
       <input type="number" step="0.01" value={valorRepasseCorretor} onChange={(e) => setValorRepasseCorretor(e.target.value)} />
 
-      <label>Como foi calculado (registre aqui — importante enquanto não há regra automática)</label>
+      <label>Como foi calculado</label>
       <textarea value={detalhesCalculo} onChange={(e) => setDetalhesCalculo(e.target.value)} rows={2} />
-
-      <p className="config-instrucao" style={{ marginTop: '0.5rem' }}>
-        Vínculo com uma apólice ou corretor específico ainda não está disponível
-        neste formulário — depende de confirmar os services reais desses módulos.
-      </p>
 
       {erro && <p className="ls-modal-erro">{erro}</p>}
 
@@ -291,6 +372,10 @@ function FormNovaComissao({ seguradoras, onSalvo, onCancelar }) {
 }
 
 function LinhaComissao({ comissao, onAtualizado }) {
+  const [mostrarAjuste, setMostrarAjuste] = useState(false)
+  const [valorAjuste, setValorAjuste] = useState('')
+  const [motivoAjuste, setMotivoAjuste] = useState('')
+
   async function handleRecebida() {
     await marcarComoRecebida(comissao.id)
     onAtualizado()
@@ -300,8 +385,9 @@ function LinhaComissao({ comissao, onAtualizado }) {
     onAtualizado()
   }
   async function handleCancelar() {
-    if (!window.confirm('Cancelar este registro de comissão?')) return
-    await cancelarComissao(comissao.id)
+    const motivo = window.prompt('Motivo do cancelamento (obrigatório):')
+    if (!motivo?.trim()) return
+    await cancelarComissao(comissao.id, motivo)
     onAtualizado()
   }
   async function handleExcluir() {
@@ -309,30 +395,60 @@ function LinhaComissao({ comissao, onAtualizado }) {
     await excluirComissao(comissao.id)
     onAtualizado()
   }
+  async function handleSalvarAjuste() {
+    if (!valorAjuste || !motivoAjuste.trim()) return
+    await lancarAjuste(comissao.id, Number(valorAjuste), motivoAjuste)
+    setMostrarAjuste(false)
+    setValorAjuste('')
+    setMotivoAjuste('')
+    onAtualizado()
+  }
 
   return (
-    <tr>
-      <td>{comissao.seguradoras?.nome_fantasia || '—'}</td>
-      <td>{MODULOS.find((m) => m.id === comissao.modulo)?.label || comissao.modulo}</td>
-      <td>{formatarMoeda(comissao.valor_comissao)}</td>
-      <td><span className="ls-badge">{comissao.status_recebimento}</span></td>
-      <td>
-        {comissao.status_repasse !== 'nao_aplicavel'
-          ? `${formatarMoeda(comissao.valor_repasse_corretor)} (${comissao.status_repasse})`
-          : '—'}
-      </td>
-      <td className="cliente-tabela-acoes">
-        {comissao.status_recebimento === 'pendente' && (
-          <button className="cliente-tabela-btn" onClick={handleRecebida}>Marcar recebida</button>
-        )}
-        {comissao.status_repasse === 'pendente' && (
-          <button className="cliente-tabela-btn" onClick={handleRepasse}>Marcar repasse pago</button>
-        )}
-        {comissao.status_recebimento === 'pendente' && (
-          <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleCancelar}>Cancelar</button>
-        )}
-        <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleExcluir}>Excluir</button>
-      </td>
-    </tr>
+    <>
+      <tr>
+        <td>{comissao.operadora?.nome || '—'}</td>
+        <td>{MODULOS.find((m) => m.id === comissao.modulo)?.label || comissao.modulo}</td>
+        <td>{formatarMoeda(comissao.valor_comissao)}</td>
+        <td><span className="ls-badge">{comissao.status_recebimento}</span></td>
+        <td>
+          {comissao.status_repasse !== 'nao_aplicavel'
+            ? `${formatarMoeda(comissao.valor_repasse_corretor)} (${comissao.status_repasse})`
+            : '—'}
+        </td>
+        <td className="cliente-tabela-acoes">
+          {comissao.status_recebimento === 'pendente' && (
+            <button className="cliente-tabela-btn" onClick={handleRecebida}>Marcar recebida</button>
+          )}
+          {comissao.status_repasse === 'pendente' && (
+            <button className="cliente-tabela-btn" onClick={handleRepasse}>Repasse pago</button>
+          )}
+          <button className="cliente-tabela-btn" onClick={() => setMostrarAjuste(!mostrarAjuste)}>Ajuste</button>
+          {comissao.status_recebimento === 'pendente' && (
+            <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleCancelar}>Cancelar</button>
+          )}
+          <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleExcluir}>Excluir</button>
+        </td>
+      </tr>
+      {mostrarAjuste && (
+        <tr>
+          <td colSpan={6}>
+            <div className="ls-card" style={{ padding: '0.75rem' }}>
+              <div className="cotacao-form-linha">
+                <div>
+                  <label>Valor do ajuste (+ ou -)</label>
+                  <input type="number" step="0.01" value={valorAjuste} onChange={(e) => setValorAjuste(e.target.value)} />
+                </div>
+                <div>
+                  <label>Motivo (obrigatório)</label>
+                  <input value={motivoAjuste} onChange={(e) => setMotivoAjuste(e.target.value)} />
+                </div>
+              </div>
+              <button className="cliente-tabela-btn" onClick={handleSalvarAjuste}>Registrar ajuste</button>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   )
 }

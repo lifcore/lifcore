@@ -1,59 +1,80 @@
 import { operacional } from '../supabaseSchemas'
 
 /**
- * Finance Center v1 — Livro-razão de Comissões
+ * Finance Center v3 — Livro-razão de Comissões
  *
- * Este service NÃO calcula comissão automaticamente. Cada registro é
- * lançado manualmente com o valor já apurado (a apuração em si varia
- * demais hoje, por seguradora/produto/forma de pagamento, pra travar
- * numa fórmula única — decisão consciente de registrar antes de
- * automatizar).
+ * Não calcula comissão automaticamente. Cada registro é lançado
+ * manualmente com o valor já apurado. Ajustes financeiros são eventos
+ * separados (nunca sobrescrevem o valor original), garantindo
+ * rastreabilidade completa de qualquer correção.
  */
 
-/** Lista comissões, com filtros opcionais (seguradora, módulo, status de
- * recebimento, status de repasse, período de lançamento) */
+const CAMPOS_ORDENAVEIS = ['created_at', 'valor_comissao', 'data_prevista_recebimento', 'data_recebimento']
+
+/** Lista comissões com filtros, busca textual, ordenação e paginação */
 export async function listarComissoes({
+  operadoraId,
   modulo,
+  corretorId,
+  apoliceId,
   statusRecebimento,
   statusRepasse,
-  seguradoraId,
-  corretorId,
   periodoInicio,
   periodoFim,
+  busca,
+  ordenarPor = 'created_at',
+  ordemAscendente = false,
+  pagina = 1,
+  tamanhoPagina = 20,
 } = {}) {
+  const campoOrdenacao = CAMPOS_ORDENAVEIS.includes(ordenarPor) ? ordenarPor : 'created_at'
+
   let query = operacional
     .from('comissoes')
-    .select('*, seguradoras(nome_fantasia), apolices(numero_apolice), perfis(nome)')
-    .order('created_at', { ascending: false })
+    .select(
+      '*, operadora:operadoras!comissoes_operadora_id_fkey(id, nome), apolice:apolices(id, produto, premio, criado_em)',
+      { count: 'exact' }
+    )
+    .order(campoOrdenacao, { ascending: ordemAscendente })
 
+  if (operadoraId) query = query.eq('operadora_id', operadoraId)
   if (modulo) query = query.eq('modulo', modulo)
+  if (corretorId) query = query.eq('corretor_id', corretorId)
+  if (apoliceId) query = query.eq('apolice_id', apoliceId)
   if (statusRecebimento) query = query.eq('status_recebimento', statusRecebimento)
   if (statusRepasse) query = query.eq('status_repasse', statusRepasse)
-  if (seguradoraId) query = query.eq('seguradora_id', seguradoraId)
-  if (corretorId) query = query.eq('corretor_id', corretorId)
   if (periodoInicio) query = query.gte('created_at', periodoInicio)
   if (periodoFim) query = query.lte('created_at', `${periodoFim}T23:59:59`)
+  if (busca) query = query.or(`observacoes.ilike.%${busca}%,detalhes_calculo.ilike.%${busca}%,forma_pagamento.ilike.%${busca}%`)
 
-  const { data, error } = await query
+  const inicio = (pagina - 1) * tamanhoPagina
+  const fim = inicio + tamanhoPagina - 1
+  query = query.range(inicio, fim)
+
+  const { data, error, count } = await query
   if (error) throw new Error(`Erro ao listar comissões: ${error.message}`)
-  return data ?? []
+  return { linhas: data ?? [], total: count ?? 0, pagina, tamanhoPagina }
 }
 
-/** Busca uma comissão específica */
+/** Busca uma comissão específica, com seus ajustes */
 export async function obterComissao(id) {
   const { data, error } = await operacional
     .from('comissoes')
-    .select('*, seguradoras(nome_fantasia), apolices(numero_apolice), perfis(nome)')
+    .select('*, operadora:operadoras!comissoes_operadora_id_fkey(id, nome), apolice:apolices(id, produto, premio, criado_em)')
     .eq('id', id)
     .single()
   if (error) throw new Error(`Erro ao buscar comissão: ${error.message}`)
-  return data
+
+  const ajustes = await listarAjustes(id)
+  const valorAjustado = Number(data.valor_comissao || 0) + ajustes.reduce((s, a) => s + Number(a.valor_ajuste || 0), 0)
+
+  return { ...data, ajustes, valorComissaoAjustado: valorAjustado }
 }
 
 /** Lança uma nova comissão no livro-razão (registro manual) */
 export async function criarComissao({
   organizacaoId,
-  seguradoraId,
+  operadoraId,
   apoliceId,
   corretorId,
   modulo,
@@ -70,7 +91,7 @@ export async function criarComissao({
     .from('comissoes')
     .insert({
       organizacao_id: organizacaoId,
-      seguradora_id: seguradoraId || null,
+      operadora_id: operadoraId || null,
       apolice_id: apoliceId || null,
       corretor_id: corretorId || null,
       modulo,
@@ -109,9 +130,10 @@ export async function marcarRepasseComoPago(id, dataRepasse = new Date().toISOSt
   await atualizarComissao(id, { status_repasse: 'pago', data_repasse: dataRepasse })
 }
 
-/** Cancela o registro de uma comissão (ex: apólice cancelada, comissão estornada) */
-export async function cancelarComissao(id) {
-  await atualizarComissao(id, { status_recebimento: 'cancelado' })
+/** Cancela o registro de uma comissão, com motivo obrigatório (rastreabilidade) */
+export async function cancelarComissao(id, motivo) {
+  if (!motivo?.trim()) throw new Error('Informe o motivo do cancelamento.')
+  await atualizarComissao(id, { status_recebimento: 'cancelado', motivo_cancelamento: motivo })
 }
 
 /** Exclui definitivamente um lançamento (uso em fase de testes) */
@@ -120,33 +142,60 @@ export async function excluirComissao(id) {
   if (error) throw new Error(`Erro ao excluir comissão: ${error.message}`)
 }
 
+/** Lista os ajustes financeiros de uma comissão */
+export async function listarAjustes(comissaoId) {
+  const { data, error } = await operacional
+    .from('comissao_ajustes')
+    .select('*')
+    .eq('comissao_id', comissaoId)
+    .order('created_at', { ascending: true })
+  if (error) throw new Error(`Erro ao listar ajustes: ${error.message}`)
+  return data ?? []
+}
+
+/** Lança um ajuste financeiro sobre uma comissão já existente (nunca
+ * sobrescreve o valor original — evento novo, com motivo, somado no
+ * momento da consulta) */
+export async function lancarAjuste(comissaoId, valorAjuste, motivo) {
+  if (!motivo?.trim()) throw new Error('Informe o motivo do ajuste.')
+  const { data, error } = await operacional
+    .from('comissao_ajustes')
+    .insert({ comissao_id: comissaoId, valor_ajuste: valorAjuste, motivo })
+    .select()
+    .single()
+  if (error) throw new Error(`Erro ao lançar ajuste: ${error.message}`)
+  return data
+}
+
 /**
- * Visão operacional simples do Finance Center v1:
- * - Comissão Prevista: soma de tudo que não foi cancelado (recebido + pendente)
- * - Comissão Recebida: soma do que já foi recebido da seguradora
- * - Comissão Pendente: soma do que ainda não foi recebido
- * - Comissão Repassada: soma do repasse já pago ao corretor
+ * Indicadores operacionais simples: Previsto, Recebido, Pendente,
+ * Repassado, quantidade de lançamentos e últimos registros.
+ * Sem gráficos, sem BI — só os totais pedidos.
  */
-export async function resumoComissoes({ modulo, seguradoraId, periodoInicio, periodoFim } = {}) {
+export async function indicadoresOperacionais({ modulo, operadoraId, periodoInicio, periodoFim } = {}) {
   let query = operacional
     .from('comissoes')
-    .select('valor_comissao, status_recebimento, valor_repasse_corretor, status_repasse')
+    .select('valor_comissao, status_recebimento, valor_repasse_corretor, status_repasse, created_at')
 
   if (modulo) query = query.eq('modulo', modulo)
-  if (seguradoraId) query = query.eq('seguradora_id', seguradoraId)
+  if (operadoraId) query = query.eq('operadora_id', operadoraId)
   if (periodoInicio) query = query.gte('created_at', periodoInicio)
   if (periodoFim) query = query.lte('created_at', `${periodoFim}T23:59:59`)
 
   const { data, error } = await query
-  if (error) throw new Error(`Erro ao calcular resumo: ${error.message}`)
+  if (error) throw new Error(`Erro ao calcular indicadores: ${error.message}`)
 
   const linhas = data ?? []
   const naoCanceladas = linhas.filter((l) => l.status_recebimento !== 'cancelado')
 
+  const { linhas: ultimos } = await listarComissoes({ modulo, operadoraId, periodoInicio, periodoFim, tamanhoPagina: 5 })
+
   return {
-    comissaoPrevista: naoCanceladas.reduce((s, l) => s + Number(l.valor_comissao || 0), 0),
-    comissaoRecebida: linhas.filter((l) => l.status_recebimento === 'recebido').reduce((s, l) => s + Number(l.valor_comissao || 0), 0),
-    comissaoPendente: linhas.filter((l) => l.status_recebimento === 'pendente').reduce((s, l) => s + Number(l.valor_comissao || 0), 0),
-    comissaoRepassada: linhas.filter((l) => l.status_repasse === 'pago').reduce((s, l) => s + Number(l.valor_repasse_corretor || 0), 0),
+    totalPrevisto: naoCanceladas.reduce((s, l) => s + Number(l.valor_comissao || 0), 0),
+    totalRecebido: linhas.filter((l) => l.status_recebimento === 'recebido').reduce((s, l) => s + Number(l.valor_comissao || 0), 0),
+    totalPendente: linhas.filter((l) => l.status_recebimento === 'pendente').reduce((s, l) => s + Number(l.valor_comissao || 0), 0),
+    totalRepassado: linhas.filter((l) => l.status_repasse === 'pago').reduce((s, l) => s + Number(l.valor_repasse_corretor || 0), 0),
+    quantidadeLancamentos: linhas.length,
+    ultimosRegistros: ultimos,
   }
 }
