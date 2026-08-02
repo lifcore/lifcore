@@ -10,6 +10,7 @@ import {
 } from '../../lib/crm/conexoesService'
 import { operacional } from '../../lib/supabaseSchemas'
 import { useAuth } from '../auth/AuthContext'
+import SeguradorasCard from './MasterCenterSeguradoras'
 
 export default function ConfiguracoesPage() {
   const { perfil } = useAuth()
@@ -36,6 +37,7 @@ export default function ConfiguracoesPage() {
   const abas = [
     { id: 'corretores', label: 'Corretores' },
     ...(ehMaster ? [{ id: 'transferir', label: 'Transferir Carteira' }] : []),
+    ...(ehMaster ? [{ id: 'seguradoras', label: 'Seguradoras' }] : []),
     ...(ehMaster ? [{ id: 'conexoes', label: 'Conexões' }] : []),
   ]
 
@@ -123,6 +125,8 @@ export default function ConfiguracoesPage() {
       )}
 
       {abaAtiva === 'transferir' && ehMaster && <TransferirCarteiraCard />}
+
+      {abaAtiva === 'seguradoras' && ehMaster && <SeguradorasCard />}
 
       {abaAtiva === 'conexoes' && ehMaster && <ConexoesOperadorasCard />}
     </div>

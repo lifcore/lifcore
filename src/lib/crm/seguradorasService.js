@@ -1,149 +1,88 @@
-/**
- * seguradorasService.js
- * Service layer do Master Center unificado de Seguradoras/Operadoras.
- *
- * Ajuste o import do client Supabase abaixo para o caminho real do seu
- * projeto (ex: '../supabaseClient' ou onde quer que ele esteja).
- */
-import { supabase } from './supabaseClient';
+import { operacional } from '../supabaseSchemas'
 
-const MODULOS_VALIDOS = ['lifcare', 'lifleet', 'lifsure', 'lishield', 'lifplan'];
-
-// ---------------------------------------------------------------------
-// Seguradoras (cadastro mestre)
-// ---------------------------------------------------------------------
-
-export async function listarSeguradoras({ busca = '', apenasAtivas = false } = {}) {
-  let query = supabase
+/** Lista todas as seguradoras cadastradas, com seus gestores por módulo */
+export async function listarSeguradoras() {
+  const { data, error } = await operacional
     .from('seguradoras')
-    .select(`
-      *,
-      seguradora_conexoes ( id, modulo, tipo_conexao, status, codigo_sucursal, ambiente )
-    `)
-    .order('nome_fantasia', { ascending: true });
-
-  if (apenasAtivas) query = query.eq('ativo', true);
-  if (busca) query = query.ilike('nome_fantasia', `%${busca}%`);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
+    .select('*, seguradora_gestores(*)')
+    .order('nome_fantasia', { ascending: true })
+  if (error) throw new Error(`Erro ao listar seguradoras: ${error.message}`)
+  return data ?? []
 }
 
+/** Busca uma seguradora específica, com seus gestores por módulo */
 export async function obterSeguradora(id) {
-  const { data, error } = await supabase
+  const { data, error } = await operacional
     .from('seguradoras')
-    .select(`
-      *,
-      seguradora_conexoes ( id, modulo, tipo_conexao, status, codigo_sucursal, ambiente, observacoes )
-    `)
+    .select('*, seguradora_gestores(*)')
     .eq('id', id)
-    .single();
-
-  if (error) throw error;
-  return data;
+    .single()
+  if (error) throw new Error(`Erro ao buscar seguradora: ${error.message}`)
+  return data
 }
 
-export async function criarSeguradora({ nomeFantasia, razaoSocial, cnpj, site, contatoComercial }) {
-  if (!nomeFantasia || !nomeFantasia.trim()) {
-    throw new Error('Nome fantasia é obrigatório.');
-  }
-
-  const { data, error } = await supabase
+/** Cria uma nova seguradora */
+export async function criarSeguradora({ organizacaoId, nomeFantasia, razaoSocial, cnpj, site, observacoes }) {
+  const { data, error } = await operacional
     .from('seguradoras')
     .insert({
-      nome_fantasia: nomeFantasia.trim(),
+      organizacao_id: organizacaoId,
+      nome_fantasia: nomeFantasia,
       razao_social: razaoSocial || null,
       cnpj: cnpj || null,
       site: site || null,
-      contato_comercial: contatoComercial || null,
+      observacoes: observacoes || null,
     })
     .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+    .single()
+  if (error) throw new Error(`Erro ao criar seguradora: ${error.message}`)
+  return data
 }
 
-export async function atualizarSeguradora(id, campos) {
-  const { data, error } = await supabase
+/** Atualiza dados cadastrais de uma seguradora */
+export async function atualizarSeguradora(id, dados) {
+  const { error } = await operacional
     .from('seguradoras')
-    .update(campos)
+    .update({ ...dados, atualizado_em: new Date().toISOString() })
     .eq('id', id)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  if (error) throw new Error(`Erro ao atualizar seguradora: ${error.message}`)
 }
 
+/** Inativa uma seguradora (não exclui, preserva histórico de conexões vinculadas) */
 export async function inativarSeguradora(id) {
-  return atualizarSeguradora(id, { ativo: false });
+  await atualizarSeguradora(id, { ativo: false })
 }
 
-// ---------------------------------------------------------------------
-// Conexões por módulo
-// ---------------------------------------------------------------------
+/** Reativa uma seguradora */
+export async function reativarSeguradora(id) {
+  await atualizarSeguradora(id, { ativo: true })
+}
 
-export async function upsertConexao({
-  seguradoraId,
-  modulo,
-  tipoConexao = 'manual',
-  status = 'pendente',
-  codigoSucursal = null,
-  ambiente = null,
-  observacoes = null,
-}) {
-  if (!MODULOS_VALIDOS.includes(modulo)) {
-    throw new Error(`Módulo inválido: ${modulo}. Esperado um de: ${MODULOS_VALIDOS.join(', ')}`);
-  }
-
-  const { data, error } = await supabase
-    .from('seguradora_conexoes')
+/** Cria ou atualiza o gestor de um módulo específico (1 por módulo, por seguradora) */
+export async function upsertGestorModulo({ seguradoraId, modulo, nome, telefone, whatsapp, email, observacoes }) {
+  const { data, error } = await operacional
+    .from('seguradora_gestores')
     .upsert(
       {
         seguradora_id: seguradoraId,
         modulo,
-        tipo_conexao: tipoConexao,
-        status,
-        codigo_sucursal: codigoSucursal,
-        ambiente,
-        observacoes,
+        nome: nome || null,
+        telefone: telefone || null,
+        whatsapp: whatsapp || null,
+        email: email || null,
+        observacoes: observacoes || null,
+        atualizado_em: new Date().toISOString(),
       },
       { onConflict: 'seguradora_id,modulo' }
     )
     .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+    .single()
+  if (error) throw new Error(`Erro ao salvar gestor: ${error.message}`)
+  return data
 }
 
-export async function removerConexao(conexaoId) {
-  const { error } = await supabase
-    .from('seguradora_conexoes')
-    .delete()
-    .eq('id', conexaoId);
-
-  if (error) throw error;
-  return true;
-}
-
-// ---------------------------------------------------------------------
-// Helper para os formulários de Apólice (select vinculado por seguradora_id)
-// ---------------------------------------------------------------------
-
-export async function listarSeguradorasParaSelect(modulo = null) {
-  let query = supabase
-    .from('seguradoras')
-    .select('id, nome_fantasia')
-    .eq('ativo', true)
-    .order('nome_fantasia', { ascending: true });
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  // Se filtrar por módulo, opcionalmente destacar quais já têm conexão
-  // configurada naquele módulo (útil pra UX, não é obrigatório usar)
-  return data;
+/** Remove o gestor de um módulo específico */
+export async function excluirGestorModulo(id) {
+  const { error } = await operacional.from('seguradora_gestores').delete().eq('id', id)
+  if (error) throw new Error(`Erro ao excluir gestor: ${error.message}`)
 }
