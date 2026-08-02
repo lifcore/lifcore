@@ -12,7 +12,7 @@ export async function listarConexoesOperadoras(modulo) {
 }
 
 /** Cria uma nova conexão com operadora */
-export async function criarConexaoOperadora({ organizacaoId, modulo, nomeOperadora, tipoConexao, observacoes }) {
+export async function criarConexaoOperadora({ organizacaoId, modulo, nomeOperadora, tipoConexao, observacoes, codigoSucursal, ambiente, configuracoesExtras }) {
   const { data, error } = await operacional
     .from('conexoes_operadoras')
     .insert({
@@ -21,6 +21,9 @@ export async function criarConexaoOperadora({ organizacaoId, modulo, nomeOperado
       nome_operadora: nomeOperadora,
       tipo_conexao: tipoConexao,
       observacoes: observacoes || null,
+      codigo_sucursal: codigoSucursal || null,
+      ambiente: ambiente || 'homologacao',
+      configuracoes_extras: configuracoesExtras || null,
     })
     .select()
     .single()

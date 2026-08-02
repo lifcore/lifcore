@@ -301,6 +301,7 @@ const MODULOS_CONEXAO = [
 
 const ROTULO_TIPO_CONEXAO = { api: '🔌 API', tabela: '📄 Tabela importada', manual: '✍️ Manual' }
 const ROTULO_STATUS_CONEXAO = { ativa: 'Ativa', pendente: 'Pendente', inativa: 'Inativa' }
+const ROTULO_AMBIENTE = { desenvolvimento: 'Desenvolvimento', homologacao: 'Homologação', producao: 'Produção' }
 
 function ConexoesOperadorasCard() {
   const [moduloSelecionado, setModuloSelecionado] = useState('auto')
@@ -380,6 +381,9 @@ function NovaConexaoForm({ modulo, onSalvo, onCancelar }) {
   const [nomeOperadora, setNomeOperadora] = useState('')
   const [tipoConexao, setTipoConexao] = useState('manual')
   const [observacoes, setObservacoes] = useState('')
+  const [codigoSucursal, setCodigoSucursal] = useState('')
+  const [ambiente, setAmbiente] = useState('homologacao')
+  const [configuracoesExtras, setConfiguracoesExtras] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
 
@@ -398,6 +402,9 @@ function NovaConexaoForm({ modulo, onSalvo, onCancelar }) {
         nomeOperadora,
         tipoConexao,
         observacoes,
+        codigoSucursal,
+        ambiente,
+        configuracoesExtras,
       })
       onSalvo()
     } catch (err) {
@@ -410,7 +417,7 @@ function NovaConexaoForm({ modulo, onSalvo, onCancelar }) {
   return (
     <div className="ls-card" style={{ marginTop: '0.75rem' }}>
       <label>Nome da operadora/seguradora</label>
-      <input value={nomeOperadora} onChange={(e) => setNomeOperadora(e.target.value)} placeholder="Ex: Porto Seguro, SulAmérica..." />
+      <input value={nomeOperadora} onChange={(e) => setNomeOperadora(e.target.value)} placeholder="Ex: Porto Seguro, SulAmérica, Bradesco Seguros..." />
 
       <label>Tipo de conexão</label>
       <select value={tipoConexao} onChange={(e) => setTipoConexao(e.target.value)}>
@@ -418,6 +425,34 @@ function NovaConexaoForm({ modulo, onSalvo, onCancelar }) {
         <option value="tabela">📄 Tabela importada (Excel/CSV)</option>
         <option value="api">🔌 API</option>
       </select>
+
+      {tipoConexao === 'api' && (
+        <>
+          <div className="cotacao-form-linha">
+            <div>
+              <label>Código de sucursal/filial (se souber)</label>
+              <input value={codigoSucursal} onChange={(e) => setCodigoSucursal(e.target.value)} placeholder="Ex: 911" />
+            </div>
+            <div>
+              <label>Ambiente</label>
+              <select value={ambiente} onChange={(e) => setAmbiente(e.target.value)}>
+                <option value="desenvolvimento">Desenvolvimento</option>
+                <option value="homologacao">Homologação</option>
+                <option value="producao">Produção</option>
+              </select>
+            </div>
+          </div>
+
+          <label>Outros códigos técnicos (livre — nunca coloque client_id/client_secret ou senha aqui)</label>
+          <textarea
+            value={configuracoesExtras}
+            onChange={(e) => setConfiguracoesExtras(e.target.value)}
+            rows={3}
+            placeholder="Ex: cdEmpresa: 123, cdInspetoria: 456, cdProdutoCliente: 789, comissão Auto: 20%"
+            style={{ width: '100%', padding: '0.5rem 0.65rem', border: '1px solid var(--ls-border)', borderRadius: 'var(--ls-radius-sm)', fontFamily: 'inherit' }}
+          />
+        </>
+      )}
 
       <label>Observações</label>
       <input value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Ex: aguardando retorno da operadora sobre disponibilizar tabela" />
@@ -438,9 +473,18 @@ function LinhaConexao({ conexao, onAtualizado }) {
   const [editando, setEditando] = useState(false)
   const [status, setStatus] = useState(conexao.status)
   const [tipoConexao, setTipoConexao] = useState(conexao.tipo_conexao)
+  const [codigoSucursal, setCodigoSucursal] = useState(conexao.codigo_sucursal ?? '')
+  const [ambiente, setAmbiente] = useState(conexao.ambiente ?? 'homologacao')
+  const [configuracoesExtras, setConfiguracoesExtras] = useState(conexao.configuracoes_extras ?? '')
 
   async function handleSalvar() {
-    await atualizarConexaoOperadora(conexao.id, { status, tipo_conexao: tipoConexao })
+    await atualizarConexaoOperadora(conexao.id, {
+      status,
+      tipo_conexao: tipoConexao,
+      codigo_sucursal: codigoSucursal || null,
+      ambiente,
+      configuracoes_extras: configuracoesExtras || null,
+    })
     setEditando(false)
     onAtualizado()
   }
@@ -459,25 +503,59 @@ function LinhaConexao({ conexao, onAtualizado }) {
   if (editando) {
     return (
       <tr>
-        <td>{conexao.nome_operadora}</td>
-        <td>
-          <select value={tipoConexao} onChange={(e) => setTipoConexao(e.target.value)}>
-            <option value="manual">Manual</option>
-            <option value="tabela">Tabela importada</option>
-            <option value="api">API</option>
-          </select>
-        </td>
-        <td>
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="pendente">Pendente</option>
-            <option value="ativa">Ativa</option>
-            <option value="inativa">Inativa</option>
-          </select>
-        </td>
-        <td>{conexao.ultima_sincronizacao ? new Date(conexao.ultima_sincronizacao).toLocaleString('pt-BR') : '—'}</td>
-        <td>
-          <button className="cliente-tabela-btn" onClick={handleSalvar}>Salvar</button>
-          <button className="cliente-tabela-btn" onClick={() => setEditando(false)}>Cancelar</button>
+        <td colSpan={5}>
+          <div className="ls-card" style={{ padding: '0.75rem' }}>
+            <strong>{conexao.nome_operadora}</strong>
+            <div className="cotacao-form-linha" style={{ marginTop: '0.5rem' }}>
+              <div>
+                <label>Tipo de conexão</label>
+                <select value={tipoConexao} onChange={(e) => setTipoConexao(e.target.value)}>
+                  <option value="manual">Manual</option>
+                  <option value="tabela">Tabela importada</option>
+                  <option value="api">API</option>
+                </select>
+              </div>
+              <div>
+                <label>Status</label>
+                <select value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="pendente">Pendente</option>
+                  <option value="ativa">Ativa</option>
+                  <option value="inativa">Inativa</option>
+                </select>
+              </div>
+              {tipoConexao === 'api' && (
+                <>
+                  <div>
+                    <label>Código de sucursal/filial</label>
+                    <input value={codigoSucursal} onChange={(e) => setCodigoSucursal(e.target.value)} placeholder="Ex: 911" />
+                  </div>
+                  <div>
+                    <label>Ambiente</label>
+                    <select value={ambiente} onChange={(e) => setAmbiente(e.target.value)}>
+                      <option value="desenvolvimento">Desenvolvimento</option>
+                      <option value="homologacao">Homologação</option>
+                      <option value="producao">Produção</option>
+                    </select>
+                  </div>
+                </>
+              )}
+            </div>
+            {tipoConexao === 'api' && (
+              <>
+                <label>Outros códigos técnicos (nunca client_id/client_secret ou senha)</label>
+                <textarea
+                  value={configuracoesExtras}
+                  onChange={(e) => setConfiguracoesExtras(e.target.value)}
+                  rows={2}
+                  style={{ width: '100%', padding: '0.5rem 0.65rem', border: '1px solid var(--ls-border)', borderRadius: 'var(--ls-radius-sm)', fontFamily: 'inherit' }}
+                />
+              </>
+            )}
+            <div className="ls-modal-acoes">
+              <button className="cliente-tabela-btn" onClick={() => setEditando(false)}>Cancelar</button>
+              <button className="cliente-tabela-btn" onClick={handleSalvar}>Salvar</button>
+            </div>
+          </div>
         </td>
       </tr>
     )
@@ -485,7 +563,16 @@ function LinhaConexao({ conexao, onAtualizado }) {
 
   return (
     <tr>
-      <td>{conexao.nome_operadora}</td>
+      <td>
+        {conexao.nome_operadora}
+        {conexao.tipo_conexao === 'api' && (conexao.codigo_sucursal || conexao.ambiente) && (
+          <div className="config-instrucao" style={{ fontSize: '0.75rem', marginTop: '0.15rem' }}>
+            {conexao.codigo_sucursal && `Sucursal ${conexao.codigo_sucursal}`}
+            {conexao.codigo_sucursal && conexao.ambiente && ' · '}
+            {conexao.ambiente && ROTULO_AMBIENTE[conexao.ambiente]}
+          </div>
+        )}
+      </td>
       <td>{ROTULO_TIPO_CONEXAO[conexao.tipo_conexao]}</td>
       <td><span className={`ls-badge ls-badge-${conexao.status === 'ativa' ? 'cliente' : 'prospect'}`}>{ROTULO_STATUS_CONEXAO[conexao.status]}</span></td>
       <td>{conexao.ultima_sincronizacao ? new Date(conexao.ultima_sincronizacao).toLocaleString('pt-BR') : '—'}</td>
