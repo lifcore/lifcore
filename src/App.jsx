@@ -16,6 +16,8 @@ import PipelineLifsurePage from './features/lifsure/PipelineLifsurePage'
 import ClienteDetailLifsurePage from './features/lifsure/ClienteDetailLifsurePage'
 import PipelineLifplanPage from './features/lifplan/PipelineLifplanPage'
 import ClienteDetailLifplanPage from './features/lifplan/ClienteDetailLifplanPage'
+import PipelineLishieldPage from './features/lishield/PipelineLishieldPage'
+import ClienteDetailLishieldPage from './features/lishield/ClienteDetailLishieldPage'
 import './components/sideiconmenu.css'
 
 function AppShell() {
@@ -43,6 +45,8 @@ function AppShell() {
           <Route path="/lifsure/clientes/:id" element={<ClienteDetailLifsurePage />} />
           <Route path="/lifplan" element={<PipelineLifplanPage />} />
           <Route path="/lifplan/clientes/:id" element={<ClienteDetailLifplanPage />} />
+          <Route path="/lishield" element={<PipelineLishieldPage />} />
+          <Route path="/lishield/clientes/:id" element={<ClienteDetailLishieldPage />} />
           <Route path="/configuracoes" element={<ConfiguracoesPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
           <Route path="/mensagens" element={<MensagensPage />} />
@@ -54,9 +58,10 @@ function AppShell() {
   )
 }
 
-/** Decide o módulo padrão do Especialista conforme a rota atual */
+/** Decide o módulo padrão do Especialista conforme a rota atual — LiShield ainda não tem IA própria, então não mostra o botão lá */
 function EspecialistaSwitcherCondicional() {
   const location = useLocation()
+  if (location.pathname.startsWith('/lishield')) return null
   let moduloPadrao = 'saude'
   if (location.pathname.startsWith('/lifleet')) moduloPadrao = 'auto'
   if (location.pathname.startsWith('/lifsure')) moduloPadrao = 'lifsure'

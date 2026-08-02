@@ -8,6 +8,7 @@ const MODULOS = [
   { id: 'lifleet', label: 'Lifleet (Auto/Frota)' },
   { id: 'lifplan', label: 'Lifplan (Consórcio/Previdência)' },
   { id: 'lifsure', label: 'Lifsure (Seguros Gerais)' },
+  { id: 'lishield', label: 'LiShield (Seguros Técnicos)' },
 ]
 
 export default function MensagensPage() {
