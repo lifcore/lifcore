@@ -20,6 +20,7 @@ import PropostaLifplanForm from './PropostaLifplanForm'
 import ContratoLifplanForm from './ContratoLifplanForm'
 import EspecialistaLifplan from '../especialista/EspecialistaLifplan'
 import { useAuth } from '../auth/AuthContext'
+import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
 
 const ABAS = ['Dados Cadastrais', 'Propostas', 'Contratos', 'Demandas']
 
@@ -31,7 +32,6 @@ export default function ClienteDetailLifplanPage() {
   const [dados, setDados] = useState(null)
   const [contratos, setContratos] = useState([])
   const [abaAtiva, setAbaAtiva] = useState('Demandas')
-  const [erroExclusao, setErroExclusao] = useState(null)
   const [mostrarWhatsApp, setMostrarWhatsApp] = useState(false)
   const [mostrarTransferir, setMostrarTransferir] = useState(false)
 
@@ -48,14 +48,9 @@ export default function ClienteDetailLifplanPage() {
     setContratos(listaContratos)
   }
 
-  async function handleExcluirCliente() {
-    if (!window.confirm('Tem certeza que deseja excluir este cliente/prospect? Essa ação não pode ser desfeita.')) return
-    try {
-      await excluirClienteProspect(id)
-      navigate('/lifplan')
-    } catch (err) {
-      setErroExclusao(err.message)
-    }
+  async function excluirEVoltar() {
+    await excluirClienteProspect(id)
+    navigate('/lifplan')
   }
 
   async function handleMarcarInativo() {
@@ -90,7 +85,14 @@ export default function ClienteDetailLifplanPage() {
               <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarTransferir(true)}>🔁 Transferir</button>
             )}
             <button className="ls-btn ls-btn-ghost" onClick={handleMarcarInativo}>Marcar Inativo</button>
-            <button className="cliente-btn-excluir" onClick={handleExcluirCliente}>Excluir</button>
+            <BotaoOperacaoCritica
+              label="Excluir"
+              tabelaAfetada="operacional.clientes_prospects"
+              registroId={cliente.id}
+              dadosAntes={cliente}
+              executar={excluirEVoltar}
+              className="cliente-btn-excluir"
+            />
           </div>
         </div>
       </div>
@@ -106,8 +108,6 @@ export default function ClienteDetailLifplanPage() {
           }}
         />
       )}
-
-      {erroExclusao && <p className="ls-modal-erro">{erroExclusao}</p>}
 
       <div className="cliente-abas">
         {ABAS.map((aba) => (
@@ -222,12 +222,6 @@ function ContratosLifplanTab({ contratos, clienteProspectId, onAtualizado }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [contratoEditando, setContratoEditando] = useState(null)
 
-  async function handleExcluir(contratoId) {
-    if (!window.confirm('Excluir este contrato?')) return
-    await excluirContratoLifplan(contratoId)
-    onAtualizado()
-  }
-
   return (
     <div>
       {!mostrarForm && !contratoEditando && (
@@ -270,7 +264,14 @@ function ContratosLifplanTab({ contratos, clienteProspectId, onAtualizado }) {
               )}
               <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
                 <button className="cliente-tabela-btn" onClick={() => setContratoEditando(c)}>Editar</button>
-                <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(c.id)}>Excluir</button>
+                <BotaoOperacaoCritica
+                  label="Excluir"
+                  tabelaAfetada="lifplanService.contratos"
+                  registroId={c.id}
+                  dadosAntes={c}
+                  executar={() => excluirContratoLifplan(c.id)}
+                  onSucesso={onAtualizado}
+                />
               </div>
             </div>
           ))}

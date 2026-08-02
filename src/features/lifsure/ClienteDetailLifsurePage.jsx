@@ -21,6 +21,7 @@ import ApoliceLifsureForm from './ApoliceLifsureForm'
 import EspecialistaLifsure from '../especialista/EspecialistaLifsure'
 import { buscarHistoricoChatLifsure } from '../../lib/especialista/especialistaLifsure'
 import { useAuth } from '../auth/AuthContext'
+import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
 
 const ABAS = ['Dados Cadastrais', 'Cotações', 'Apólices', 'Demandas']
 
@@ -32,7 +33,6 @@ export default function ClienteDetailLifsurePage() {
   const [dados, setDados] = useState(null)
   const [apolices, setApolices] = useState([])
   const [abaAtiva, setAbaAtiva] = useState('Demandas')
-  const [erroExclusao, setErroExclusao] = useState(null)
   const [mostrarWhatsApp, setMostrarWhatsApp] = useState(false)
   const [mostrarTransferir, setMostrarTransferir] = useState(false)
 
@@ -49,14 +49,9 @@ export default function ClienteDetailLifsurePage() {
     setApolices(listaApolices)
   }
 
-  async function handleExcluirCliente() {
-    if (!window.confirm('Tem certeza que deseja excluir este cliente/prospect? Essa ação não pode ser desfeita.')) return
-    try {
-      await excluirClienteProspect(id)
-      navigate('/lifsure')
-    } catch (err) {
-      setErroExclusao(err.message)
-    }
+  async function excluirEVoltar() {
+    await excluirClienteProspect(id)
+    navigate('/lifsure')
   }
 
   async function handleMarcarInativo() {
@@ -91,7 +86,14 @@ export default function ClienteDetailLifsurePage() {
               <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarTransferir(true)}>🔁 Transferir</button>
             )}
             <button className="ls-btn ls-btn-ghost" onClick={handleMarcarInativo}>Marcar Inativo</button>
-            <button className="cliente-btn-excluir" onClick={handleExcluirCliente}>Excluir</button>
+            <BotaoOperacaoCritica
+              label="Excluir"
+              tabelaAfetada="operacional.clientes_prospects"
+              registroId={cliente.id}
+              dadosAntes={cliente}
+              executar={excluirEVoltar}
+              className="cliente-btn-excluir"
+            />
           </div>
         </div>
       </div>
@@ -107,8 +109,6 @@ export default function ClienteDetailLifsurePage() {
           }}
         />
       )}
-
-      {erroExclusao && <p className="ls-modal-erro">{erroExclusao}</p>}
 
       <div className="cliente-abas">
         {ABAS.map((aba) => (
@@ -223,12 +223,6 @@ function ApolicesLifsureTab({ apolices, clienteProspectId, onAtualizado }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [apoliceEditando, setApoliceEditando] = useState(null)
 
-  async function handleExcluir(apoliceId) {
-    if (!window.confirm('Excluir esta apólice?')) return
-    await excluirApoliceLifsure(apoliceId)
-    onAtualizado()
-  }
-
   return (
     <div>
       {!mostrarForm && !apoliceEditando && (
@@ -271,7 +265,14 @@ function ApolicesLifsureTab({ apolices, clienteProspectId, onAtualizado }) {
               )}
               <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
                 <button className="cliente-tabela-btn" onClick={() => setApoliceEditando(ap)}>Editar</button>
-                <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(ap.id)}>Excluir</button>
+                <BotaoOperacaoCritica
+                  label="Excluir"
+                  tabelaAfetada="operacional.apolices"
+                  registroId={ap.id}
+                  dadosAntes={ap}
+                  executar={() => excluirApoliceLifsure(ap.id)}
+                  onSucesso={onAtualizado}
+                />
               </div>
             </div>
           ))}
