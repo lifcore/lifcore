@@ -22,6 +22,7 @@ import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../..
 import { listarCorretores } from '../../lib/crm/apolicesService'
 import { useAuth } from '../auth/AuthContext'
 import { formatarDataBR } from '../../lib/utils/formatarData'
+import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
 
 const ABAS = ['Dados Cadastrais', 'Contratos', 'Cotações', 'Demandas']
 
@@ -32,7 +33,6 @@ export default function ClienteDetailPage() {
   const ehMaster = perfil?.papel === 'master'
   const [dados, setDados] = useState(null)
   const [abaAtiva, setAbaAtiva] = useState('Demandas')
-  const [erroExclusao, setErroExclusao] = useState(null)
   const [mostrarWhatsApp, setMostrarWhatsApp] = useState(false)
   const [mostrarTransferir, setMostrarTransferir] = useState(false)
 
@@ -45,14 +45,9 @@ export default function ClienteDetailPage() {
     setDados(resultado)
   }
 
-  async function handleExcluirCliente() {
-    if (!window.confirm('Tem certeza que deseja excluir este cliente/prospect? Essa ação não pode ser desfeita.')) return
-    try {
-      await excluirClienteProspect(id)
-      navigate('/')
-    } catch (err) {
-      setErroExclusao(err.message)
-    }
+  async function excluirEVoltar() {
+    await excluirClienteProspect(id)
+    navigate('/')
   }
 
   async function handleMarcarInativo() {
@@ -87,7 +82,14 @@ export default function ClienteDetailPage() {
               <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarTransferir(true)}>🔁 Transferir</button>
             )}
             <button className="ls-btn ls-btn-ghost" onClick={handleMarcarInativo}>Marcar Inativo</button>
-            <button className="cliente-btn-excluir" onClick={handleExcluirCliente}>Excluir</button>
+            <BotaoOperacaoCritica
+              label="Excluir"
+              tabelaAfetada="operacional.clientes_prospects"
+              registroId={cliente.id}
+              dadosAntes={cliente}
+              executar={excluirEVoltar}
+              className="cliente-btn-excluir"
+            />
           </div>
         </div>
       </div>
@@ -103,8 +105,6 @@ export default function ClienteDetailPage() {
           }}
         />
       )}
-
-      {erroExclusao && <p className="ls-modal-erro">{erroExclusao}</p>}
 
       <div className="cliente-abas">
         {ABAS.map((aba) => (
@@ -488,12 +488,6 @@ function ContratosTab({ contratos, clienteProspectId, onAtualizado }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [contratoEditando, setContratoEditando] = useState(null)
 
-  async function handleExcluir(contratoId) {
-    if (!window.confirm('Excluir este contrato?')) return
-    await excluirContrato(contratoId)
-    onAtualizado()
-  }
-
   return (
     <div>
       {!mostrarForm && !contratoEditando && (
@@ -550,7 +544,14 @@ function ContratosTab({ contratos, clienteProspectId, onAtualizado }) {
                   {c.anexo_contrato_url && <a href={c.anexo_contrato_url} target="_blank" rel="noreferrer" className="cotacao-anexo-link">📎 Contrato</a>}
                   {c.anexo_proposta_url && <a href={c.anexo_proposta_url} target="_blank" rel="noreferrer" className="cotacao-anexo-link">📎 Proposta</a>}
                   <button className="cliente-tabela-btn" onClick={() => setContratoEditando(c)}>Editar</button>
-                  <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(c.id)}>Excluir</button>
+                  <BotaoOperacaoCritica
+                    label="Excluir"
+                    tabelaAfetada="operacional.contratos"
+                    registroId={c.id}
+                    dadosAntes={c}
+                    executar={() => excluirContrato(c.id)}
+                    onSucesso={onAtualizado}
+                  />
                 </div>
               </div>
             )
