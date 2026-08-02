@@ -10,8 +10,17 @@ import { operacional } from '../supabaseSchemas'
  * automatizar).
  */
 
-/** Lista comissões, com filtros opcionais */
-export async function listarComissoes({ modulo, statusRecebimento, seguradoraId, corretorId } = {}) {
+/** Lista comissões, com filtros opcionais (seguradora, módulo, status de
+ * recebimento, status de repasse, período de lançamento) */
+export async function listarComissoes({
+  modulo,
+  statusRecebimento,
+  statusRepasse,
+  seguradoraId,
+  corretorId,
+  periodoInicio,
+  periodoFim,
+} = {}) {
   let query = operacional
     .from('comissoes')
     .select('*, seguradoras(nome_fantasia), apolices(numero_apolice), perfis(nome)')
@@ -19,8 +28,11 @@ export async function listarComissoes({ modulo, statusRecebimento, seguradoraId,
 
   if (modulo) query = query.eq('modulo', modulo)
   if (statusRecebimento) query = query.eq('status_recebimento', statusRecebimento)
+  if (statusRepasse) query = query.eq('status_repasse', statusRepasse)
   if (seguradoraId) query = query.eq('seguradora_id', seguradoraId)
   if (corretorId) query = query.eq('corretor_id', corretorId)
+  if (periodoInicio) query = query.gte('created_at', periodoInicio)
+  if (periodoFim) query = query.lte('created_at', `${periodoFim}T23:59:59`)
 
   const { data, error } = await query
   if (error) throw new Error(`Erro ao listar comissões: ${error.message}`)
@@ -108,19 +120,33 @@ export async function excluirComissao(id) {
   if (error) throw new Error(`Erro ao excluir comissão: ${error.message}`)
 }
 
-/** Resumo simples pra dashboard: total pendente/recebido, por status */
-export async function resumoComissoes({ modulo } = {}) {
-  let query = operacional.from('comissoes').select('valor_comissao, status_recebimento, valor_repasse_corretor, status_repasse')
+/**
+ * Visão operacional simples do Finance Center v1:
+ * - Comissão Prevista: soma de tudo que não foi cancelado (recebido + pendente)
+ * - Comissão Recebida: soma do que já foi recebido da seguradora
+ * - Comissão Pendente: soma do que ainda não foi recebido
+ * - Comissão Repassada: soma do repasse já pago ao corretor
+ */
+export async function resumoComissoes({ modulo, seguradoraId, periodoInicio, periodoFim } = {}) {
+  let query = operacional
+    .from('comissoes')
+    .select('valor_comissao, status_recebimento, valor_repasse_corretor, status_repasse')
+
   if (modulo) query = query.eq('modulo', modulo)
+  if (seguradoraId) query = query.eq('seguradora_id', seguradoraId)
+  if (periodoInicio) query = query.gte('created_at', periodoInicio)
+  if (periodoFim) query = query.lte('created_at', `${periodoFim}T23:59:59`)
 
   const { data, error } = await query
   if (error) throw new Error(`Erro ao calcular resumo: ${error.message}`)
 
   const linhas = data ?? []
+  const naoCanceladas = linhas.filter((l) => l.status_recebimento !== 'cancelado')
+
   return {
-    totalPendenteRecebimento: linhas.filter((l) => l.status_recebimento === 'pendente').reduce((s, l) => s + Number(l.valor_comissao || 0), 0),
-    totalRecebido: linhas.filter((l) => l.status_recebimento === 'recebido').reduce((s, l) => s + Number(l.valor_comissao || 0), 0),
-    totalRepassePendente: linhas.filter((l) => l.status_repasse === 'pendente').reduce((s, l) => s + Number(l.valor_repasse_corretor || 0), 0),
-    totalRepassePago: linhas.filter((l) => l.status_repasse === 'pago').reduce((s, l) => s + Number(l.valor_repasse_corretor || 0), 0),
+    comissaoPrevista: naoCanceladas.reduce((s, l) => s + Number(l.valor_comissao || 0), 0),
+    comissaoRecebida: linhas.filter((l) => l.status_recebimento === 'recebido').reduce((s, l) => s + Number(l.valor_comissao || 0), 0),
+    comissaoPendente: linhas.filter((l) => l.status_recebimento === 'pendente').reduce((s, l) => s + Number(l.valor_comissao || 0), 0),
+    comissaoRepassada: linhas.filter((l) => l.status_repasse === 'pago').reduce((s, l) => s + Number(l.valor_repasse_corretor || 0), 0),
   }
 }

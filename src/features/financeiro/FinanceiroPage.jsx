@@ -19,6 +19,18 @@ const MODULOS = [
   { id: 'lifplan', label: 'LifPlan' },
 ]
 
+const STATUS_RECEBIMENTO = [
+  { id: 'pendente', label: 'Pendente' },
+  { id: 'recebido', label: 'Recebido' },
+  { id: 'cancelado', label: 'Cancelado' },
+]
+
+const STATUS_REPASSE = [
+  { id: 'nao_aplicavel', label: 'Não aplicável' },
+  { id: 'pendente', label: 'Pendente' },
+  { id: 'pago', label: 'Pago' },
+]
+
 function formatarMoeda(valor) {
   return (Number(valor) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
@@ -26,22 +38,54 @@ function formatarMoeda(valor) {
 export default function FinanceiroPage() {
   const [comissoes, setComissoes] = useState([])
   const [resumo, setResumo] = useState(null)
-  const [filtroModulo, setFiltroModulo] = useState('')
+  const [seguradoras, setSeguradoras] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
+
+  // Filtros
+  const [filtroSeguradora, setFiltroSeguradora] = useState('')
+  const [filtroModulo, setFiltroModulo] = useState('')
+  const [filtroStatusRecebimento, setFiltroStatusRecebimento] = useState('')
+  const [filtroStatusRepasse, setFiltroStatusRepasse] = useState('')
+  const [filtroPeriodoInicio, setFiltroPeriodoInicio] = useState('')
+  const [filtroPeriodoFim, setFiltroPeriodoFim] = useState('')
+
+  useEffect(() => {
+    listarSeguradoras().then(setSeguradoras)
+  }, [])
 
   useEffect(() => {
     carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroModulo])
+  }, [filtroSeguradora, filtroModulo, filtroStatusRecebimento, filtroStatusRepasse, filtroPeriodoInicio, filtroPeriodoFim])
+
+  function filtrosAtivos() {
+    const f = {}
+    if (filtroSeguradora) f.seguradoraId = filtroSeguradora
+    if (filtroModulo) f.modulo = filtroModulo
+    if (filtroStatusRecebimento) f.statusRecebimento = filtroStatusRecebimento
+    if (filtroStatusRepasse) f.statusRepasse = filtroStatusRepasse
+    if (filtroPeriodoInicio) f.periodoInicio = filtroPeriodoInicio
+    if (filtroPeriodoFim) f.periodoFim = filtroPeriodoFim
+    return f
+  }
 
   async function carregar() {
     setCarregando(true)
-    const filtros = filtroModulo ? { modulo: filtroModulo } : {}
+    const filtros = filtrosAtivos()
     const [lista, res] = await Promise.all([listarComissoes(filtros), resumoComissoes(filtros)])
     setComissoes(lista)
     setResumo(res)
     setCarregando(false)
+  }
+
+  function limparFiltros() {
+    setFiltroSeguradora('')
+    setFiltroModulo('')
+    setFiltroStatusRecebimento('')
+    setFiltroStatusRepasse('')
+    setFiltroPeriodoInicio('')
+    setFiltroPeriodoFim('')
   }
 
   return (
@@ -49,32 +93,73 @@ export default function FinanceiroPage() {
       <h2>Financeiro — Comissões</h2>
       <p className="config-instrucao">
         Livro-razão de comissões: registro manual do que foi apurado por apólice.
-        Este módulo ainda não calcula comissão automaticamente — cada regra de
-        cálculo varia por seguradora, produto e forma de pagamento, e ainda está
-        sendo mapeada. Por enquanto, lance aqui o valor já apurado.
+        Este módulo não calcula comissão automaticamente — cada regra de cálculo
+        varia por seguradora, produto e forma de pagamento, e ainda está sendo
+        mapeada. Lance aqui o valor já apurado.
       </p>
 
       {resumo && (
         <div className="cotacao-form-linha" style={{ marginBottom: '1rem' }}>
-          <div className="ls-card"><strong>A receber</strong><div>{formatarMoeda(resumo.totalPendenteRecebimento)}</div></div>
-          <div className="ls-card"><strong>Recebido</strong><div>{formatarMoeda(resumo.totalRecebido)}</div></div>
-          <div className="ls-card"><strong>Repasse pendente</strong><div>{formatarMoeda(resumo.totalRepassePendente)}</div></div>
-          <div className="ls-card"><strong>Repasse pago</strong><div>{formatarMoeda(resumo.totalRepassePago)}</div></div>
+          <div className="ls-card"><strong>Comissão Prevista</strong><div>{formatarMoeda(resumo.comissaoPrevista)}</div></div>
+          <div className="ls-card"><strong>Comissão Recebida</strong><div>{formatarMoeda(resumo.comissaoRecebida)}</div></div>
+          <div className="ls-card"><strong>Comissão Pendente</strong><div>{formatarMoeda(resumo.comissaoPendente)}</div></div>
+          <div className="ls-card"><strong>Comissão Repassada</strong><div>{formatarMoeda(resumo.comissaoRepassada)}</div></div>
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem' }}>
-        <select value={filtroModulo} onChange={(e) => setFiltroModulo(e.target.value)}>
-          <option value="">Todos os módulos</option>
-          {MODULOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-        </select>
-        <button className="ls-btn ls-btn-accent" onClick={() => setMostrarForm(!mostrarForm)}>
-          {mostrarForm ? 'Cancelar' : '+ Lançar Comissão'}
-        </button>
+      <div className="ls-card" style={{ marginBottom: '1rem' }}>
+        <div className="cotacao-form-linha">
+          <div>
+            <label>Seguradora</label>
+            <select value={filtroSeguradora} onChange={(e) => setFiltroSeguradora(e.target.value)}>
+              <option value="">Todas</option>
+              {seguradoras.map((s) => <option key={s.id} value={s.id}>{s.nome_fantasia}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Módulo</label>
+            <select value={filtroModulo} onChange={(e) => setFiltroModulo(e.target.value)}>
+              <option value="">Todos</option>
+              {MODULOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="cotacao-form-linha">
+          <div>
+            <label>Status recebimento</label>
+            <select value={filtroStatusRecebimento} onChange={(e) => setFiltroStatusRecebimento(e.target.value)}>
+              <option value="">Todos</option>
+              {STATUS_RECEBIMENTO.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Status repasse</label>
+            <select value={filtroStatusRepasse} onChange={(e) => setFiltroStatusRepasse(e.target.value)}>
+              <option value="">Todos</option>
+              {STATUS_REPASSE.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="cotacao-form-linha">
+          <div>
+            <label>Período — de</label>
+            <input type="date" value={filtroPeriodoInicio} onChange={(e) => setFiltroPeriodoInicio(e.target.value)} />
+          </div>
+          <div>
+            <label>Período — até</label>
+            <input type="date" value={filtroPeriodoFim} onChange={(e) => setFiltroPeriodoFim(e.target.value)} />
+          </div>
+        </div>
+        <button className="cliente-tabela-btn" onClick={limparFiltros}>Limpar filtros</button>
       </div>
+
+      <button className="ls-btn ls-btn-accent" onClick={() => setMostrarForm(!mostrarForm)} style={{ marginBottom: '1rem' }}>
+        {mostrarForm ? 'Cancelar' : '+ Lançar Comissão'}
+      </button>
 
       {mostrarForm && (
         <FormNovaComissao
+          seguradoras={seguradoras}
           onSalvo={() => { setMostrarForm(false); carregar() }}
           onCancelar={() => setMostrarForm(false)}
         />
@@ -83,7 +168,7 @@ export default function FinanceiroPage() {
       {carregando ? (
         <p className="cliente-carregando">Carregando...</p>
       ) : comissoes.length === 0 ? (
-        <p className="cliente-vazio">Nenhuma comissão lançada ainda.</p>
+        <p className="cliente-vazio">Nenhuma comissão encontrada para os filtros selecionados.</p>
       ) : (
         <table className="cliente-tabela">
           <thead>
@@ -102,8 +187,7 @@ export default function FinanceiroPage() {
   )
 }
 
-function FormNovaComissao({ onSalvo, onCancelar }) {
-  const [seguradoras, setSeguradoras] = useState([])
+function FormNovaComissao({ seguradoras, onSalvo, onCancelar }) {
   const [seguradoraId, setSeguradoraId] = useState('')
   const [modulo, setModulo] = useState('auto')
   const [valorPremio, setValorPremio] = useState('')
@@ -114,10 +198,6 @@ function FormNovaComissao({ onSalvo, onCancelar }) {
   const [detalhesCalculo, setDetalhesCalculo] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
-
-  useEffect(() => {
-    listarSeguradoras().then(setSeguradoras)
-  }, [])
 
   async function handleSalvar() {
     if (!valorComissao) {
@@ -193,6 +273,11 @@ function FormNovaComissao({ onSalvo, onCancelar }) {
       <label>Como foi calculado (registre aqui — importante enquanto não há regra automática)</label>
       <textarea value={detalhesCalculo} onChange={(e) => setDetalhesCalculo(e.target.value)} rows={2} />
 
+      <p className="config-instrucao" style={{ marginTop: '0.5rem' }}>
+        Vínculo com uma apólice ou corretor específico ainda não está disponível
+        neste formulário — depende de confirmar os services reais desses módulos.
+      </p>
+
       {erro && <p className="ls-modal-erro">{erro}</p>}
 
       <div className="ls-modal-acoes">
@@ -230,9 +315,7 @@ function LinhaComissao({ comissao, onAtualizado }) {
       <td>{comissao.seguradoras?.nome_fantasia || '—'}</td>
       <td>{MODULOS.find((m) => m.id === comissao.modulo)?.label || comissao.modulo}</td>
       <td>{formatarMoeda(comissao.valor_comissao)}</td>
-      <td>
-        <span className="ls-badge">{comissao.status_recebimento}</span>
-      </td>
+      <td><span className="ls-badge">{comissao.status_recebimento}</span></td>
       <td>
         {comissao.status_repasse !== 'nao_aplicavel'
           ? `${formatarMoeda(comissao.valor_repasse_corretor)} (${comissao.status_repasse})`
