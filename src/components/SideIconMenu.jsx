@@ -3,6 +3,7 @@ import { useAuth } from '../features/auth/AuthContext'
 
 const ITENS = [
   { path: '/', icone: '🏠', titulo: 'Início (Pipeline)' },
+  { path: '/painel', icone: '📊', titulo: 'Painel Executivo', somenteMasterAdmin: true },
   { path: '/perfil', icone: '👤', titulo: 'Meu Perfil' },
   { path: '/mensagens', icone: '💬', titulo: 'Mensagens Padrão' },
   { path: '/financeiro', icone: '💰', titulo: 'Financeiro', somenteMasterAdmin: true },
