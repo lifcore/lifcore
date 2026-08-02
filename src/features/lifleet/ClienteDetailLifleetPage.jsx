@@ -166,7 +166,6 @@ export default function ClienteDetailLifleetPage() {
 }
 
 function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado }) {
-  const [mostrarForm, setMostrarForm] = useState(false)
   const [mostrarComparativo, setMostrarComparativo] = useState(false)
   const [cotacaoEditando, setCotacaoEditando] = useState(null)
 
@@ -190,15 +189,10 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado }) {
 
   return (
     <div>
-      {!mostrarForm && !mostrarComparativo && !cotacaoEditando && (
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="ls-btn ls-btn-accent" onClick={() => setMostrarComparativo(true)}>
-            📊 Cotador Comparativo
-          </button>
-          <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarForm(true)}>
-            + Registrar Cotação Avulsa
-          </button>
-        </div>
+      {!mostrarComparativo && !cotacaoEditando && (
+        <button className="ls-btn ls-btn-accent" onClick={() => setMostrarComparativo(true)}>
+          📊 Cotador Comparativo
+        </button>
       )}
 
       {mostrarComparativo && (
@@ -212,19 +206,15 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado }) {
         />
       )}
 
-      {(mostrarForm || cotacaoEditando) && (
+      {cotacaoEditando && (
         <CotacaoAutoForm
           clienteProspectId={clienteId}
           cotacaoExistente={cotacaoEditando}
           onSalvo={() => {
-            setMostrarForm(false)
             setCotacaoEditando(null)
             onAtualizado()
           }}
-          onCancelar={() => {
-            setMostrarForm(false)
-            setCotacaoEditando(null)
-          }}
+          onCancelar={() => setCotacaoEditando(null)}
         />
       )}
 
