@@ -7,7 +7,7 @@ import { enviarAnexo, ehArquivoDeTexto, lerConteudoTexto } from '../../lib/espec
 import { renderizarTextoComMarkdown } from '../../lib/utils/renderizarMarkdown'
 import './especialista.css'
 
-const ROTULOS_MODULO = { saude: 'Saúde', auto: 'Auto/Frota', lifsure: 'LifSure' }
+const ROTULOS_MODULO = { saude: 'Saúde', auto: 'Auto/Frota', lifsure: 'LifSure', lifplan: 'LifPlan' }
 
 /** Escapa HTML e converte **negrito** em <strong> — usado só na função de Imprimir (gera HTML puro, não JSX) */
 function escaparEConverterNegrito(texto) {

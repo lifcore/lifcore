@@ -54,13 +54,13 @@ function AppShell() {
   )
 }
 
-/** Decide o módulo padrão do Especialista conforme a rota atual — Lifplan ainda não tem IA própria, então não mostra o botão lá */
+/** Decide o módulo padrão do Especialista conforme a rota atual */
 function EspecialistaSwitcherCondicional() {
   const location = useLocation()
-  if (location.pathname.startsWith('/lifplan')) return null
   let moduloPadrao = 'saude'
   if (location.pathname.startsWith('/lifleet')) moduloPadrao = 'auto'
   if (location.pathname.startsWith('/lifsure')) moduloPadrao = 'lifsure'
+  if (location.pathname.startsWith('/lifplan')) moduloPadrao = 'lifplan'
   return <EspecialistaSwitcher moduloPadrao={moduloPadrao} />
 }
 

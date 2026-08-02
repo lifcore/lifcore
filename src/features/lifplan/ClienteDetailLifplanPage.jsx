@@ -18,6 +18,7 @@ import { formatarDataBR } from '../../lib/utils/formatarData'
 import { DadosCadastraisTab } from '../crm/ClienteDetailPage'
 import PropostaLifplanForm from './PropostaLifplanForm'
 import ContratoLifplanForm from './ContratoLifplanForm'
+import EspecialistaLifplan from '../especialista/EspecialistaLifplan'
 import { useAuth } from '../auth/AuthContext'
 
 const ABAS = ['Dados Cadastrais', 'Propostas', 'Contratos', 'Demandas']
@@ -409,6 +410,7 @@ function DemandaDetailLifplanModal({ demanda, onFechar, onAtualizado, onSalvoSem
   const [salvando, setSalvando] = useState(false)
   const [gerandoResumo, setGerandoResumo] = useState(false)
   const [candidato, setCandidato] = useState(null)
+  const [abrirEspecialista, setAbrirEspecialista] = useState(false)
 
   async function handleSalvar() {
     setSalvando(true)
@@ -448,6 +450,17 @@ function DemandaDetailLifplanModal({ demanda, onFechar, onAtualizado, onSalvoSem
     onAtualizado()
   }
 
+  if (abrirEspecialista) {
+    return (
+      <div className="ls-modal-overlay" onClick={onFechar}>
+        <div className="especialista-modal" onClick={(e) => e.stopPropagation()}>
+          <button className="especialista-modal-fechar" onClick={onFechar}>✕</button>
+          <EspecialistaLifplan clienteProspectIdInicial={demanda.cliente_prospect_id} casoIdContinuacao={demanda.id} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="ls-modal-overlay" onClick={editando ? undefined : onFechar}>
       <div className="ls-modal" onClick={(e) => e.stopPropagation()}>
@@ -474,6 +487,7 @@ function DemandaDetailLifplanModal({ demanda, onFechar, onAtualizado, onSalvoSem
         ) : !editando ? (
           <div className="demanda-detail-rodape">
             <span className="ls-badge ls-badge-prospect">{traduzirSituacaoLifplan(situacao)}</span>
+            <button className="ls-btn ls-btn-accent" onClick={() => setAbrirEspecialista(true)}>🧠 Especialista</button>
             <button className="ls-btn ls-btn-ghost" onClick={() => setEditando(true)}>Editar Demanda</button>
           </div>
         ) : (

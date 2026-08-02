@@ -2,17 +2,20 @@ import { useEffect, useState } from 'react'
 import EspecialistaSaude from '../features/especialista/EspecialistaSaude'
 import EspecialistaAuto from '../features/especialista/EspecialistaAuto'
 import EspecialistaLifsure from '../features/especialista/EspecialistaLifsure'
+import EspecialistaLifplan from '../features/especialista/EspecialistaLifplan'
 
 const ROTULOS = {
   saude: 'Especialista de Saúde',
   auto: 'Especialista de Auto/Frota',
   lifsure: 'Especialista LifSure',
+  lifplan: 'Especialista LifPlan',
 }
 
 const COMPONENTES = {
   saude: EspecialistaSaude,
   auto: EspecialistaAuto,
   lifsure: EspecialistaLifsure,
+  lifplan: EspecialistaLifplan,
 }
 
 /**

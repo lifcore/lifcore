@@ -1,32 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import { atenderDemanda, buscarHistoricoChat, encerrarConversa } from '../../lib/especialista/especialistaSaude'
-import { atenderConsultaRapida, vincularConsultaComoDemanda } from '../../lib/especialista/consultaRapida'
+import { atenderDemandaLifplan, buscarHistoricoChatLifplan, encerrarConversaLifplan } from '../../lib/especialista/especialistaLifplan'
+import { atenderConsultaRapidaLifplan, vincularConsultaComoDemandaLifplan } from '../../lib/especialista/consultaRapidaLifplan'
 import { listarClientesProspects } from '../../lib/crm/clientesService'
 import { enviarAnexo, ehArquivoDeTexto, lerConteudoTexto } from '../../lib/especialista/uploadService'
 import { renderizarTextoComMarkdown } from '../../lib/utils/renderizarMarkdown'
 import './especialista.css'
 
-/**
- * Especialista de Saúde — chat contínuo com dois modos:
- *
- *   MODO DEMANDA (clienteProspectIdInicial informado, ou continuando
- *   um caso já existente): ciclo de vida completo — código DM-SAU,
- *   status, próxima ação, aparece na aba Demandas do cliente.
- *
- *   MODO CONSULTA RÁPIDA (sem cliente, chamado pelo botão flutuante):
- *   registro leve, sem burocracia. Pode ser "vinculado a um cliente"
- *   a qualquer momento, virando uma Demanda de verdade.
- */
 const ROTULOS_MODULO = { saude: 'Saúde', auto: 'Auto/Frota', lifsure: 'LifSure', lifplan: 'LifPlan' }
 
-/** Escapa HTML e converte **negrito** em <strong> — usado só na função de Imprimir (gera HTML puro, não JSX) */
+/**
+ * Escapa HTML e converte **negrito** em <strong> — usado só na função de
+ * Imprimir (gera HTML puro, não JSX).
+ */
 function escaparEConverterNegrito(texto) {
   const escapado = (texto || '').replace(/</g, '&lt;')
   return escapado.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
 }
 
-export default function EspecialistaSaude({ clienteProspectIdInicial = null, casoIdContinuacao = null, perguntaInicial = null, onSolicitarTroca = null }) {
+export default function EspecialistaLifplan({ clienteProspectIdInicial = null, casoIdContinuacao = null, perguntaInicial = null, onSolicitarTroca = null }) {
   const { perfil } = useAuth()
   const modoDemanda = !!clienteProspectIdInicial || !!casoIdContinuacao
 
@@ -39,7 +31,6 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
   const [carregando, setCarregando] = useState(false)
   const [carregandoHistorico, setCarregandoHistorico] = useState(!!casoIdContinuacao)
   const [erro, setErro] = useState(null)
-  const [ultimoContexto, setUltimoContexto] = useState(null)
   const [mostrarVincular, setMostrarVincular] = useState(false)
   const [especialistaSugerido, setEspecialistaSugerido] = useState(null)
   const fimDoChatRef = useRef(null)
@@ -50,7 +41,7 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
 
   useEffect(() => {
     if (casoIdContinuacao) {
-      buscarHistoricoChat(casoIdContinuacao)
+      buscarHistoricoChatLifplan(casoIdContinuacao)
         .then((historico) => setMensagens(historico))
         .finally(() => setCarregandoHistorico(false))
     }
@@ -64,9 +55,9 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
     if ((!demanda.trim() && !arquivo) || carregando) return
     const textoEnviado = demanda.trim() || 'Segue documento em anexo para análise.'
     setDemanda('')
+    setEspecialistaSugerido(null)
     setCarregando(true)
     setErro(null)
-    setEspecialistaSugerido(null)
     setMensagens((msgs) => [...msgs, { autor: 'corretor', texto: textoEnviado, criadoEm: new Date().toISOString() }])
 
     try {
@@ -84,7 +75,7 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
 
       let resposta
       if (modoDemanda) {
-        resposta = await atenderDemanda({
+        resposta = await atenderDemandaLifplan({
           demandaTexto: textoParaEnviar,
           usuarioId: perfil?.id,
           organizacaoId: perfil?.organizacao_id ?? null,
@@ -94,7 +85,7 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
         })
         if (!casoAtualId) setCasoAtualId(resposta.caso.id)
       } else {
-        resposta = await atenderConsultaRapida({
+        resposta = await atenderConsultaRapidaLifplan({
           demandaTexto: textoParaEnviar,
           usuarioId: perfil?.id,
           organizacaoId: perfil?.organizacao_id ?? null,
@@ -110,12 +101,6 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
         ...msgs,
         { autor: 'especialista', texto: resposta.resposta.textoCompleto, criadoEm: new Date().toISOString() },
       ])
-      setUltimoContexto({
-        playbook: resposta.playbookUtilizado,
-        modelosRaciocinio: resposta.modelosRaciocinio,
-        regulamentacaoAplicavel: resposta.regulamentacaoAplicavel,
-        casosRelacionados: resposta.casosRelacionados,
-      })
 
       if (!modoDemanda && resposta.especialistaSugerido) {
         setEspecialistaSugerido({ modulo: resposta.especialistaSugerido, pergunta: textoEnviado })
@@ -142,14 +127,14 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
     janela.document.write(`
       <html>
         <head>
-          <title>Conversa com o Especialista de Saúde</title>
+          <title>Conversa com o Especialista LifPlan</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; max-width: 700px; margin: 0 auto; }
             h1 { font-size: 18px; color: #0e2a3d; }
           </style>
         </head>
         <body>
-          <h1>Especialista de Saúde — Registro da Conversa</h1>
+          <h1>Especialista LifPlan — Registro da Conversa</h1>
           <p style="color:#666; font-size:12px;">Impresso em ${new Date().toLocaleString('pt-BR')}</p>
           <hr />
           ${conteudoHtml}
@@ -162,7 +147,7 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
   }
 
   async function handleEncerrar() {
-    if (casoAtualId) await encerrarConversa(casoAtualId)
+    if (casoAtualId) await encerrarConversaLifplan(casoAtualId)
     setConversaEncerrada(true)
   }
 
@@ -176,7 +161,7 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
   return (
     <div className="especialista-container especialista-chat-container">
       <div className="especialista-chat-header">
-        <h2>Especialista de Saúde</h2>
+        <h2>Especialista LifPlan</h2>
       </div>
 
       <div className="especialista-chat-corpo">
@@ -211,12 +196,6 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
 
         <div ref={fimDoChatRef} />
       </div>
-
-      {ultimoContexto?.regulamentacaoAplicavel && (
-        <div className="especialista-regulamentacao">
-          📘 Regulamentação consultada: <strong>{ultimoContexto.regulamentacaoAplicavel.codigo} — {ultimoContexto.regulamentacaoAplicavel.titulo}</strong>
-        </div>
-      )}
 
       {especialistaSugerido && onSolicitarTroca && (
         <div className="especialista-sugestao-troca">
@@ -255,7 +234,7 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
             {mensagens.length > 0 && (
               <button className="especialista-icone-btn" onClick={handleImprimir} title="Imprimir conversa">🖨️</button>
             )}
-            <label className="especialista-icone-btn" title="Anexar exame, negativa ou documento">
+            <label className="especialista-icone-btn" title="Anexar documento">
               📎
               <input
                 type="file"
@@ -292,7 +271,7 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
       )}
 
       {mostrarVincular && (
-        <VincularClienteModal
+        <VincularClienteLifplanModal
           consultaId={consultaAtualId}
           usuarioId={perfil?.id}
           organizacaoId={perfil?.organizacao_id}
@@ -314,14 +293,14 @@ export default function EspecialistaSaude({ clienteProspectIdInicial = null, cas
   )
 }
 
-function VincularClienteModal({ consultaId, usuarioId, organizacaoId, onFechar, onVinculado }) {
+function VincularClienteLifplanModal({ consultaId, usuarioId, organizacaoId, onFechar, onVinculado }) {
   const [busca, setBusca] = useState('')
   const [clientes, setClientes] = useState([])
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState(null)
 
   useEffect(() => {
-    listarClientesProspects({ mostrarFuturas: true }).then(setClientes)
+    listarClientesProspects({ mostrarFuturas: true, modulo: 'lifplan' }).then(setClientes)
   }, [])
 
   const filtrados = clientes.filter((c) => c.razao_social?.toLowerCase().includes(busca.toLowerCase()))
@@ -330,7 +309,7 @@ function VincularClienteModal({ consultaId, usuarioId, organizacaoId, onFechar, 
     setCarregando(true)
     setErro(null)
     try {
-      const novoCaso = await vincularConsultaComoDemanda({
+      const novoCaso = await vincularConsultaComoDemandaLifplan({
         consultaId,
         clienteProspectId: clienteId,
         organizacaoId,
@@ -352,7 +331,7 @@ function VincularClienteModal({ consultaId, usuarioId, organizacaoId, onFechar, 
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder="Buscar cliente por nome..."
-          style={{ width: '100%', padding: '0.5rem 0.65rem', marginBottom: '0.75rem' }}
+          style={{ marginBottom: '0.75rem' }}
         />
         <div className="especialista-lista-clientes">
           {filtrados.map((c) => (

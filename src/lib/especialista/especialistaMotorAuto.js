@@ -102,11 +102,13 @@ rodas. Se a Biblioteca não tiver uma tabela específica de tarifação de moto,
 princípios gerais de seguro de veículo que já domina (perfil de risco, sinistro, cobertura, franquia,
 comparação entre seguradoras) e é transparente sobre não ter o número exato na mão — mas nunca declina
 o assunto inteiro. Você NÃO é especialista em plano de saúde/
-odontológico (módulo LifCare) nem em Vida, Patrimonial, Transportes, Responsabilidade Civil e demais
-Seguros Gerais (módulo LifSure). Se a pergunta do corretor for claramente sobre outro ramo, NÃO tente
-responder usando conhecimento geral — diga com clareza que isso está fora do seu domínio (Auto/Frota)
-e oriente o corretor a usar o Especialista correto para aquele ramo. Não invente uma resposta só
-porque você "sabe" algo sobre o assunto de forma genérica — sua responsabilidade técnica é estritamente
+odontológico (módulo LifCare), Vida, Patrimonial, Transportes, Responsabilidade Civil e demais
+Seguros Gerais (módulo LifSure), nem Planejamento Patrimonial — consórcio, financiamento, empréstimo,
+investimento, previdência, gestão empresarial (módulo LifPlan). Se a pergunta do corretor for
+claramente sobre outro ramo, NÃO tente responder usando conhecimento geral — diga com clareza que isso
+está fora do seu domínio (Auto/Frota) e oriente o corretor a usar o Especialista correto para aquele
+ramo. Não invente uma resposta só porque você "sabe" algo sobre o assunto de forma genérica — sua
+responsabilidade técnica é estritamente
 Auto e Frota (incluindo moto). **Sempre que isso acontecer, você DEVE também preencher o campo ESPECIALISTA_SUGERIDO no
 cabeçalho da resposta com a palavra exata "saude" ou "lifsure" (sem aspas, sem markdown), conforme o
 caso — a explicação em texto sozinha não é suficiente, o campo precisa vir preenchido junto.**
@@ -125,7 +127,7 @@ Responda EXATAMENTE neste formato, sem markdown ao redor, sem texto antes do cab
 CATEGORIA: Comercial | Apólices | Sinistro | Ressarcimento | Regulamentação
 SUBCATEGORIA: string curta descrevendo o assunto
 PRECISA_MAIS_INFORMACAO: true ou false
-ESPECIALISTA_SUGERIDO: escreva exatamente a palavra "null" (sem aspas, sem markdown), ou "saude" (Plano de Saúde/Odontológico) ou "lifsure" (Vida, Patrimonial, RC, Transportes e demais Seguros Gerais), conforme o caso. Nada mais nessa linha.
+ESPECIALISTA_SUGERIDO: escreva exatamente a palavra "null" (sem aspas, sem markdown), ou "saude" (Plano de Saúde/Odontológico), "lifsure" (Vida, Patrimonial, RC, Transportes e demais Seguros Gerais) ou "lifplan" (consórcio, financiamento, empréstimo, investimento, previdência), conforme o caso. Nada mais nessa linha.
 ---RESPOSTA---
 Sua resposta completa em português vem aqui, livre — pode ter parágrafos, quebras de linha, listas,
 emojis, à vontade, sem nenhuma restrição de formato. Siga as 5 etapas do seu modelo cognitivo de forma
@@ -162,7 +164,9 @@ pergunta(s) essencial(is) para ESSE caso. Preço nunca deve ser o único critér
       ? 'saude'
       : /especialista\s+(lifsure|d[eo]\s+seguros?\s+gerais)/i.test(respostaTextoSemFormatacao)
         ? 'lifsure'
-        : null)
+        : /especialista\s+(lifplan|d[eo]\s+planejamento\s+patrimonial)/i.test(respostaTextoSemFormatacao)
+          ? 'lifplan'
+          : null)
 
   return {
     categoria: parsed.categoria,
@@ -199,12 +203,13 @@ function parsearRespostaComSeparador(textoBruto) {
   const especialistaSugeridoBruto = extrairCampo('ESPECIALISTA_SUGERIDO') ?? ''
   const matchSaude = /\bsa[uú]de\b/i.test(especialistaSugeridoBruto)
   const matchLifsure = /\blifsure\b/i.test(especialistaSugeridoBruto)
+  const matchLifplan = /\blifplan\b/i.test(especialistaSugeridoBruto)
 
   return {
     categoria: extrairCampo('CATEGORIA'),
     subcategoria: extrairCampo('SUBCATEGORIA'),
     precisaMaisInformacao: (extrairCampo('PRECISA_MAIS_INFORMACAO') ?? '').toLowerCase() === 'true',
-    especialistaSugerido: matchSaude ? 'saude' : matchLifsure ? 'lifsure' : null,
+    especialistaSugerido: matchSaude ? 'saude' : matchLifsure ? 'lifsure' : matchLifplan ? 'lifplan' : null,
     resposta,
   }
 }

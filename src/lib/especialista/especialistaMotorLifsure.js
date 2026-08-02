@@ -102,11 +102,13 @@ substância é desperdício de tempo do corretor e de custo de processamento.
 ## Limite de escopo — importante
 Você é especialista em Seguros Gerais (Vida, Patrimonial, Transportes, Responsabilidade Civil e
 demais ramos do catálogo LifSure), ponto. Você NÃO é especialista em Plano de Saúde/Odontológico
-(módulo LifCare) nem em Seguro Auto/Frota (módulo Lifleet). Se a pergunta for claramente sobre um
-desses outros ramos, NÃO tente responder usando conhecimento geral — diga com clareza que está fora
-do seu domínio. **Sempre que isso acontecer, você DEVE também preencher o campo ESPECIALISTA_SUGERIDO
-no cabeçalho da resposta** com a palavra exata "saude" ou "auto" (sem aspas, sem markdown) — a
-explicação em texto sozinha não é suficiente, o campo precisa vir preenchido junto.
+(módulo LifCare), Seguro Auto/Frota (módulo Lifleet), nem Planejamento Patrimonial — consórcio,
+financiamento, empréstimo, investimento, previdência, gestão empresarial (módulo LifPlan). Se a
+pergunta for claramente sobre um desses outros ramos, NÃO tente responder usando conhecimento geral —
+diga com clareza que está fora do seu domínio. **Sempre que isso acontecer, você DEVE também preencher
+o campo ESPECIALISTA_SUGERIDO no cabeçalho da resposta** com a palavra exata "saude", "auto" ou
+"lifplan" (sem aspas, sem markdown), conforme o caso — a explicação em texto sozinha não é suficiente,
+o campo precisa vir preenchido junto.
 
 ## Biblioteca LifSure relevante para esta demanda (fonte PRINCIPAL — tem mais peso que os casos abaixo)
 ${blocoBiblioteca || '(nenhum documento especialmente relevante encontrado — responda com cautela e diga isso se for o caso)'}
@@ -122,7 +124,7 @@ Responda EXATAMENTE neste formato, sem markdown ao redor, sem texto antes do cab
 CATEGORIA: Consultivo | Técnico | Comercial | Sinistro | Subscrição
 SUBCATEGORIA: string curta descrevendo o assunto
 PRECISA_MAIS_INFORMACAO: true ou false
-ESPECIALISTA_SUGERIDO: escreva exatamente a palavra "null" (sem aspas, sem markdown), ou "saude"/"auto" se for claramente o caso
+ESPECIALISTA_SUGERIDO: escreva exatamente a palavra "null" (sem aspas, sem markdown), ou "saude"/"auto"/"lifplan" se for claramente o caso
 ---RESPOSTA---
 Sua resposta completa em português vem aqui, livre — pode ter parágrafos, quebras de linha, listas,
 emojis, à vontade, sem nenhuma restrição de formato. Siga seu Sistema Cognitivo de forma natural (sem
@@ -153,7 +155,9 @@ essencial(is) para ESSE caso.`
       ? 'saude'
       : /especialista\s+d[eo]\s+auto/i.test(respostaTextoSemFormatacao)
         ? 'auto'
-        : null)
+        : /especialista\s+(lifplan|d[eo]\s+planejamento\s+patrimonial)/i.test(respostaTextoSemFormatacao)
+          ? 'lifplan'
+          : null)
 
   return {
     categoria: parsed.categoria,
@@ -189,12 +193,13 @@ function parsearRespostaComSeparador(textoBruto) {
   const especialistaSugeridoBruto = extrairCampo('ESPECIALISTA_SUGERIDO') ?? ''
   const matchSaude = /\bsa[uú]de\b/i.test(especialistaSugeridoBruto)
   const matchAuto = /\bauto\b/i.test(especialistaSugeridoBruto)
+  const matchLifplan = /\blifplan\b/i.test(especialistaSugeridoBruto)
 
   return {
     categoria: extrairCampo('CATEGORIA'),
     subcategoria: extrairCampo('SUBCATEGORIA'),
     precisaMaisInformacao: (extrairCampo('PRECISA_MAIS_INFORMACAO') ?? '').toLowerCase() === 'true',
-    especialistaSugerido: matchSaude ? 'saude' : matchAuto ? 'auto' : null,
+    especialistaSugerido: matchSaude ? 'saude' : matchAuto ? 'auto' : matchLifplan ? 'lifplan' : null,
     resposta,
   }
 }
