@@ -58,6 +58,14 @@ export async function reativarSeguradora(id) {
   await atualizarSeguradora(id, { ativo: true })
 }
 
+/** Exclui definitivamente uma seguradora (uso em fase de testes — gestores
+ * vinculados são removidos em cascata; falha se houver conexao_operadora
+ * já vinculada a ela via seguradora_id) */
+export async function excluirSeguradora(id) {
+  const { error } = await operacional.from('seguradoras').delete().eq('id', id)
+  if (error) throw new Error(`Erro ao excluir seguradora: ${error.message}`)
+}
+
 /** Cria ou atualiza o gestor de um módulo específico (1 por módulo, por seguradora) */
 export async function upsertGestorModulo({ seguradoraId, modulo, nome, telefone, whatsapp, email, observacoes }) {
   const { data, error } = await operacional
