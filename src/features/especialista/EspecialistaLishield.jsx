@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import { atenderDemandaLifplan, buscarHistoricoChatLifplan, encerrarConversaLifplan } from '../../lib/especialista/especialistaLifplan'
-import { atenderConsultaRapidaLifplan, vincularConsultaComoDemandaLifplan } from '../../lib/especialista/consultaRapidaLifplan'
+import { atenderDemandaLishield, buscarHistoricoChatLishield, encerrarConversaLishield } from '../../lib/especialista/especialistaLishield'
+import { atenderConsultaRapidaLishield, vincularConsultaComoDemandaLishield } from '../../lib/especialista/consultaRapidaLishield'
 import { listarClientesProspects } from '../../lib/crm/clientesService'
 import { enviarAnexo, ehArquivoDeTexto, lerConteudoTexto } from '../../lib/especialista/uploadService'
 import { renderizarTextoComMarkdown } from '../../lib/utils/renderizarMarkdown'
@@ -18,7 +18,7 @@ function escaparEConverterNegrito(texto) {
   return escapado.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
 }
 
-export default function EspecialistaLifplan({ clienteProspectIdInicial = null, casoIdContinuacao = null, perguntaInicial = null, onSolicitarTroca = null }) {
+export default function EspecialistaLishield({ clienteProspectIdInicial = null, casoIdContinuacao = null, perguntaInicial = null, onSolicitarTroca = null }) {
   const { perfil } = useAuth()
   const modoDemanda = !!clienteProspectIdInicial || !!casoIdContinuacao
 
@@ -41,7 +41,7 @@ export default function EspecialistaLifplan({ clienteProspectIdInicial = null, c
 
   useEffect(() => {
     if (casoIdContinuacao) {
-      buscarHistoricoChatLifplan(casoIdContinuacao)
+      buscarHistoricoChatLishield(casoIdContinuacao)
         .then((historico) => setMensagens(historico))
         .finally(() => setCarregandoHistorico(false))
     }
@@ -75,7 +75,7 @@ export default function EspecialistaLifplan({ clienteProspectIdInicial = null, c
 
       let resposta
       if (modoDemanda) {
-        resposta = await atenderDemandaLifplan({
+        resposta = await atenderDemandaLishield({
           demandaTexto: textoParaEnviar,
           usuarioId: perfil?.id,
           organizacaoId: perfil?.organizacao_id ?? null,
@@ -85,7 +85,7 @@ export default function EspecialistaLifplan({ clienteProspectIdInicial = null, c
         })
         if (!casoAtualId) setCasoAtualId(resposta.caso.id)
       } else {
-        resposta = await atenderConsultaRapidaLifplan({
+        resposta = await atenderConsultaRapidaLishield({
           demandaTexto: textoParaEnviar,
           usuarioId: perfil?.id,
           organizacaoId: perfil?.organizacao_id ?? null,
@@ -127,14 +127,14 @@ export default function EspecialistaLifplan({ clienteProspectIdInicial = null, c
     janela.document.write(`
       <html>
         <head>
-          <title>Conversa com o Especialista LifPlan</title>
+          <title>Conversa com o Especialista LiShield</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; max-width: 700px; margin: 0 auto; }
             h1 { font-size: 18px; color: #0e2a3d; }
           </style>
         </head>
         <body>
-          <h1>Especialista LifPlan — Registro da Conversa</h1>
+          <h1>Especialista LiShield — Registro da Conversa</h1>
           <p style="color:#666; font-size:12px;">Impresso em ${new Date().toLocaleString('pt-BR')}</p>
           <hr />
           ${conteudoHtml}
@@ -147,7 +147,7 @@ export default function EspecialistaLifplan({ clienteProspectIdInicial = null, c
   }
 
   async function handleEncerrar() {
-    if (casoAtualId) await encerrarConversaLifplan(casoAtualId)
+    if (casoAtualId) await encerrarConversaLishield(casoAtualId)
     setConversaEncerrada(true)
   }
 
@@ -161,7 +161,7 @@ export default function EspecialistaLifplan({ clienteProspectIdInicial = null, c
   return (
     <div className="especialista-container especialista-chat-container">
       <div className="especialista-chat-header">
-        <h2>Especialista LifPlan</h2>
+        <h2>Especialista LiShield</h2>
       </div>
 
       <div className="especialista-chat-corpo">
@@ -271,7 +271,7 @@ export default function EspecialistaLifplan({ clienteProspectIdInicial = null, c
       )}
 
       {mostrarVincular && (
-        <VincularClienteLifplanModal
+        <VincularClienteLishieldModal
           consultaId={consultaAtualId}
           usuarioId={perfil?.id}
           organizacaoId={perfil?.organizacao_id}
@@ -293,14 +293,14 @@ export default function EspecialistaLifplan({ clienteProspectIdInicial = null, c
   )
 }
 
-function VincularClienteLifplanModal({ consultaId, usuarioId, organizacaoId, onFechar, onVinculado }) {
+function VincularClienteLishieldModal({ consultaId, usuarioId, organizacaoId, onFechar, onVinculado }) {
   const [busca, setBusca] = useState('')
   const [clientes, setClientes] = useState([])
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState(null)
 
   useEffect(() => {
-    listarClientesProspects({ mostrarFuturas: true, modulo: 'lifplan' }).then(setClientes)
+    listarClientesProspects({ mostrarFuturas: true, modulo: 'lishield' }).then(setClientes)
   }, [])
 
   const filtrados = clientes.filter((c) => c.razao_social?.toLowerCase().includes(busca.toLowerCase()))
@@ -309,7 +309,7 @@ function VincularClienteLifplanModal({ consultaId, usuarioId, organizacaoId, onF
     setCarregando(true)
     setErro(null)
     try {
-      const novoCaso = await vincularConsultaComoDemandaLifplan({
+      const novoCaso = await vincularConsultaComoDemandaLishield({
         consultaId,
         clienteProspectId: clienteId,
         organizacaoId,

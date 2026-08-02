@@ -3,12 +3,14 @@ import EspecialistaSaude from '../features/especialista/EspecialistaSaude'
 import EspecialistaAuto from '../features/especialista/EspecialistaAuto'
 import EspecialistaLifsure from '../features/especialista/EspecialistaLifsure'
 import EspecialistaLifplan from '../features/especialista/EspecialistaLifplan'
+import EspecialistaLishield from '../features/especialista/EspecialistaLishield'
 
 const ROTULOS = {
   saude: 'Especialista de Saúde',
   auto: 'Especialista de Auto/Frota',
   lifsure: 'Especialista LifSure',
   lifplan: 'Especialista LifPlan',
+  lishield: 'Especialista LiShield',
 }
 
 const COMPONENTES = {
@@ -16,6 +18,7 @@ const COMPONENTES = {
   auto: EspecialistaAuto,
   lifsure: EspecialistaLifsure,
   lifplan: EspecialistaLifplan,
+  lishield: EspecialistaLishield,
 }
 
 /**

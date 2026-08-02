@@ -27,8 +27,12 @@ export const CATEGORIAS_LISHIELD = [
     produtos: ['RC Geral', 'RC Profissional', 'RC Operações', 'RC Produtos'],
   },
   {
-    categoria: 'Seguro Garantia',
+    categoria: 'Garantia',
     produtos: ['Seguro Garantia', 'Garantia Judicial', 'Garantia Aduaneira', 'Garantia Licitante', 'Garantia Executante', 'Garantia Performance', 'Garantia Retenção de Pagamento', 'Garantia Concessões', 'Garantia Administrativa'],
+  },
+  {
+    categoria: 'Crédito e Fiança',
+    produtos: ['Seguro Fiança', 'Fiança Locatícia', 'Fiança Contratual', 'Crédito Interno', 'Crédito à Exportação', 'Crédito Comercial'],
   },
   {
     categoria: 'Linhas Financeiras',
@@ -36,11 +40,7 @@ export const CATEGORIAS_LISHIELD = [
   },
   {
     categoria: 'Seguros de Engenharia',
-    produtos: ['Riscos de Engenharia', 'Obras Civis em Construção (OCC)', 'Obras Civis em Instalação e Montagem (EAR)', 'Quebra de Máquinas', 'Equipamentos Eletrônicos', 'Equipamentos Estacionários', 'Equipamentos Industriais'],
-  },
-  {
-    categoria: 'Crédito e Garantias Especializadas',
-    produtos: ['Crédito Interno', 'Crédito à Exportação', 'Crédito Comercial', 'Fiança Locatícia', 'Fiança Contratual'],
+    produtos: ['Seguro de Engenharia', 'Riscos de Engenharia', 'Obras Civis em Construção (OCC)', 'Obras Civis em Instalação e Montagem (EAR)', 'Quebra de Máquinas', 'Equipamentos Eletrônicos', 'Equipamentos Estacionários', 'Equipamentos Industriais'],
   },
   {
     categoria: 'Seguro Cyber',

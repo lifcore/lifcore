@@ -11,34 +11,36 @@ import { atualizarClienteProspect, atualizarStatusClienteProspect } from './clie
  */
 export const CATEGORIAS_LIFSURE = [
   {
-    categoria: 'Vida',
-    produtos: ['Seguro de Vida Individual', 'Seguro de Vida Empresarial (Global)'],
-  },
-  {
-    categoria: 'Patrimonial',
-    produtos: ['Seguro Empresarial'],
-  },
-  {
-    categoria: 'Transportes',
+    categoria: 'Vida e Pessoas',
     produtos: [
-      'Seguro Transporte Nacional',
-      'RCTR-C',
-      'RC-DC',
-      'RC-V',
-      'Seguro de Transporte Internacional',
-      'Programa de Gerenciamento de Riscos (PGR)',
-      'Averbação Eletrônica',
-      'Dispensa do Direito de Regresso (DDR)',
-      'Gerenciamento de Riscos em Transportes',
+      'Seguro de Vida Individual',
+      'Seguro de Vida Empresarial (Global)',
+      'Acidentes Pessoais (AP)',
+      'Prestamista',
+      'Seguro Viagem',
+      'Doenças Graves',
+      'Diária por Incapacidade Temporária (DIT)',
+      'Diária por Internação Hospitalar (DIH)',
+      'Assistência Funeral',
+      'Renda por Incapacidade',
     ],
   },
   {
-    categoria: 'Responsabilidade Civil',
-    produtos: ['RC Geral', 'RC Profissional', 'RC Operações', 'RC Produtos'],
+    categoria: 'Patrimonial',
+    produtos: ['Seguro Residencial', 'Seguro Condomínio', 'Seguro Empresarial Tradicional'],
   },
   {
-    categoria: 'Outros Ramos',
-    produtos: ['Seguro Prestamista', 'Seguro Garantia', 'Seguro Fiança', 'Seguro Celular', 'Acidentes Pessoais'],
+    categoria: 'Afinidade e Equipamentos',
+    produtos: [
+      'Seguro Celular',
+      'Seguro Notebook',
+      'Seguro Tablet',
+      'Seguro Smartwatch',
+      'Seguro Câmeras Fotográficas',
+      'Seguro Equipamentos Portáteis',
+      'Seguro Bike',
+      'Seguro Pet',
+    ],
   },
 ]
 

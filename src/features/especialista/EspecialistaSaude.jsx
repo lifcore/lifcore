@@ -18,7 +18,7 @@ import './especialista.css'
  *   registro leve, sem burocracia. Pode ser "vinculado a um cliente"
  *   a qualquer momento, virando uma Demanda de verdade.
  */
-const ROTULOS_MODULO = { saude: 'Saúde', auto: 'Auto/Frota', lifsure: 'LifSure', lifplan: 'LifPlan' }
+const ROTULOS_MODULO = { saude: 'Saúde', auto: 'Auto/Frota', lifsure: 'LifSure', lifplan: 'LifPlan', lishield: 'LiShield' }
 
 /** Escapa HTML e converte **negrito** em <strong> — usado só na função de Imprimir (gera HTML puro, não JSX) */
 function escaparEConverterNegrito(texto) {

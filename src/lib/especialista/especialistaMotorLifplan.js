@@ -90,11 +90,12 @@ completo. Diagnóstico ou estratégia de verdade → aí sim vale seguir o Méto
 ## Limite de escopo — importante
 Você é especialista em Planejamento Patrimonial (consórcio, financiamento, empréstimo, investimento,
 previdência, gestão empresarial), ponto. Você NÃO é especialista em Plano de Saúde/Odontológico
-(LifCare), Seguro Auto/Frota (Lifleet) nem Seguros Gerais — Vida, Patrimonial, RC, Transportes
-(LifSure). Se a pergunta for claramente sobre um desses outros ramos, NÃO tente responder usando
-conhecimento geral — diga com clareza que está fora do seu domínio e sinalize isso no campo
-ESPECIALISTA_SUGERIDO do cabeçalho, com a palavra exata "saude", "auto" ou "lifsure" (sem aspas, sem
-markdown), conforme o caso.
+(LifCare), Seguro Auto/Frota (Lifleet), Seguros Gerais tradicionais — Vida, Patrimonial, Afinidade
+(LifSure) nem Seguros Técnicos e Linhas Corporativas — Transportes, RC, Garantia, Linhas Financeiras,
+Engenharia, Cyber (LiShield). Se a pergunta for claramente sobre um desses outros ramos, NÃO tente
+responder usando conhecimento geral — diga com clareza que está fora do seu domínio e sinalize isso no
+campo ESPECIALISTA_SUGERIDO do cabeçalho, com a palavra exata "saude", "auto", "lifsure" ou "lishield"
+(sem aspas, sem markdown), conforme o caso.
 
 ## Biblioteca LifPlan relevante para esta demanda (fonte PRINCIPAL — tem mais peso que os casos abaixo)
 ${blocoBiblioteca || '(nenhum documento especialmente relevante encontrado — responda com cautela e diga isso se for o caso)'}
@@ -110,7 +111,7 @@ Responda EXATAMENTE neste formato, sem markdown ao redor, sem texto antes do cab
 CATEGORIA: Consultivo | Técnico | Comercial | Risco | Auditoria
 SUBCATEGORIA: string curta descrevendo o assunto
 PRECISA_MAIS_INFORMACAO: true ou false
-ESPECIALISTA_SUGERIDO: escreva exatamente a palavra "null" (sem aspas, sem markdown), ou "saude"/"auto"/"lifsure" conforme o caso. Nada mais nessa linha.
+ESPECIALISTA_SUGERIDO: escreva exatamente a palavra "null" (sem aspas, sem markdown), ou "saude"/"auto"/"lifsure"/"lishield" conforme o caso. Nada mais nessa linha.
 ---RESPOSTA---
 Sua resposta completa em português vem aqui, livre — pode ter parágrafos, quebras de linha, listas,
 emojis, à vontade, sem nenhuma restrição de formato. Siga sua Constituição Cognitiva de forma natural
@@ -143,7 +144,9 @@ essencial(is) para ESSE caso.`
         ? 'saude'
         : /especialista\s+(lifsure|d[eo]\s+seguros?\s+gerais)/i.test(respostaTextoSemFormatacao)
           ? 'lifsure'
-          : null)
+          : /especialista\s+(lishield|d[eo]\s+seguros?\s+t[eé]cnicos)/i.test(respostaTextoSemFormatacao)
+            ? 'lishield'
+            : null)
 
   return {
     categoria: parsed.categoria,
@@ -179,12 +182,13 @@ function parsearRespostaComSeparador(textoBruto) {
   const matchSaude = /\bsa[uú]de\b/i.test(especialistaSugeridoBruto)
   const matchAuto = /\bauto\b/i.test(especialistaSugeridoBruto)
   const matchLifsure = /\blifsure\b/i.test(especialistaSugeridoBruto)
+  const matchLishield = /\blishield\b/i.test(especialistaSugeridoBruto)
 
   return {
     categoria: extrairCampo('CATEGORIA'),
     subcategoria: extrairCampo('SUBCATEGORIA'),
     precisaMaisInformacao: (extrairCampo('PRECISA_MAIS_INFORMACAO') ?? '').toLowerCase() === 'true',
-    especialistaSugerido: matchSaude ? 'saude' : matchAuto ? 'auto' : matchLifsure ? 'lifsure' : null,
+    especialistaSugerido: matchSaude ? 'saude' : matchAuto ? 'auto' : matchLifsure ? 'lifsure' : matchLishield ? 'lishield' : null,
     resposta,
   }
 }
