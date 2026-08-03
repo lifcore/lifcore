@@ -8,6 +8,7 @@ const ITENS = [
   { path: '/mensagens', icone: '💬', titulo: 'Mensagens Padrão' },
   { path: '/financeiro', icone: '💰', titulo: 'Financeiro', somenteMasterAdmin: true },
   { path: '/claims', icone: '🗂️', titulo: 'Claims Center' },
+  { path: '/growth', icone: '📈', titulo: 'Growth Center' },
   { path: '/auditoria', icone: '🕵️', titulo: 'Auditoria', somenteMasterAdmin: true },
   { path: '/configuracoes', icone: '⚙️', titulo: 'Configurações', somenteMasterAdmin: true },
 ]
