@@ -1,134 +1,266 @@
-import { operacional } from '../supabaseSchemas'
+import { useEffect, useState } from 'react'
+import '../../styles/centers.css'
+import { Link } from 'react-router-dom'
+import {
+  listarCarteiraConsolidada,
+  obterAgendaComercial,
+  obterIndicadoresComerciais,
+  obterPainelCorretor,
+} from '../../lib/crm/growthService'
+import { listarCorretores } from '../../lib/crm/apolicesService'
+import { useAuth } from '../auth/AuthContext'
+import { formatarDataBR } from '../../lib/utils/formatarData'
 
-/**
- * Growth Center v1 — Customer Journey & Pipeline Hub.
- *
- * Fortalece 2 Engines constitucionais (CRM & Customer Journey, Pipeline
- * Management) reaproveitando exclusivamente `clientes_prospects`, que
- * já é compartilhada pelos 5 Workspaces. Zero tabela nova.
- *
- * LIMITAÇÃO ASSUMIDA CONSCIENTEMENTE (decisão do Chief, registrada):
- * métricas que dependem de HISTÓRICO de transição de status (tempo
- * médio por etapa, conversão Prospect→Cliente, Timeline comercial de
- * múltiplos estágios) NÃO são calculadas aqui — a plataforma hoje só
- * guarda o status ATUAL de cada cliente, não guarda quando ele mudou
- * de etapa. Calcular isso exigiria um histórico que ainda não existe
- * (futuro "Commercial Event History", fora desta Sprint por decisão
- * consciente — não criar tabela só pra alimentar dashboard).
- */
+const MODULOS = [
+  { id: 'saude', label: 'Lifcare' }, { id: 'auto', label: 'Lifleet' }, { id: 'lifsure', label: 'LifSure' },
+  { id: 'lishield', label: 'LiShield' }, { id: 'lifplan', label: 'LifPlan' },
+]
+const STATUS_LABEL = { prospect: 'Prospect', em_negociacao: 'Em Negociação', cliente: 'Cliente Ativo' }
 
-const MODULOS = ['saude', 'auto', 'lifsure', 'lishield', 'lifplan']
+export default function GrowthCenterPage() {
+  const { perfil } = useAuth()
+  const ehMaster = perfil?.papel === 'master'
+  const [abaAtiva, setAbaAtiva] = useState('central')
 
-const MODULO_ROTA_CLIENTE = {
-  saude: '/clientes', auto: '/lifleet/clientes', lifsure: '/lifsure/clientes',
-  lishield: '/lishield/clientes', lifplan: '/lifplan/clientes',
-}
-const MODULO_ROTA_PIPELINE = {
-  saude: '/', auto: '/lifleet', lifsure: '/lifsure', lishield: '/lishield', lifplan: '/lifplan',
-}
+  return (
+    <div className="config-page">
+      <h2>Growth Center — Customer Journey & Pipeline Hub</h2>
+      <p className="config-instrucao">
+        Consolida CRM e Pipeline dos 5 Workspaces (já compartilham a mesma base — só faltava a visão única).
+        Campanhas, Ads e automações externas seguem congeladas até o Connect Center ser homologado.
+      </p>
 
-/**
- * Carteira consolidada — todos os clientes/prospects ativos (exclui
- * inativos), com sinalizadores derivados do estado atual: próxima ação
- * atrasada, sem próxima ação definida, rota de origem.
- */
-export async function listarCarteiraConsolidada({ corretorId, modulo, status } = {}) {
-  let query = operacional.from('clientes_prospects').select('*').neq('status', 'inativo')
-  if (corretorId) query = query.eq('corretor_id', corretorId)
-  if (modulo) query = query.eq('modulo', modulo)
-  if (status) query = query.eq('status', status)
+      <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
+        <button className={`cliente-aba ${abaAtiva === 'central' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('central')}>Central</button>
+        <button className={`cliente-aba ${abaAtiva === 'agenda' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('agenda')}>Agenda Comercial</button>
+        <button className={`cliente-aba ${abaAtiva === 'meupainel' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('meupainel')}>{ehMaster ? 'Painel do Corretor' : 'Meu Painel'}</button>
+      </div>
 
-  const { data, error } = await query
-  if (error) throw new Error(`Erro ao listar carteira: ${error.message}`)
-
-  const hoje = new Date().toISOString().slice(0, 10)
-  return (data ?? []).map((c) => ({
-    ...c,
-    proximaAcaoAtrasada: c.proxima_acao_data ? c.proxima_acao_data < hoje : false,
-    semProximaAcao: !c.proxima_acao_data,
-    rotaCliente: `${MODULO_ROTA_CLIENTE[c.modulo] ?? '/clientes'}/${c.id}`,
-    rotaPipeline: MODULO_ROTA_PIPELINE[c.modulo] ?? '/',
-  }))
+      {abaAtiva === 'central' && <CentralTab />}
+      {abaAtiva === 'agenda' && <AgendaTab />}
+      {abaAtiva === 'meupainel' && <PainelCorretorTab perfil={perfil} ehMaster={ehMaster} />}
+    </div>
+  )
 }
 
-/**
- * Agenda Comercial — agrupa por urgência da próxima ação (não por
- * histórico, só pela data já cadastrada em cada cliente): atrasados,
- * hoje, esta semana, próximos 30 dias, sem ação definida.
- */
-export async function obterAgendaComercial({ corretorId } = {}) {
-  const carteira = await listarCarteiraConsolidada({ corretorId })
+function CentralTab() {
+  const [indicadores, setIndicadores] = useState(null)
+  const [carteira, setCarteira] = useState(null)
+  const [filtroStatus, setFiltroStatus] = useState('')
+  const [filtroModulo, setFiltroModulo] = useState('')
+  const [carregando, setCarregando] = useState(true)
 
-  const hoje = new Date()
-  const hojeStr = hoje.toISOString().slice(0, 10)
-  const em7dias = new Date(hoje.getTime() + 7 * 86400000).toISOString().slice(0, 10)
-  const em30dias = new Date(hoje.getTime() + 30 * 86400000).toISOString().slice(0, 10)
+  useEffect(() => {
+    carregar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroStatus, filtroModulo])
 
-  const comAcao = carteira.filter((c) => c.proxima_acao_data)
-
-  return {
-    atrasados: comAcao.filter((c) => c.proxima_acao_data < hojeStr),
-    hoje: comAcao.filter((c) => c.proxima_acao_data === hojeStr),
-    estaSemana: comAcao.filter((c) => c.proxima_acao_data > hojeStr && c.proxima_acao_data <= em7dias),
-    proximos30Dias: comAcao.filter((c) => c.proxima_acao_data > em7dias && c.proxima_acao_data <= em30dias),
-    semAcaoDefinida: carteira.filter((c) => c.semProximaAcao),
-  }
-}
-
-/**
- * Indicadores comerciais — todos deriváveis do estado ATUAL da
- * carteira (Grupo A, conforme decisão do Chief). Não inclui conversão
- * por etapa nem tempo médio — ver nota no topo do arquivo.
- */
-export async function obterIndicadoresComerciais({ modulo } = {}) {
-  const carteira = await listarCarteiraConsolidada({ modulo })
-
-  const porStatus = { prospect: 0, em_negociacao: 0, cliente: 0 }
-  const porModulo = Object.fromEntries(MODULOS.map((m) => [m, 0]))
-  let semCorretor = 0
-  let semProximaAcao = 0
-  let atrasados = 0
-
-  for (const c of carteira) {
-    if (porStatus[c.status] !== undefined) porStatus[c.status]++
-    if (porModulo[c.modulo] !== undefined) porModulo[c.modulo]++
-    if (!c.corretor_id) semCorretor++
-    if (c.semProximaAcao) semProximaAcao++
-    if (c.proximaAcaoAtrasada) atrasados++
+  async function carregar() {
+    setCarregando(true)
+    const [ind, lista] = await Promise.all([
+      obterIndicadoresComerciais({ modulo: filtroModulo || undefined }),
+      listarCarteiraConsolidada({ status: filtroStatus || undefined, modulo: filtroModulo || undefined }),
+    ])
+    setIndicadores(ind)
+    setCarteira(lista)
+    setCarregando(false)
   }
 
-  const { count: totalInativos, error: erroInativos } = await operacional
-    .from('clientes_prospects')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'inativo')
-  if (erroInativos) throw new Error(`Erro ao contar inativos: ${erroInativos.message}`)
+  return (
+    <div>
+      {indicadores && (
+        <div className="kpi-grid">
+          <div className="ls-card kpi-card"><strong>Carteira Ativa</strong><div className="kpi-valor">{indicadores.totalAtivos}</div></div>
+          <div className="ls-card kpi-card card-clicavel-critico"><strong>Ações Atrasadas</strong><div className="kpi-valor">{indicadores.atrasados}</div></div>
+          <div className="ls-card kpi-card"><strong>Sem Corretor</strong><div className="kpi-valor">{indicadores.semCorretor}</div></div>
+          <div className="ls-card kpi-card"><strong>Sem Próxima Ação</strong><div className="kpi-valor">{indicadores.semProximaAcao}</div></div>
+          <div className="ls-card kpi-card"><strong>Inativos</strong><div className="kpi-valor">{indicadores.totalInativos}</div></div>
+        </div>
+      )}
 
-  return {
-    porStatus,
-    porModulo,
-    totalAtivos: carteira.length,
-    semCorretor,
-    semProximaAcao,
-    atrasados,
-    totalInativos: totalInativos ?? 0,
-  }
+      <div className="ls-card" style={{ marginBottom: '1rem' }}>
+        <div className="cotacao-form-linha">
+          <div>
+            <label>Status</label>
+            <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}>
+              <option value="">Todos</option>
+              {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Módulo</label>
+            <select value={filtroModulo} onChange={(e) => setFiltroModulo(e.target.value)}>
+              <option value="">Todos</option>
+              {MODULOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {indicadores && (
+        <div className="kpi-grid">
+          {Object.entries(STATUS_LABEL).map(([k, label]) => (
+            <button
+              key={k}
+              className="ls-card"
+              className={`ls-card kpi-card card-clicavel ${filtroStatus === k ? 'card-clicavel-ativo' : ''}`}
+              onClick={() => setFiltroStatus(filtroStatus === k ? '' : k)}
+            >
+              <strong>{label}</strong>
+              <div className="kpi-valor">{indicadores.porStatus[k]}</div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {carregando ? (
+        <p className="cliente-carregando">Carregando carteira...</p>
+      ) : carteira.length === 0 ? (
+        <p className="cliente-vazio">Nenhum cliente/prospect com esse filtro.</p>
+      ) : (
+        <table className="cliente-tabela">
+          <thead><tr><th>Cliente</th><th>Módulo</th><th>Status</th><th>Próxima Ação</th><th>Ações</th></tr></thead>
+          <tbody>
+            {carteira.map((c) => (
+              <tr key={c.id}>
+                <td>{c.razao_social}</td>
+                <td>{MODULOS.find((m) => m.id === c.modulo)?.label || c.modulo}</td>
+                <td><span className="ls-badge">{STATUS_LABEL[c.status] ?? c.status}</span></td>
+                <td style={c.proximaAcaoAtrasada ? { color: '#b23b3b', fontWeight: 600 } : {}}>
+                  {c.proxima_acao_data ? formatarDataBR(c.proxima_acao_data) : 'Sem data definida'}
+                </td>
+                <td className="cliente-tabela-acoes">
+                  <Link to={c.rotaCliente} className="cliente-tabela-btn">Ver Cliente</Link>
+                  <Link to={c.rotaPipeline} className="cliente-tabela-btn">Pipeline</Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <MetricasIndisponiveis />
+    </div>
+  )
 }
 
-/** Painel do Corretor — carteira, pendências e próximas ações de um corretor específico */
-export async function obterPainelCorretor(corretorId) {
-  const [carteira, agenda] = await Promise.all([
-    listarCarteiraConsolidada({ corretorId }),
-    obterAgendaComercial({ corretorId }),
-  ])
+function AgendaTab() {
+  const [agenda, setAgenda] = useState(null)
 
-  return {
-    totalCarteira: carteira.length,
-    porStatus: {
-      prospect: carteira.filter((c) => c.status === 'prospect').length,
-      em_negociacao: carteira.filter((c) => c.status === 'em_negociacao').length,
-      cliente: carteira.filter((c) => c.status === 'cliente').length,
-    },
-    agenda,
-    negociacoesCriticas: carteira.filter((c) => c.status === 'em_negociacao' && c.proximaAcaoAtrasada),
-  }
+  useEffect(() => {
+    obterAgendaComercial().then(setAgenda)
+  }, [])
+
+  if (!agenda) return <p className="cliente-carregando">Carregando agenda...</p>
+
+  const BLOCOS = [
+    { chave: 'atrasados', titulo: 'Atrasados', critico: true },
+    { chave: 'hoje', titulo: 'Hoje' },
+    { chave: 'estaSemana', titulo: 'Esta Semana' },
+    { chave: 'proximos30Dias', titulo: 'Próximos 30 dias' },
+    { chave: 'semAcaoDefinida', titulo: 'Sem Ação Definida' },
+  ]
+
+  return (
+    <div>
+      {BLOCOS.map((b) => (
+        <div key={b.chave} style={{ marginBottom: '1.5rem' }}>
+          <h3 style={b.critico ? { color: '#b23b3b' } : {}}>{b.titulo} ({agenda[b.chave].length})</h3>
+          {agenda[b.chave].length === 0 ? (
+            <p className="cliente-vazio">Nenhum cliente nessa faixa.</p>
+          ) : (
+            <table className="cliente-tabela">
+              <thead><tr><th>Cliente</th><th>Módulo</th><th>Próxima Ação</th><th>Ações</th></tr></thead>
+              <tbody>
+                {agenda[b.chave].map((c) => (
+                  <tr key={c.id}>
+                    <td>{c.razao_social}</td>
+                    <td>{MODULOS.find((m) => m.id === c.modulo)?.label || c.modulo}</td>
+                    <td>{c.proxima_acao_data ? formatarDataBR(c.proxima_acao_data) : '—'}</td>
+                    <td><Link to={c.rotaCliente} className="cliente-tabela-btn">Ver Cliente</Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function PainelCorretorTab({ perfil, ehMaster }) {
+  const [corretores, setCorretores] = useState([])
+  const [corretorSelecionado, setCorretorSelecionado] = useState(perfil?.id ?? null)
+  const [painel, setPainel] = useState(null)
+
+  useEffect(() => {
+    if (ehMaster) listarCorretores().then(setCorretores)
+  }, [ehMaster])
+
+  useEffect(() => {
+    if (corretorSelecionado) obterPainelCorretor(corretorSelecionado).then(setPainel)
+  }, [corretorSelecionado])
+
+  if (!painel) return <p className="cliente-carregando">Carregando painel...</p>
+
+  return (
+    <div>
+      {ehMaster && (
+        <div style={{ marginBottom: '1rem' }}>
+          <label>Ver painel de:</label>
+          <select value={corretorSelecionado ?? ''} onChange={(e) => setCorretorSelecionado(e.target.value)}>
+            <option value={perfil.id}>Eu mesmo</option>
+            {corretores.filter((c) => c.id !== perfil.id).map((c) => <option key={c.id} value={c.id}>{c.nome_completo}</option>)}
+          </select>
+        </div>
+      )}
+
+      <div className="kpi-grid">
+        <div className="ls-card kpi-card"><strong>Minha Carteira</strong><div className="kpi-valor">{painel.totalCarteira}</div></div>
+        <div className="ls-card kpi-card"><strong>Prospects</strong><div className="kpi-valor">{painel.porStatus.prospect}</div></div>
+        <div className="ls-card kpi-card"><strong>Em Negociação</strong><div className="kpi-valor">{painel.porStatus.em_negociacao}</div></div>
+        <div className="ls-card kpi-card"><strong>Clientes Ativos</strong><div className="kpi-valor">{painel.porStatus.cliente}</div></div>
+        <div className="ls-card kpi-card card-clicavel-critico"><strong>Negociações Críticas</strong><div className="kpi-valor">{painel.negociacoesCriticas.length}</div></div>
+      </div>
+
+      <h3>Ações Atrasadas</h3>
+      {painel.agenda.atrasados.length === 0 ? (
+        <p className="cliente-vazio">Nenhuma ação atrasada.</p>
+      ) : (
+        <table className="cliente-tabela">
+          <thead><tr><th>Cliente</th><th>Próxima Ação</th><th></th></tr></thead>
+          <tbody>
+            {painel.agenda.atrasados.map((c) => (
+              <tr key={c.id}>
+                <td>{c.razao_social}</td>
+                <td style={{ color: '#b23b3b', fontWeight: 600 }}>{formatarDataBR(c.proxima_acao_data)}</td>
+                <td><Link to={c.rotaCliente} className="cliente-tabela-btn">Ver Cliente</Link></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+/** Métricas de Grupo B — dependem de histórico de transição de status
+ * que a plataforma não registra hoje. Mantidas visíveis (não escondidas)
+ * com o texto exato acordado com o Chief, em vez de fingir cálculo. */
+function MetricasIndisponiveis() {
+  const ITENS = [
+    'Tempo médio em Prospect', 'Tempo médio em Negociação', 'Conversão Prospect → Cliente',
+    'Taxa de conversão por etapa', 'Tempo médio de fechamento', 'Timeline comercial completa', 'Gargalos históricos',
+  ]
+  return (
+    <div className="ls-card" style={{ marginTop: '1.5rem', opacity: 0.7 }}>
+      <strong>Métricas históricas</strong>
+      <ul style={{ marginTop: '0.5rem' }}>
+        {ITENS.map((item) => (
+          <li key={item}>{item} — <em>disponível após ativação do Commercial Event History</em></li>
+        ))}
+      </ul>
+    </div>
+  )
 }

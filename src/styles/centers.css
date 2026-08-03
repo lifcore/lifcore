@@ -1,0 +1,91 @@
+/* =====================================================================
+   centers.css — Padrão visual único pros Centers (Finance, Claims,
+   Growth, Knowledge, Painel Executivo). Resolve a inconsistência de
+   tamanhos/espaçamentos que existia por terem sido criados em Sprints
+   diferentes, cada uma com valores inline levemente distintos.
+   Importar em cada página: import '../../styles/centers.css'
+   ===================================================================== */
+
+.kpi-grid {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.kpi-card {
+  min-width: 160px;
+  flex: 1 1 160px;
+}
+
+.kpi-card-label {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #7a7a7a;
+  margin-bottom: 0.3rem;
+}
+
+.kpi-valor {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.kpi-valor-critico {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #b23b3b;
+}
+
+.kpi-detalhe {
+  font-size: 0.75rem;
+  color: #888;
+  margin-top: 0.2rem;
+}
+
+/* Cards que funcionam como filtro clicável (ex: cards de status no Claims/Growth/Finance) */
+.card-clicavel {
+  cursor: pointer;
+  text-align: left;
+  border: 2px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+.card-clicavel-ativo {
+  border-color: #0e2a3d;
+}
+
+.card-clicavel-critico {
+  color: #b23b3b;
+}
+
+/* Título de seção dentro de uma página de Center (ex: "Financeiro (Comissões)") */
+.secao-titulo {
+  margin-top: 1.75rem;
+  margin-bottom: 0.6rem;
+  font-size: 1.05rem;
+}
+
+/* Linha de filtros (selects/inputs lado a lado) */
+.filtros-linha {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.filtros-linha > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 160px;
+}
+
+.filtros-linha label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #444;
+}

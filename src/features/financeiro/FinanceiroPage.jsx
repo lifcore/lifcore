@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../../styles/centers.css'
 import { useSearchParams } from 'react-router-dom'
 import {
   listarComissoes,
@@ -311,16 +312,15 @@ function PendenciasTab({ setAbaAtiva }) {
       <p className="config-instrucao">
         Consolida tudo que exige atenção administrativa agora — clique num card pra ir direto à fila correspondente.
       </p>
-      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap' }}>
+      <div className="kpi-grid">
         {cards.map((c) => (
           <div
             key={c.titulo}
-            className="ls-card"
-            style={{ minWidth: '180px', cursor: c.aba ? 'pointer' : 'default' }}
+            className={`ls-card kpi-card ${c.aba ? 'card-clicavel' : ''}`}
             onClick={() => c.aba && setAbaAtiva(c.aba)}
           >
             <strong>{c.titulo}</strong>
-            <div style={{ fontSize: '1.3rem', fontWeight: 600, color: c.critico ? '#b23b3b' : undefined }}>{c.valor}</div>
+            <div className={c.critico ? 'kpi-valor-critico' : 'kpi-valor'}>{c.valor}</div>
           </div>
         ))}
       </div>
@@ -491,19 +491,15 @@ function ContasAReceberTab() {
         Complementa a Conciliação (que mostra visão agregada por seguradora): aqui é por lançamento individual.
       </p>
 
-      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap', marginBottom: '1rem' }}>
+      <div className="kpi-grid">
         {Object.entries(resumo.porFaixa).map(([faixa, dados]) => (
           <button
             key={faixa}
-            className="ls-card"
-            style={{
-              minWidth: '150px', textAlign: 'left', cursor: 'pointer',
-              border: filtroFaixa === faixa ? '2px solid #b23b3b' : undefined,
-            }}
+            className={`ls-card kpi-card card-clicavel ${filtroFaixa === faixa ? 'card-clicavel-ativo' : ''}`}
             onClick={() => setFiltroFaixa(filtroFaixa === faixa ? '' : faixa)}
           >
             <strong>{FAIXAS_LABEL[faixa]}</strong>
-            <div style={{ fontSize: '1.2rem', fontWeight: 600, color: faixa !== '0-30' ? '#b23b3b' : undefined }}>
+            <div className={faixa !== '0-30' ? 'kpi-valor-critico' : 'kpi-valor'}>
               {formatarMoeda(dados.total)}
             </div>
             <div className="config-instrucao" style={{ fontSize: '0.8rem' }}>{dados.quantidade} lançamento(s)</div>
@@ -618,19 +614,15 @@ function RepassesTab() {
         não são "atrasados", só ainda não estão liberados pra pagamento.
       </p>
 
-      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap', marginBottom: '1rem' }}>
+      <div className="kpi-grid">
         {Object.entries(resumo.porFaixa).map(([faixa, dados]) => (
           <button
             key={faixa}
-            className="ls-card"
-            style={{
-              minWidth: '150px', textAlign: 'left', cursor: 'pointer',
-              border: filtroFaixa === faixa ? '2px solid #b23b3b' : undefined,
-            }}
+            className={`ls-card kpi-card card-clicavel ${filtroFaixa === faixa ? 'card-clicavel-ativo' : ''}`}
             onClick={() => setFiltroFaixa(filtroFaixa === faixa ? '' : faixa)}
           >
             <strong>{FAIXAS_LABEL[faixa]}</strong>
-            <div style={{ fontSize: '1.2rem', fontWeight: 600, color: faixa !== '0-30' ? '#b23b3b' : undefined }}>
+            <div className={faixa !== '0-30' ? 'kpi-valor-critico' : 'kpi-valor'}>
               {formatarMoeda(dados.total)}
             </div>
             <div className="config-instrucao" style={{ fontSize: '0.8rem' }}>{dados.quantidade} repasse(s)</div>
@@ -655,7 +647,7 @@ function RepassesTab() {
 
       {aguardando.length > 0 && (
         <>
-          <h3 style={{ marginTop: '1.5rem' }}>Aguardando recebimento da seguradora ({aguardando.length})</h3>
+          <h3 className="secao-titulo">Aguardando recebimento da seguradora ({aguardando.length})</h3>
           <table className="cliente-tabela">
             <thead>
               <tr><th>Corretor</th><th>Seguradora</th><th>Módulo</th><th>Valor</th></tr>
@@ -779,9 +771,9 @@ function FluxoCaixaTab() {
       {meses.length === 0 ? (
         <p className="cliente-vazio">Nenhuma previsão de recebimento nos próximos meses.</p>
       ) : (
-        <div className="cotacao-form-linha" style={{ flexWrap: 'wrap' }}>
+        <div className="kpi-grid">
           {meses.map((m) => (
-            <div key={m.mes} className="ls-card" style={{ minWidth: '200px' }}>
+            <div key={m.mes} className="ls-card kpi-card">
               <strong>{m.mes}</strong>
               <div style={{ fontSize: '1.2rem', fontWeight: 600, marginTop: '0.25rem' }}>{formatarMoeda(m.totalPrevisto)}</div>
               <div className="config-instrucao" style={{ fontSize: '0.8rem' }}>

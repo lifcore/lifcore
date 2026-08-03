@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../../styles/centers.css'
 import { Link } from 'react-router-dom'
 import {
   listarCasosConsolidado,
@@ -78,12 +79,12 @@ export default function ClaimsCenterPage() {
       {abaAtiva === 'central' && (
         <>
           {indicadores && (
-            <div className="cotacao-form-linha" style={{ flexWrap: 'wrap', marginBottom: '1rem' }}>
-              <div className="ls-card" style={{ minWidth: '140px' }}><strong>Total de Casos</strong><div style={{ fontSize: '1.3rem', fontWeight: 600 }}>{indicadores.totalCasos}</div></div>
-              <div className="ls-card" style={{ minWidth: '140px' }}><strong>Abertos</strong><div style={{ fontSize: '1.3rem', fontWeight: 600 }}>{indicadores.totalAbertos}</div></div>
-              <div className="ls-card" style={{ minWidth: '140px', color: '#b23b3b' }}><strong>Críticos (15+ dias)</strong><div style={{ fontSize: '1.3rem', fontWeight: 600 }}>{indicadores.totalCriticos}</div></div>
-              <div className="ls-card" style={{ minWidth: '140px' }}><strong>Tempo Médio de Resolução</strong><div style={{ fontSize: '1.3rem', fontWeight: 600 }}>{indicadores.tempoMedioResolucaoDias ?? '—'}{indicadores.tempoMedioResolucaoDias !== null && ' dias'}</div></div>
-              <div className="ls-card" style={{ minWidth: '140px' }}><strong>Concluídas (7 dias)</strong><div style={{ fontSize: '1.3rem', fontWeight: 600 }}>{indicadores.totalConcluidosRecentemente}</div></div>
+            <div className="kpi-grid">
+              <div className="ls-card kpi-card"><strong>Total de Casos</strong><div className="kpi-valor">{indicadores.totalCasos}</div></div>
+              <div className="ls-card kpi-card"><strong>Abertos</strong><div className="kpi-valor">{indicadores.totalAbertos}</div></div>
+              <div className="ls-card kpi-card card-clicavel-critico"><strong>Críticos (15+ dias)</strong><div className="kpi-valor">{indicadores.totalCriticos}</div></div>
+              <div className="ls-card kpi-card"><strong>Tempo Médio de Resolução</strong><div className="kpi-valor">{indicadores.tempoMedioResolucaoDias ?? '—'}{indicadores.tempoMedioResolucaoDias !== null && ' dias'}</div></div>
+              <div className="ls-card kpi-card"><strong>Concluídas (7 dias)</strong><div className="kpi-valor">{indicadores.totalConcluidosRecentemente}</div></div>
             </div>
           )}
 
@@ -106,16 +107,16 @@ export default function ClaimsCenterPage() {
             </div>
           </div>
 
-          <div className="cotacao-form-linha" style={{ flexWrap: 'wrap', marginBottom: '1rem' }}>
+          <div className="kpi-grid">
             {CARDS_SITUACAO.map((c) => (
               <button
                 key={c.situacao}
                 className="ls-card"
-                style={{ minWidth: '150px', textAlign: 'left', cursor: 'pointer', border: filtroSituacao === c.situacao ? '2px solid #0e2a3d' : undefined }}
+                className={`ls-card kpi-card card-clicavel ${filtroSituacao === c.situacao ? 'card-clicavel-ativo' : ''}`}
                 onClick={() => setFiltroSituacao(filtroSituacao === c.situacao ? '' : c.situacao)}
               >
                 <strong>{c.label}</strong>
-                <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{indicadores?.porSituacao[c.situacao] ?? 0}</div>
+                <div className="kpi-valor">{indicadores?.porSituacao[c.situacao] ?? 0}</div>
               </button>
             ))}
           </div>
@@ -207,23 +208,23 @@ function LinhaTimeline({ caso }) {
           ) : (
             <>
               <div className="cotacao-form-linha" style={{ flexWrap: 'wrap', marginTop: '0.5rem' }}>
-                <div className="ls-card" style={{ minWidth: '160px' }}>
+                <div className="ls-card kpi-card">
                   <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>ABERTURA</span>
                   <div style={{ fontSize: '0.85rem' }}>{new Date(caso.criado_em).toLocaleString('pt-BR')}</div>
                 </div>
-                <div className="ls-card" style={{ minWidth: '160px' }}>
+                <div className="ls-card kpi-card">
                   <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>PRIMEIRO ATENDIMENTO</span>
                   <div style={{ fontSize: '0.85rem' }}>{primeiroEvento ? new Date(primeiroEvento.data).toLocaleString('pt-BR') : 'Ainda sem registro'}</div>
                 </div>
-                <div className="ls-card" style={{ minWidth: '160px' }}>
+                <div className="ls-card kpi-card">
                   <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>ÚLTIMA ATUALIZAÇÃO</span>
                   <div style={{ fontSize: '0.85rem' }}>{ultimoEvento ? new Date(ultimoEvento.data).toLocaleString('pt-BR') : 'Sem movimentação ainda'}</div>
                 </div>
-                <div className="ls-card" style={{ minWidth: '160px' }}>
+                <div className="ls-card kpi-card">
                   <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>SITUAÇÃO ATUAL</span>
                   <div style={{ fontSize: '0.85rem' }}>{SITUACAO_LABEL[caso.situacao] ?? caso.situacao}</div>
                 </div>
-                <div className="ls-card" style={{ minWidth: '160px' }}>
+                <div className="ls-card kpi-card">
                   <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>PRÓXIMA AÇÃO</span>
                   <div style={{ fontSize: '0.85rem' }}>{caso.data_proxima_acao ? formatarDataBR(caso.data_proxima_acao) : 'Não definida'}</div>
                 </div>
@@ -323,16 +324,16 @@ function PorEspecialistaTab() {
         "Especialista" aqui é sinônimo de Módulo/Workspace — não existe uma entidade humana
         separada de especialista no sistema hoje (GIN=Lifcare, LifAuto=Lifleet, etc).
       </p>
-      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap', marginBottom: '1rem' }}>
+      <div className="kpi-grid">
         {MODULOS.map((m) => (
           <button
             key={m.id}
             className="ls-card"
-            style={{ minWidth: '150px', textAlign: 'left', cursor: 'pointer', border: moduloSelecionado === m.id ? '2px solid #0e2a3d' : undefined }}
+            className={`ls-card kpi-card card-clicavel ${moduloSelecionado === m.id ? 'card-clicavel-ativo' : ''}`}
             onClick={() => verCasos(m.id)}
           >
             <strong>{m.label}</strong>
-            <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{indicadores.porEspecialista[m.id]}</div>
+            <div className="kpi-valor">{indicadores.porEspecialista[m.id]}</div>
           </button>
         ))}
       </div>

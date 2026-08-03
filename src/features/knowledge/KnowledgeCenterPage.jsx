@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../../styles/centers.css'
 import {
   listarRegras, criarRegra, atualizarRegra, inativarRegra, reativarRegra, CATEGORIAS,
   buscarConhecimentoGlobal,

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../../styles/centers.css'
 import { Link } from 'react-router-dom'
 import { contarClientesPorModulo, contarDemandasAbertas, contarConsultasPorEspecialista, contarIndicadoresPorCorretor, obterSaudeFinanceira, obterSaudeOperacional } from '../../lib/crm/painelExecutivoService'
 import { indicadoresOperacionais } from '../../lib/crm/comissoesService'
@@ -73,15 +74,15 @@ export default function PainelExecutivoPage() {
         e indicadores financeiros, tudo em um lugar só.
       </p>
 
-      <h3 style={{ marginTop: '1.5rem' }}>Clientes por módulo</h3>
-      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap' }}>
+      <h3 className="secao-titulo">Clientes por módulo</h3>
+      <div className="kpi-grid">
         {MODULOS.map((m) => {
           const c = clientesPorModulo[m.id]
           const totalAtivo = c.prospect + c.em_negociacao + c.cliente
           return (
-            <Link key={m.id} to={m.rota} className="ls-card" style={{ textDecoration: 'none', color: 'inherit', minWidth: '160px' }}>
+            <Link key={m.id} to={m.rota} className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
               <strong>{m.label}</strong>
-              <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>{totalAtivo}</div>
+              <div className="kpi-valor">{totalAtivo}</div>
               <div className="config-instrucao" style={{ fontSize: '0.8rem' }}>
                 {c.prospect} prospect · {c.em_negociacao} negociação · {c.cliente} ativos
               </div>
@@ -93,22 +94,22 @@ export default function PainelExecutivoPage() {
         })}
       </div>
 
-      <h3 style={{ marginTop: '1.5rem' }}>Demandas em aberto (total)</h3>
+      <h3 className="secao-titulo">Demandas em aberto (total)</h3>
       <div className="ls-card" style={{ maxWidth: '220px' }}>
-        <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>{demandas.total}</div>
+        <div className="kpi-valor">{demandas.total}</div>
       </div>
 
-      <h3 style={{ marginTop: '1.5rem' }}>Consultas por especialista (histórico total)</h3>
-      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap' }}>
+      <h3 className="secao-titulo">Consultas por especialista (histórico total)</h3>
+      <div className="kpi-grid">
         {MODULOS.map((m) => (
-          <div key={m.id} className="ls-card" style={{ minWidth: '140px' }}>
+          <div key={m.id} className="ls-card kpi-card">
             <strong>{m.label}</strong>
-            <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>{consultasPorEspecialista[m.id]}</div>
+            <div className="kpi-valor">{consultasPorEspecialista[m.id]}</div>
           </div>
         ))}
       </div>
 
-      <h3 style={{ marginTop: '1.5rem' }}>Ranking por corretor</h3>
+      <h3 className="secao-titulo">Ranking por corretor</h3>
       <div className="ls-card" style={{ padding: 0 }}>
         <table className="cliente-tabela">
           <thead>
@@ -131,60 +132,60 @@ export default function PainelExecutivoPage() {
         </table>
       </div>
 
-      <h3 style={{ marginTop: '1.5rem' }}>Saúde Operacional</h3>
-      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap' }}>
-        <Link to="/claims" className="ls-card" style={{ textDecoration: 'none', color: 'inherit', minWidth: '150px' }}>
+      <h3 className="secao-titulo">Saúde Operacional</h3>
+      <div className="kpi-grid">
+        <Link to="/claims" className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
           <strong>Casos Abertos</strong>
-          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{saudeOperacional.totalAbertos}</div>
+          <div className="kpi-valor">{saudeOperacional.totalAbertos}</div>
         </Link>
-        <Link to="/claims" className="ls-card" style={{ textDecoration: 'none', color: '#b23b3b', minWidth: '150px' }}>
+        <Link to="/claims" className="ls-card kpi-card card-clicavel-critico" style={{ textDecoration: 'none' }}>
           <strong>Casos Críticos</strong>
-          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{saudeOperacional.totalCriticos}</div>
+          <div className="kpi-valor">{saudeOperacional.totalCriticos}</div>
           <div className="config-instrucao" style={{ fontSize: '0.75rem' }}>abertos há 15+ dias</div>
         </Link>
-        <div className="ls-card" style={{ minWidth: '150px' }}>
+        <div className="ls-card kpi-card">
           <strong>Tempo Médio de Resolução</strong>
-          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{saudeOperacional.tempoMedioResolucaoDias ?? '—'}{saudeOperacional.tempoMedioResolucaoDias !== null && ' dias'}</div>
+          <div className="kpi-valor">{saudeOperacional.tempoMedioResolucaoDias ?? '—'}{saudeOperacional.tempoMedioResolucaoDias !== null && ' dias'}</div>
         </div>
-        <div className="ls-card" style={{ minWidth: '150px' }}>
+        <div className="ls-card kpi-card">
           <strong>Total de Casos</strong>
-          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{saudeOperacional.totalCasos}</div>
+          <div className="kpi-valor">{saudeOperacional.totalCasos}</div>
         </div>
       </div>
 
-      <h3 style={{ marginTop: '1.5rem' }}>Saúde Financeira</h3>
-      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap' }}>
-        <Link to="/financeiro?aba=contasareceber" className="ls-card" style={{ textDecoration: 'none', color: 'inherit', minWidth: '160px' }}>
+      <h3 className="secao-titulo">Saúde Financeira</h3>
+      <div className="kpi-grid">
+        <Link to="/financeiro?aba=contasareceber" className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
           <strong>Total a Receber</strong>
-          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatarMoeda(saudeFinanceira.totalAReceber)}</div>
+          <div className="kpi-valor">{formatarMoeda(saudeFinanceira.totalAReceber)}</div>
         </Link>
-        <Link to="/financeiro?aba=contasareceber" className="ls-card" style={{ textDecoration: 'none', color: '#b23b3b', minWidth: '160px' }}>
+        <Link to="/financeiro?aba=contasareceber" className="ls-card kpi-card card-clicavel-critico" style={{ textDecoration: 'none' }}>
           <strong>Total em Atraso</strong>
-          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatarMoeda(saudeFinanceira.totalEmAtraso)}</div>
+          <div className="kpi-valor">{formatarMoeda(saudeFinanceira.totalEmAtraso)}</div>
           <div className="config-instrucao" style={{ fontSize: '0.75rem' }}>{saudeFinanceira.percentualEmAtraso.toFixed(1)}% do total a receber</div>
         </Link>
-        <Link to="/financeiro?aba=contasareceber" className="ls-card" style={{ textDecoration: 'none', color: '#b23b3b', minWidth: '160px' }}>
+        <Link to="/financeiro?aba=contasareceber" className="ls-card kpi-card card-clicavel-critico" style={{ textDecoration: 'none' }}>
           <strong>Faixa Crítica (90+ dias)</strong>
-          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatarMoeda(saudeFinanceira.totalFaixaCritica90)}</div>
+          <div className="kpi-valor">{formatarMoeda(saudeFinanceira.totalFaixaCritica90)}</div>
           <div className="config-instrucao" style={{ fontSize: '0.75rem' }}>{saudeFinanceira.quantidadeFaixaCritica90} lançamento(s)</div>
         </Link>
-        <Link to="/financeiro?aba=repasses" className="ls-card" style={{ textDecoration: 'none', color: 'inherit', minWidth: '160px' }}>
+        <Link to="/financeiro?aba=repasses" className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
           <strong>Repasses Pendentes</strong>
-          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatarMoeda(saudeFinanceira.totalRepassesPendentes)}</div>
+          <div className="kpi-valor">{formatarMoeda(saudeFinanceira.totalRepassesPendentes)}</div>
         </Link>
-        <Link to="/financeiro?aba=conciliacao" className="ls-card" style={{ textDecoration: 'none', color: 'inherit', minWidth: '160px' }}>
+        <Link to="/financeiro?aba=conciliacao" className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
           <strong>Conciliado</strong>
-          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatarMoeda(saudeFinanceira.totalConciliado)}</div>
+          <div className="kpi-valor">{formatarMoeda(saudeFinanceira.totalConciliado)}</div>
           <div className="config-instrucao" style={{ fontSize: '0.75rem' }}>{saudeFinanceira.percentualConciliado.toFixed(1)}% conciliado</div>
         </Link>
-        <Link to="/financeiro?aba=pendencias" className="ls-card" style={{ textDecoration: 'none', color: 'inherit', minWidth: '160px' }}>
+        <Link to="/financeiro?aba=pendencias" className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
           <strong>Volume Aguardando Ação</strong>
-          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatarMoeda(saudeFinanceira.volumeAguardandoAcao)}</div>
+          <div className="kpi-valor">{formatarMoeda(saudeFinanceira.volumeAguardandoAcao)}</div>
         </Link>
       </div>
 
-      <h3 style={{ marginTop: '1.5rem' }}>Financeiro (Comissões)</h3>
-      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap' }}>
+      <h3 className="secao-titulo">Financeiro (Comissões)</h3>
+      <div className="kpi-grid">
         <div className="ls-card"><strong>Previsto</strong><div>{formatarMoeda(financeiro.totalPrevisto)}</div></div>
         <div className="ls-card"><strong>Recebido</strong><div>{formatarMoeda(financeiro.totalRecebido)}</div></div>
         <div className="ls-card"><strong>Pendente</strong><div>{formatarMoeda(financeiro.totalPendente)}</div></div>
