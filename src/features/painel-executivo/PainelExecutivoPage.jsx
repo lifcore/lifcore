@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { contarClientesPorModulo, contarDemandasAbertas, contarConsultasPorEspecialista, contarIndicadoresPorCorretor, obterSaudeFinanceira } from '../../lib/crm/painelExecutivoService'
+import { contarClientesPorModulo, contarDemandasAbertas, contarConsultasPorEspecialista, contarIndicadoresPorCorretor, obterSaudeFinanceira, obterSaudeOperacional } from '../../lib/crm/painelExecutivoService'
 import { indicadoresOperacionais } from '../../lib/crm/comissoesService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
 
@@ -23,6 +23,7 @@ export default function PainelExecutivoPage() {
   const [consultasPorEspecialista, setConsultasPorEspecialista] = useState(null)
   const [indicadoresPorCorretor, setIndicadoresPorCorretor] = useState(null)
   const [saudeFinanceira, setSaudeFinanceira] = useState(null)
+  const [saudeOperacional, setSaudeOperacional] = useState(null)
   const [corretores, setCorretores] = useState([])
   const [carregando, setCarregando] = useState(true)
 
@@ -32,7 +33,7 @@ export default function PainelExecutivoPage() {
 
   async function carregar() {
     setCarregando(true)
-    const [clientes, dem, fin, consultas, porCorretor, listaCorretores, saude] = await Promise.all([
+    const [clientes, dem, fin, consultas, porCorretor, listaCorretores, saude, saudeOp] = await Promise.all([
       contarClientesPorModulo(),
       contarDemandasAbertas(),
       indicadoresOperacionais(),
@@ -40,6 +41,7 @@ export default function PainelExecutivoPage() {
       contarIndicadoresPorCorretor(),
       listarCorretores(),
       obterSaudeFinanceira(),
+      obterSaudeOperacional(),
     ])
     setClientesPorModulo(clientes)
     setDemandas(dem)
@@ -48,6 +50,7 @@ export default function PainelExecutivoPage() {
     setIndicadoresPorCorretor(porCorretor)
     setCorretores(listaCorretores)
     setSaudeFinanceira(saude)
+    setSaudeOperacional(saudeOp)
     setCarregando(false)
   }
 
@@ -126,6 +129,27 @@ export default function PainelExecutivoPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <h3 style={{ marginTop: '1.5rem' }}>Saúde Operacional</h3>
+      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap' }}>
+        <Link to="/claims" className="ls-card" style={{ textDecoration: 'none', color: 'inherit', minWidth: '150px' }}>
+          <strong>Casos Abertos</strong>
+          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{saudeOperacional.totalAbertos}</div>
+        </Link>
+        <Link to="/claims" className="ls-card" style={{ textDecoration: 'none', color: '#b23b3b', minWidth: '150px' }}>
+          <strong>Casos Críticos</strong>
+          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{saudeOperacional.totalCriticos}</div>
+          <div className="config-instrucao" style={{ fontSize: '0.75rem' }}>abertos há 15+ dias</div>
+        </Link>
+        <div className="ls-card" style={{ minWidth: '150px' }}>
+          <strong>Tempo Médio de Resolução</strong>
+          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{saudeOperacional.tempoMedioResolucaoDias ?? '—'}{saudeOperacional.tempoMedioResolucaoDias !== null && ' dias'}</div>
+        </div>
+        <div className="ls-card" style={{ minWidth: '150px' }}>
+          <strong>Total de Casos</strong>
+          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{saudeOperacional.totalCasos}</div>
+        </div>
       </div>
 
       <h3 style={{ marginTop: '1.5rem' }}>Saúde Financeira</h3>

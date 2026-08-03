@@ -1,5 +1,6 @@
 import { operacional } from '../supabaseSchemas'
 import { listarContasAReceber, listarRepassesAPagar, obterConciliacao } from './comissoesService'
+import { obterIndicadoresOperacionais as obterIndicadoresCasos } from './casosService'
 
 /**
  * Painel Executivo — agrega dados que já existem em outras tabelas
@@ -157,4 +158,13 @@ export async function obterSaudeFinanceira() {
     quantidadeEmAtraso: emAtraso.length,
     quantidadeFaixaCritica90: faixaCritica90.length,
   }
+}
+
+/**
+ * Saúde Operacional — bloco do Painel Executivo, reaproveitando
+ * exclusivamente `casosService.obterIndicadoresOperacionais()` já
+ * existente (Claims Center). Zero Service novo, zero consulta nova.
+ */
+export async function obterSaudeOperacional() {
+  return obterIndicadoresCasos()
 }
