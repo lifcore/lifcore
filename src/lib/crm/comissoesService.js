@@ -1,5 +1,5 @@
 import { operacional, institucional } from '../supabaseSchemas'
-import { listarAuditoria } from './governancaService'
+import { listarAuditoria } from '../governanca/governancaService'
 
 /**
  * Finance Center v3 — Livro-razão de Comissões
