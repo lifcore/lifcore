@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { contarClientesPorModulo, contarDemandasAbertas } from '../../lib/crm/painelExecutivoService'
+import { contarClientesPorModulo, contarDemandasAbertas, contarConsultasPorEspecialista, contarIndicadoresPorCorretor } from '../../lib/crm/painelExecutivoService'
 import { indicadoresOperacionais } from '../../lib/crm/comissoesService'
+import { listarCorretores } from '../../lib/crm/apolicesService'
 
 const MODULOS = [
   { id: 'saude', label: 'Lifcare', rota: '/' },
@@ -19,6 +20,9 @@ export default function PainelExecutivoPage() {
   const [clientesPorModulo, setClientesPorModulo] = useState(null)
   const [demandas, setDemandas] = useState(null)
   const [financeiro, setFinanceiro] = useState(null)
+  const [consultasPorEspecialista, setConsultasPorEspecialista] = useState(null)
+  const [indicadoresPorCorretor, setIndicadoresPorCorretor] = useState(null)
+  const [corretores, setCorretores] = useState([])
   const [carregando, setCarregando] = useState(true)
 
   useEffect(() => {
@@ -27,18 +31,33 @@ export default function PainelExecutivoPage() {
 
   async function carregar() {
     setCarregando(true)
-    const [clientes, dem, fin] = await Promise.all([
+    const [clientes, dem, fin, consultas, porCorretor, listaCorretores] = await Promise.all([
       contarClientesPorModulo(),
       contarDemandasAbertas(),
       indicadoresOperacionais(),
+      contarConsultasPorEspecialista(),
+      contarIndicadoresPorCorretor(),
+      listarCorretores(),
     ])
     setClientesPorModulo(clientes)
     setDemandas(dem)
     setFinanceiro(fin)
+    setConsultasPorEspecialista(consultas)
+    setIndicadoresPorCorretor(porCorretor)
+    setCorretores(listaCorretores)
     setCarregando(false)
   }
 
   if (carregando) return <p className="cliente-carregando">Carregando painel...</p>
+
+  const nomesPorId = Object.fromEntries(corretores.map((c) => [c.id, c.nome_completo]))
+
+  // Ranking simples: mais clientes ativos primeiro. Sem cálculo de
+  // conversão/receita individual — depende de dado financeiro por
+  // corretor que ainda não existe modelado.
+  const rankingCorretores = Object.entries(indicadoresPorCorretor)
+    .map(([corretorId, dados]) => ({ corretorId, nome: nomesPorId[corretorId] ?? 'Corretor', ...dados }))
+    .sort((a, b) => b.clientesAtivos - a.clientesAtivos)
 
   return (
     <div className="config-page">
@@ -71,6 +90,39 @@ export default function PainelExecutivoPage() {
       <h3 style={{ marginTop: '1.5rem' }}>Demandas em aberto (total)</h3>
       <div className="ls-card" style={{ maxWidth: '220px' }}>
         <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>{demandas.total}</div>
+      </div>
+
+      <h3 style={{ marginTop: '1.5rem' }}>Consultas por especialista (histórico total)</h3>
+      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap' }}>
+        {MODULOS.map((m) => (
+          <div key={m.id} className="ls-card" style={{ minWidth: '140px' }}>
+            <strong>{m.label}</strong>
+            <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>{consultasPorEspecialista[m.id]}</div>
+          </div>
+        ))}
+      </div>
+
+      <h3 style={{ marginTop: '1.5rem' }}>Ranking por corretor</h3>
+      <div className="ls-card" style={{ padding: 0 }}>
+        <table className="cliente-tabela">
+          <thead>
+            <tr>
+              <th>Corretor</th><th>Prospect</th><th>Negociação</th><th>Ativos</th><th>Demandas abertas</th><th>Demandas resolvidas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rankingCorretores.map((c) => (
+              <tr key={c.corretorId}>
+                <td>{c.nome}</td>
+                <td>{c.clientesProspect}</td>
+                <td>{c.clientesNegociacao}</td>
+                <td>{c.clientesAtivos}</td>
+                <td>{c.demandasAbertas}</td>
+                <td>{c.demandasResolvidas}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <h3 style={{ marginTop: '1.5rem' }}>Financeiro (Comissões)</h3>
