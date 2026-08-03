@@ -5,6 +5,7 @@ import {
   obterIndicadoresOperacionais,
   obterTimelineCaso,
   buscarCasosGlobal,
+  obterCentralGargalos,
 } from '../../lib/crm/casosService'
 import { montarDadosDocumentoCliente, gerarHtmlDocumentoCliente } from '../../lib/crm/documentoClienteService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
@@ -65,9 +66,13 @@ export default function ClaimsCenterPage() {
 
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
         <button className={`cliente-aba ${abaAtiva === 'central' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('central')}>Central</button>
+        <button className={`cliente-aba ${abaAtiva === 'gargalos' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('gargalos')}>Gargalos</button>
+        <button className={`cliente-aba ${abaAtiva === 'especialistas' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('especialistas')}>Por Especialista</button>
         <button className={`cliente-aba ${abaAtiva === 'buscar' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('buscar')}>Buscar</button>
       </div>
 
+      {abaAtiva === 'gargalos' && <GargalosTab />}
+      {abaAtiva === 'especialistas' && <PorEspecialistaTab />}
       {abaAtiva === 'buscar' && <BuscaGlobalCasos />}
 
       {abaAtiva === 'central' && (
@@ -78,6 +83,7 @@ export default function ClaimsCenterPage() {
               <div className="ls-card" style={{ minWidth: '140px' }}><strong>Abertos</strong><div style={{ fontSize: '1.3rem', fontWeight: 600 }}>{indicadores.totalAbertos}</div></div>
               <div className="ls-card" style={{ minWidth: '140px', color: '#b23b3b' }}><strong>Críticos (15+ dias)</strong><div style={{ fontSize: '1.3rem', fontWeight: 600 }}>{indicadores.totalCriticos}</div></div>
               <div className="ls-card" style={{ minWidth: '140px' }}><strong>Tempo Médio de Resolução</strong><div style={{ fontSize: '1.3rem', fontWeight: 600 }}>{indicadores.tempoMedioResolucaoDias ?? '—'}{indicadores.tempoMedioResolucaoDias !== null && ' dias'}</div></div>
+              <div className="ls-card" style={{ minWidth: '140px' }}><strong>Concluídas (7 dias)</strong><div style={{ fontSize: '1.3rem', fontWeight: 600 }}>{indicadores.totalConcluidosRecentemente}</div></div>
             </div>
           )}
 
@@ -175,40 +181,182 @@ function LinhaCaso({ caso }) {
           </button>
         </td>
       </tr>
-      {mostrarTimeline && <LinhaTimeline casoId={caso.id} />}
+      {mostrarTimeline && <LinhaTimeline caso={caso} />}
     </>
   )
 }
 
-function LinhaTimeline({ casoId }) {
+function LinhaTimeline({ caso }) {
   const [eventos, setEventos] = useState(null)
 
   useEffect(() => {
-    obterTimelineCaso(casoId).then(setEventos)
-  }, [casoId])
+    obterTimelineCaso(caso.id).then(setEventos)
+  }, [caso.id])
+
+  const primeiroEvento = eventos && eventos.length > 0 ? eventos[0] : null
+  const ultimoEvento = eventos && eventos.length > 0 ? eventos[eventos.length - 1] : null
 
   return (
     <tr>
       <td colSpan={6}>
         <div className="ls-card" style={{ padding: '0.75rem' }}>
-          <strong style={{ fontSize: '0.85rem' }}>Timeline do caso</strong>
+          <strong style={{ fontSize: '0.85rem' }}>Timeline do caso — estágios reais (derivados dos dados existentes)</strong>
+
           {!eventos ? (
             <p className="cliente-carregando">Carregando...</p>
-          ) : eventos.length === 0 ? (
-            <p className="config-instrucao">Nenhum evento registrado ainda além da abertura.</p>
           ) : (
-            <ul style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
-              {eventos.map((e, i) => (
-                <li key={i}>
-                  <strong>{new Date(e.data).toLocaleString('pt-BR')}</strong> — {e.descricao}
-                  {e.motivo && <span className="config-instrucao"> ({e.motivo})</span>}
-                </li>
-              ))}
-            </ul>
+            <>
+              <div className="cotacao-form-linha" style={{ flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                <div className="ls-card" style={{ minWidth: '160px' }}>
+                  <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>ABERTURA</span>
+                  <div style={{ fontSize: '0.85rem' }}>{new Date(caso.criado_em).toLocaleString('pt-BR')}</div>
+                </div>
+                <div className="ls-card" style={{ minWidth: '160px' }}>
+                  <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>PRIMEIRO ATENDIMENTO</span>
+                  <div style={{ fontSize: '0.85rem' }}>{primeiroEvento ? new Date(primeiroEvento.data).toLocaleString('pt-BR') : 'Ainda sem registro'}</div>
+                </div>
+                <div className="ls-card" style={{ minWidth: '160px' }}>
+                  <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>ÚLTIMA ATUALIZAÇÃO</span>
+                  <div style={{ fontSize: '0.85rem' }}>{ultimoEvento ? new Date(ultimoEvento.data).toLocaleString('pt-BR') : 'Sem movimentação ainda'}</div>
+                </div>
+                <div className="ls-card" style={{ minWidth: '160px' }}>
+                  <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>SITUAÇÃO ATUAL</span>
+                  <div style={{ fontSize: '0.85rem' }}>{SITUACAO_LABEL[caso.situacao] ?? caso.situacao}</div>
+                </div>
+                <div className="ls-card" style={{ minWidth: '160px' }}>
+                  <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>PRÓXIMA AÇÃO</span>
+                  <div style={{ fontSize: '0.85rem' }}>{caso.data_proxima_acao ? formatarDataBR(caso.data_proxima_acao) : 'Não definida'}</div>
+                </div>
+              </div>
+
+              <strong style={{ fontSize: '0.8rem', marginTop: '0.75rem', display: 'block' }}>Histórico completo</strong>
+              {eventos.length === 0 ? (
+                <p className="config-instrucao">Nenhum evento registrado ainda além da abertura.</p>
+              ) : (
+                <ul style={{ marginTop: '0.25rem', fontSize: '0.85rem' }}>
+                  {eventos.map((e, i) => (
+                    <li key={i}>
+                      <strong>{new Date(e.data).toLocaleString('pt-BR')}</strong> — {e.descricao}
+                      {e.motivo && <span className="config-instrucao"> ({e.motivo})</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </div>
       </td>
     </tr>
+  )
+}
+
+function GargalosTab() {
+  const [gargalos, setGargalos] = useState(null)
+
+  useEffect(() => {
+    obterCentralGargalos().then(setGargalos)
+  }, [])
+
+  if (!gargalos) return <p className="cliente-carregando">Carregando gargalos...</p>
+
+  const BLOCOS = [
+    { chave: 'semResponsavel', titulo: 'Sem Responsável' },
+    { chave: 'semMovimentacao', titulo: 'Sem Nenhuma Movimentação' },
+    { chave: 'semAtualizacaoRecente', titulo: 'Sem Atualização há 7+ dias' },
+    { chave: 'antigos', titulo: 'Antigos (15+ dias)' },
+    { chave: 'aguardandoTerceiros', titulo: 'Aguardando Cliente/Seguradora' },
+  ]
+
+  return (
+    <div>
+      <p className="config-instrucao">
+        Identificado automaticamente a partir do estado atual dos casos — sem SLA configurado,
+        sem histórico novo. Clique num bloco pra ver os casos.
+      </p>
+      {BLOCOS.map((b) => (
+        <div key={b.chave} style={{ marginBottom: '1.5rem' }}>
+          <h3>{b.titulo} ({gargalos[b.chave].length})</h3>
+          {gargalos[b.chave].length === 0 ? (
+            <p className="cliente-vazio">Nenhum caso nessa condição.</p>
+          ) : (
+            <table className="cliente-tabela">
+              <thead><tr><th>Código</th><th>Cliente</th><th>Módulo</th><th>Situação</th><th>Ações</th></tr></thead>
+              <tbody>
+                {gargalos[b.chave].map((c) => (
+                  <tr key={c.id}>
+                    <td className="ls-mono">{c.codigo}</td>
+                    <td>{c.cliente?.razao_social ?? '—'}</td>
+                    <td>{MODULOS.find((m) => m.id === c.moduloOrigem)?.label ?? c.moduloOrigem}</td>
+                    <td><span className="ls-badge">{SITUACAO_LABEL[c.situacao] ?? c.situacao}</span></td>
+                    <td>{c.rotaCliente && <Link to={c.rotaCliente} className="cliente-tabela-btn">Ver Cliente</Link>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function PorEspecialistaTab() {
+  const [indicadores, setIndicadores] = useState(null)
+  const [moduloSelecionado, setModuloSelecionado] = useState(null)
+  const [casosDoModulo, setCasosDoModulo] = useState(null)
+
+  useEffect(() => {
+    obterIndicadoresOperacionais().then(setIndicadores)
+  }, [])
+
+  async function verCasos(modulo) {
+    setModuloSelecionado(modulo)
+    const lista = await listarCasosConsolidado({ modulo })
+    setCasosDoModulo(lista)
+  }
+
+  if (!indicadores) return <p className="cliente-carregando">Carregando...</p>
+
+  return (
+    <div>
+      <p className="config-instrucao">
+        "Especialista" aqui é sinônimo de Módulo/Workspace — não existe uma entidade humana
+        separada de especialista no sistema hoje (GIN=Lifcare, LifAuto=Lifleet, etc).
+      </p>
+      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap', marginBottom: '1rem' }}>
+        {MODULOS.map((m) => (
+          <button
+            key={m.id}
+            className="ls-card"
+            style={{ minWidth: '150px', textAlign: 'left', cursor: 'pointer', border: moduloSelecionado === m.id ? '2px solid #0e2a3d' : undefined }}
+            onClick={() => verCasos(m.id)}
+          >
+            <strong>{m.label}</strong>
+            <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{indicadores.porEspecialista[m.id]}</div>
+          </button>
+        ))}
+      </div>
+
+      {casosDoModulo && (
+        casosDoModulo.length === 0 ? (
+          <p className="cliente-vazio">Nenhum caso nesse módulo.</p>
+        ) : (
+          <table className="cliente-tabela">
+            <thead><tr><th>Código</th><th>Cliente</th><th>Situação</th><th>Tempo Aberto</th></tr></thead>
+            <tbody>
+              {casosDoModulo.map((c) => (
+                <tr key={c.id}>
+                  <td className="ls-mono">{c.codigo}</td>
+                  <td>{c.cliente?.razao_social ?? '—'}</td>
+                  <td><span className="ls-badge">{SITUACAO_LABEL[c.situacao] ?? c.situacao}</span></td>
+                  <td>{c.tempoAbertoDias} dia(s)</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
+      )}
+    </div>
   )
 }
 
@@ -218,6 +366,7 @@ function BuscaGlobalCasos() {
   const [codigoCaso, setCodigoCaso] = useState('')
   const [filtroSituacao, setFiltroSituacao] = useState('')
   const [filtroCorretor, setFiltroCorretor] = useState('')
+  const [filtroModulo, setFiltroModulo] = useState('')
   const [periodoInicio, setPeriodoInicio] = useState('')
   const [periodoFim, setPeriodoFim] = useState('')
   const [resultados, setResultados] = useState(null)
@@ -235,6 +384,7 @@ function BuscaGlobalCasos() {
         codigoCaso: codigoCaso || undefined,
         situacao: filtroSituacao || undefined,
         corretorId: filtroCorretor || undefined,
+        modulo: filtroModulo || undefined,
         periodoInicio: periodoInicio || undefined,
         periodoFim: periodoFim || undefined,
       })
@@ -266,10 +416,17 @@ function BuscaGlobalCasos() {
             </select>
           </div>
           <div>
-            <label>Corretor</label>
+            <label>Corretor (Responsável)</label>
             <select value={filtroCorretor} onChange={(e) => setFiltroCorretor(e.target.value)}>
               <option value="">Todos</option>
               {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome_completo}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Especialista (Módulo)</label>
+            <select value={filtroModulo} onChange={(e) => setFiltroModulo(e.target.value)}>
+              <option value="">Todos</option>
+              {MODULOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </div>
         </div>

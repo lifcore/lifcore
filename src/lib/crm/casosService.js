@@ -61,6 +61,8 @@ export async function listarCasosConsolidado({ modulo, situacao, corretorId } = 
     }
   })
 
+  combinados = await anexarTempoSemAtualizacao(combinados)
+
   if (modulo) combinados = combinados.filter((c) => c.moduloOrigem === modulo)
   if (corretorId) combinados = combinados.filter((c) => c.cliente?.corretor_id === corretorId)
 
@@ -68,10 +70,42 @@ export async function listarCasosConsolidado({ modulo, situacao, corretorId } = 
 }
 
 /**
- * Tempo Aberto (dias desde a criação) e Tempo sem Atualização (dias
- * desde `data_proxima_acao` ter sido definida, como proxy — não temos
- * um `atualizado_em` explícito na tabela `casos`; usar o campo mais
- * recente disponível é mais honesto que inventar uma coluna).
+ * Tempo sem Atualização — dias desde o último evento registrado pra
+ * cada caso (real, não proxy). Busca em lote (1 consulta pra todos os
+ * casos da lista) em vez de 1 consulta por caso, pra não pesar
+ * performance. Se um caso não tem nenhum evento ainda, usa a própria
+ * criação como referência e marca `semMovimentacao: true`.
+ */
+async function anexarTempoSemAtualizacao(casos) {
+  const ids = casos.map((c) => c.id)
+  if (ids.length === 0) return casos
+
+  const { data: eventos, error } = await operacional
+    .from('eventos')
+    .select('caso_id, criado_em')
+    .in('caso_id', ids)
+  if (error) throw new Error(`Erro ao calcular tempo sem atualização: ${error.message}`)
+
+  const ultimaPorCaso = {}
+  for (const e of eventos ?? []) {
+    if (!ultimaPorCaso[e.caso_id] || e.criado_em > ultimaPorCaso[e.caso_id]) {
+      ultimaPorCaso[e.caso_id] = e.criado_em
+    }
+  }
+
+  const hoje = new Date()
+  return casos.map((c) => {
+    const ultimaAtualizacao = ultimaPorCaso[c.id] ?? null
+    const referencia = ultimaAtualizacao ? new Date(ultimaAtualizacao) : new Date(c.criado_em)
+    const tempoSemAtualizacaoDias = Math.floor((hoje - referencia) / 86400000)
+    return { ...c, tempoSemAtualizacaoDias, semMovimentacao: !ultimaAtualizacao, ultimaAtualizacao }
+  })
+}
+
+/**
+ * Tempo Aberto (dias desde a criação). Tempo sem Atualização é
+ * calculado separadamente em `anexarTempoSemAtualizacao`, com dado
+ * real (último evento), não mais proxy.
  *
  * NÃO calcula "tempo até SLA" nem "vencido" — não existe prazo-alvo
  * configurado em nenhum lugar do sistema. Calcular isso exigiria
@@ -104,7 +138,10 @@ export async function obterIndicadoresOperacionais() {
     if (porSituacao[c.situacao] !== undefined) porSituacao[c.situacao]++
   }
 
+  // "Por Especialista" = "Por Módulo" — não existe entidade Especialista
+  // separada no sistema; a especialização É o módulo (decisão do Chief).
   const porModulo = Object.fromEntries(MODULOS.map((m) => [m, casos.filter((c) => c.moduloOrigem === m).length]))
+  const porEspecialista = porModulo
 
   const finalizados = casos.filter((c) => c.finalizado)
   const tempoMedioResolucaoDias = finalizados.length
@@ -114,13 +151,37 @@ export async function obterIndicadoresOperacionais() {
   const abertosOuAndamento = casos.filter((c) => !c.finalizado)
   const casosCriticos = abertosOuAndamento.filter((c) => c.tempoAbertoDias > 15) // proxy simples de "crítico": aberto há mais de 15 dias, sem SLA configurado pra usar como referência real
 
+  const seteDiasAtras = new Date(Date.now() - 7 * 86400000)
+  const concluidosRecentemente = finalizados.filter((c) => c.ultimaAtualizacao && new Date(c.ultimaAtualizacao) >= seteDiasAtras)
+
   return {
     porSituacao,
     porModulo,
+    porEspecialista,
     totalCasos: casos.length,
     totalAbertos: abertosOuAndamento.length,
     totalCriticos: casosCriticos.length,
     tempoMedioResolucaoDias,
+    totalConcluidosRecentemente: concluidosRecentemente.length,
+  }
+}
+
+/**
+ * Central de Gargalos — identifica automaticamente o que precisa de
+ * atenção, tudo derivado do estado atual (sem SLA, sem histórico
+ * novo): sem responsável, sem movimentação, aguardando há muito tempo,
+ * críticos, antigos.
+ */
+export async function obterCentralGargalos() {
+  const casos = await listarCasosConsolidado()
+  const abertos = casos.filter((c) => !c.finalizado)
+
+  return {
+    semResponsavel: abertos.filter((c) => !c.cliente?.corretor_id),
+    semMovimentacao: abertos.filter((c) => c.semMovimentacao),
+    semAtualizacaoRecente: abertos.filter((c) => c.tempoSemAtualizacaoDias > 7).sort((a, b) => b.tempoSemAtualizacaoDias - a.tempoSemAtualizacaoDias),
+    antigos: abertos.filter((c) => c.tempoAbertoDias > 15).sort((a, b) => b.tempoAbertoDias - a.tempoAbertoDias),
+    aguardandoTerceiros: abertos.filter((c) => c.situacao === 'aguardando_operadora' || c.situacao === 'aguardando_cliente'),
   }
 }
 
@@ -158,8 +219,8 @@ export async function obterTimelineCaso(casoId) {
  * uma decisão de design maior (qual "produto" vincular) — registrado
  * pra revisão, não implementado às cegas.
  */
-export async function buscarCasosGlobal({ termoCliente, codigoCaso, situacao, periodoInicio, periodoFim, corretorId } = {}) {
-  const todos = await listarCasosConsolidado({ situacao, corretorId })
+export async function buscarCasosGlobal({ termoCliente, codigoCaso, situacao, periodoInicio, periodoFim, corretorId, modulo } = {}) {
+  const todos = await listarCasosConsolidado({ situacao, corretorId, modulo })
 
   return todos.filter((c) => {
     if (codigoCaso && !c.codigo?.toLowerCase().includes(codigoCaso.toLowerCase())) return false
