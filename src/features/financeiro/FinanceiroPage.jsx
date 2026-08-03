@@ -10,8 +10,13 @@ import {
   indicadoresOperacionais,
   obterConciliacao,
   obterFluxoCaixaPrevisto,
+  listarContasAReceber,
+  resumirPorFaixaAtraso,
 } from '../../lib/crm/comissoesService'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
+import { listarGestoresPorOperadora } from '../../lib/crm/seguradorasService'
+import { montarLinkWhatsApp } from '../../lib/crm/templatesService'
+import { formatarDataBR } from '../../lib/utils/formatarData'
 import { operacional } from '../../lib/supabaseSchemas'
 import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
 
@@ -114,10 +119,12 @@ export default function FinanceiroPage() {
 
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
         <button className={`cliente-aba ${abaAtiva === 'lancamentos' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('lancamentos')}>Comissões</button>
+        <button className={`cliente-aba ${abaAtiva === 'contasareceber' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('contasareceber')}>Contas a Receber</button>
         <button className={`cliente-aba ${abaAtiva === 'conciliacao' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('conciliacao')}>Conciliação</button>
         <button className={`cliente-aba ${abaAtiva === 'fluxo' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('fluxo')}>Fluxo de Caixa</button>
       </div>
 
+      {abaAtiva === 'contasareceber' && <ContasAReceberTab />}
       {abaAtiva === 'conciliacao' && <ConciliacaoTab />}
       {abaAtiva === 'fluxo' && <FluxoCaixaTab />}
 
@@ -253,6 +260,134 @@ export default function FinanceiroPage() {
       </>
       )}
     </div>
+  )
+}
+
+const FAIXAS_LABEL = {
+  '0-30': '0–30 dias',
+  '31-60': '31–60 dias',
+  '61-90': '61–90 dias',
+  '90+': 'Acima de 90 dias',
+}
+
+function ContasAReceberTab() {
+  const [linhas, setLinhas] = useState(null)
+  const [filtroFaixa, setFiltroFaixa] = useState('')
+  const [carregando, setCarregando] = useState(true)
+
+  useEffect(() => {
+    carregar()
+  }, [])
+
+  async function carregar() {
+    setCarregando(true)
+    const r = await listarContasAReceber()
+    setLinhas(r)
+    setCarregando(false)
+  }
+
+  if (carregando) return <p className="cliente-carregando">Carregando contas a receber...</p>
+
+  const resumo = resumirPorFaixaAtraso(linhas)
+  const linhasFiltradas = filtroFaixa ? linhas.filter((l) => l.faixaAtraso === filtroFaixa) : linhas
+
+  return (
+    <div>
+      <p className="config-instrucao">
+        Fila de lançamentos pendentes, ordenada por urgência — o que está mais atrasado aparece primeiro.
+        Complementa a Conciliação (que mostra visão agregada por seguradora): aqui é por lançamento individual.
+      </p>
+
+      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap', marginBottom: '1rem' }}>
+        {Object.entries(resumo.porFaixa).map(([faixa, dados]) => (
+          <button
+            key={faixa}
+            className="ls-card"
+            style={{
+              minWidth: '150px', textAlign: 'left', cursor: 'pointer',
+              border: filtroFaixa === faixa ? '2px solid #b23b3b' : undefined,
+            }}
+            onClick={() => setFiltroFaixa(filtroFaixa === faixa ? '' : faixa)}
+          >
+            <strong>{FAIXAS_LABEL[faixa]}</strong>
+            <div style={{ fontSize: '1.2rem', fontWeight: 600, color: faixa !== '0-30' ? '#b23b3b' : undefined }}>
+              {formatarMoeda(dados.total)}
+            </div>
+            <div className="config-instrucao" style={{ fontSize: '0.8rem' }}>{dados.quantidade} lançamento(s)</div>
+          </button>
+        ))}
+      </div>
+
+      {linhasFiltradas.length === 0 ? (
+        <p className="cliente-vazio">Nenhuma conta a receber pendente {filtroFaixa ? 'nessa faixa' : ''}.</p>
+      ) : (
+        <table className="cliente-tabela">
+          <thead>
+            <tr>
+              <th>Seguradora</th><th>Módulo</th><th>Valor</th><th>Previsão</th><th>Atraso</th><th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {linhasFiltradas.map((l) => (
+              <LinhaContaAReceber key={l.id} linha={l} onAtualizado={carregar} />
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+function LinhaContaAReceber({ linha, onAtualizado }) {
+  const [cobrando, setCobrando] = useState(false)
+
+  async function handleMarcarRecebida() {
+    await marcarComoRecebida(linha.id)
+    onAtualizado()
+  }
+
+  async function handleCobrar() {
+    setCobrando(true)
+    try {
+      const gestores = await listarGestoresPorOperadora(linha.operadora_id)
+      const gestor = gestores.find((g) => g.modulo === linha.modulo)
+      const numero = gestor?.whatsapp || gestor?.telefone
+      if (!numero) {
+        alert('Nenhum WhatsApp/telefone cadastrado pro gestor dessa seguradora nesse módulo. Cadastre em Configurações → Seguradoras.')
+        return
+      }
+      const texto = `Olá${gestor.nome ? ', ' + gestor.nome : ''}! Temos um recebimento de comissão pendente` +
+        `${linha.operadora?.nome ? ` (${linha.operadora.nome})` : ''}, valor ${formatarMoeda(linha.valor_comissao)}` +
+        `${linha.data_prevista_recebimento ? `, previsto para ${formatarDataBR(linha.data_prevista_recebimento)}` : ''}.` +
+        ` Poderia nos ajudar a verificar o status? Obrigado!`
+      window.open(montarLinkWhatsApp(numero, texto), '_blank')
+    } finally {
+      setCobrando(false)
+    }
+  }
+
+  return (
+    <tr>
+      <td>{linha.operadora?.nome || '—'}</td>
+      <td>{MODULOS.find((m) => m.id === linha.modulo)?.label || linha.modulo}</td>
+      <td>{formatarMoeda(linha.valor_comissao)}</td>
+      <td>{linha.data_prevista_recebimento ? formatarDataBR(linha.data_prevista_recebimento) : '—'}</td>
+      <td>
+        {linha.faixaAtraso ? (
+          <span className="ls-badge" style={{ background: '#f5d9d9', color: '#b23b3b' }}>
+            {linha.diasAtraso}d ({FAIXAS_LABEL[linha.faixaAtraso]})
+          </span>
+        ) : (
+          <span className="ls-badge">No prazo</span>
+        )}
+      </td>
+      <td className="cliente-tabela-acoes">
+        <button className="cliente-tabela-btn" onClick={handleMarcarRecebida}>Marcar recebida</button>
+        <button className="cliente-tabela-btn" onClick={handleCobrar} disabled={cobrando}>
+          {cobrando ? '...' : '💬 Cobrar'}
+        </button>
+      </td>
+    </tr>
   )
 }
 

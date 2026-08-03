@@ -209,6 +209,75 @@ export async function listarComissoesPorApolices(apoliceIds) {
 }
 
 /**
+ * Contas a Receber — fila operacional de lançamentos individuais
+ * pendentes, ordenada por urgência (mais atrasado primeiro), com
+ * classificação de faixa de atraso calculada em tempo de consulta
+ * (0-30 / 31-60 / 61-90 / 90+ dias). Não persiste nada novo — é
+ * cálculo puro em cima do que já está no Ledger.
+ *
+ * Complementar à Conciliação, não redundante: a Conciliação responde
+ * "está batendo por seguradora?" (visão agregada); Contas a Receber
+ * responde "o que eu preciso cobrar agora, e de quem?" (fila acionável
+ * por lançamento).
+ */
+export async function listarContasAReceber({ operadoraId, modulo } = {}) {
+  let query = operacional
+    .from('comissoes')
+    .select('*')
+    .eq('status_recebimento', 'pendente')
+
+  if (operadoraId) query = query.eq('operadora_id', operadoraId)
+  if (modulo) query = query.eq('modulo', modulo)
+
+  const { data, error } = await query
+  if (error) throw new Error(`Erro ao listar contas a receber: ${error.message}`)
+
+  const hoje = new Date()
+  const comFaixa = (data ?? []).map((l) => {
+    let diasAtraso = 0
+    if (l.data_prevista_recebimento) {
+      const prevista = new Date(`${l.data_prevista_recebimento}T00:00:00`)
+      diasAtraso = Math.floor((hoje - prevista) / (1000 * 60 * 60 * 24))
+    }
+    return { ...l, diasAtraso, faixaAtraso: calcularFaixaAtraso(diasAtraso) }
+  })
+
+  const comOperadora = await anexarNomesOperadoras(comFaixa)
+
+  // Urgência: mais atrasado primeiro; entre os não-atrasados, o que
+  // vence mais cedo vem primeiro.
+  return comOperadora.sort((a, b) => b.diasAtraso - a.diasAtraso)
+}
+
+function calcularFaixaAtraso(diasAtraso) {
+  if (diasAtraso <= 0) return null
+  if (diasAtraso <= 30) return '0-30'
+  if (diasAtraso <= 60) return '31-60'
+  if (diasAtraso <= 90) return '61-90'
+  return '90+'
+}
+
+/** Resumo por faixa de atraso — pra exibir os cards no topo da fila */
+export function resumirPorFaixaAtraso(linhas) {
+  const faixas = ['0-30', '31-60', '61-90', '90+']
+  const resumo = Object.fromEntries(faixas.map((f) => [f, { quantidade: 0, total: 0 }]))
+  let semAtrasoQuantidade = 0
+  let semAtrasoTotal = 0
+
+  for (const l of linhas) {
+    if (l.faixaAtraso) {
+      resumo[l.faixaAtraso].quantidade += 1
+      resumo[l.faixaAtraso].total += Number(l.valor_comissao || 0)
+    } else {
+      semAtrasoQuantidade += 1
+      semAtrasoTotal += Number(l.valor_comissao || 0)
+    }
+  }
+
+  return { porFaixa: resumo, semAtraso: { quantidade: semAtrasoQuantidade, total: semAtrasoTotal } }
+}
+
+/**
  * Indicadores operacionais simples: Previsto, Recebido, Pendente,
  * Repassado, quantidade de lançamentos e últimos registros.
  * Sem gráficos, sem BI — só os totais pedidos.
