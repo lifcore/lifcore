@@ -223,3 +223,85 @@ export async function indicadoresOperacionais({ modulo, operadoraId, periodoInic
     ultimosRegistros: ultimos,
   }
 }
+
+/**
+ * Conciliação simples: para cada seguradora, compara o total lançado
+ * com o total já confirmado como recebido, e sinaliza o que está
+ * pendente além da data prevista (a divergência real de atenção).
+ * Compara só o que já está no próprio ledger — não importa nenhum
+ * dado externo (extrato bancário, etc.), por isso fica 100% interno.
+ */
+export async function obterConciliacao({ periodoInicio, periodoFim, operadoraId } = {}) {
+  let query = operacional
+    .from('comissoes')
+    .select('operadora_id, valor_comissao, status_recebimento, data_prevista_recebimento, data_recebimento')
+    .neq('status_recebimento', 'cancelado')
+
+  if (operadoraId) query = query.eq('operadora_id', operadoraId)
+  if (periodoInicio) query = query.gte('created_at', periodoInicio)
+  if (periodoFim) query = query.lte('created_at', `${periodoFim}T23:59:59`)
+
+  const { data, error } = await query
+  if (error) throw new Error(`Erro ao gerar conciliação: ${error.message}`)
+
+  const hoje = new Date().toISOString().slice(0, 10)
+  const linhas = data ?? []
+  const porOperadora = {}
+
+  for (const l of linhas) {
+    const chave = l.operadora_id ?? 'sem_seguradora'
+    if (!porOperadora[chave]) {
+      porOperadora[chave] = { operadoraId: l.operadora_id, totalLancado: 0, totalRecebido: 0, totalAtrasado: 0, qtdAtrasados: 0 }
+    }
+    const bucket = porOperadora[chave]
+    bucket.totalLancado += Number(l.valor_comissao || 0)
+    if (l.status_recebimento === 'recebido') {
+      bucket.totalRecebido += Number(l.valor_comissao || 0)
+    } else if (l.status_recebimento === 'pendente' && l.data_prevista_recebimento && l.data_prevista_recebimento < hoje) {
+      // Pendente com previsão já vencida — é a divergência real que
+      // merece atenção (não é só "ainda não chegou o prazo").
+      bucket.totalAtrasado += Number(l.valor_comissao || 0)
+      bucket.qtdAtrasados += 1
+    }
+  }
+
+  const linhasComOperadora = await anexarNomesOperadoras(
+    Object.values(porOperadora).map((b) => ({ operadora_id: b.operadoraId, ...b }))
+  )
+
+  return linhasComOperadora
+    .map((l) => ({ ...l, totalPendenteGeral: l.totalLancado - l.totalRecebido }))
+    .sort((a, b) => b.totalAtrasado - a.totalAtrasado)
+}
+
+/**
+ * Fluxo de caixa previsto: soma direta do que já está cadastrado
+ * (data_prevista_recebimento), agrupado por mês, para os próximos N
+ * meses. Sem projeção estatística, sem IA — só soma o que já existe.
+ */
+export async function obterFluxoCaixaPrevisto({ mesesAFrente = 3 } = {}) {
+  const hoje = new Date()
+  const limite = new Date(hoje.getFullYear(), hoje.getMonth() + mesesAFrente, 1)
+
+  const { data, error } = await operacional
+    .from('comissoes')
+    .select('valor_comissao, status_recebimento, data_prevista_recebimento')
+    .neq('status_recebimento', 'cancelado')
+    .not('data_prevista_recebimento', 'is', null)
+    .gte('data_prevista_recebimento', hoje.toISOString().slice(0, 10))
+    .lt('data_prevista_recebimento', limite.toISOString().slice(0, 10))
+
+  if (error) throw new Error(`Erro ao gerar fluxo de caixa: ${error.message}`)
+
+  const porMes = {}
+  for (const l of data ?? []) {
+    const mes = l.data_prevista_recebimento.slice(0, 7) // 'YYYY-MM'
+    if (!porMes[mes]) porMes[mes] = { mes, totalPrevisto: 0, totalRecebido: 0, totalPendente: 0 }
+    const valor = Number(l.valor_comissao || 0)
+    porMes[mes].totalPrevisto += valor
+    if (l.status_recebimento === 'recebido') porMes[mes].totalRecebido += valor
+    else porMes[mes].totalPendente += valor
+  }
+
+  return Object.values(porMes).sort((a, b) => a.mes.localeCompare(b.mes))
+}
