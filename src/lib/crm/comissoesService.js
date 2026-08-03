@@ -8,6 +8,13 @@ import { listarAuditoria } from '../governanca/governancaService'
  * manualmente com o valor já apurado. Ajustes financeiros são eventos
  * separados (nunca sobrescrevem o valor original), garantindo
  * rastreabilidade completa de qualquer correção.
+ *
+ * Sprint Apólice → Comissão v1: registros também podem nascer como
+ * "sugeridos" (status_confirmacao = 'sugerida'), gerados automaticamente
+ * quando uma Venda Nova é lançada num Workspace. Um registro sugerido
+ * nunca tem valor de comissão definido pelo sistema — apenas sinaliza
+ * que existe algo a confirmar, até um humano preencher valor/percentual
+ * reais e confirmar.
  */
 
 const CAMPOS_ORDENAVEIS = ['created_at', 'valor_comissao', 'data_prevista_recebimento', 'data_recebimento']
@@ -127,6 +134,7 @@ export async function criarComissao({
       data_prevista_recebimento: dataPrevistaRecebimento || null,
       valor_repasse_corretor: valorRepasseCorretor || null,
       status_repasse: valorRepasseCorretor ? 'pendente' : 'nao_aplicavel',
+      status_confirmacao: 'confirmada',
       detalhes_calculo: detalhesCalculo || null,
       observacoes: observacoes || null,
     })
@@ -134,6 +142,76 @@ export async function criarComissao({
     .single()
   if (error) throw new Error(`Erro ao lançar comissão: ${error.message}`)
   return data
+}
+
+/**
+ * Gera uma comissão SUGERIDA (Sprint Apólice → Comissão v1) — chamada
+ * automaticamente pelo service de cada Workspace (hoje: lifleetService)
+ * quando uma apólice é lançada com origem "venda_nova". Nunca define
+ * valor de comissão (fica 0, marcado como pendente de confirmação) —
+ * quem decide o valor real é sempre um humano, na Fila de Confirmação.
+ */
+export async function criarComissaoSugerida({ organizacaoId, operadoraId, apoliceId, corretorId, modulo, valorPremio }) {
+  const { data, error } = await operacional
+    .from('comissoes')
+    .insert({
+      organizacao_id: organizacaoId,
+      operadora_id: operadoraId || null,
+      apolice_id: apoliceId || null,
+      corretor_id: corretorId || null,
+      modulo,
+      valor_premio: valorPremio || null,
+      valor_comissao: 0,
+      status_recebimento: 'pendente',
+      status_repasse: 'nao_aplicavel',
+      status_confirmacao: 'sugerida',
+      observacoes: 'Gerado automaticamente a partir de uma Venda Nova. Aguardando confirmação de valor e percentual.',
+    })
+    .select()
+    .single()
+  if (error) throw new Error(`Erro ao gerar sugestão de comissão: ${error.message}`)
+  return data
+}
+
+/** Lista as comissões sugeridas aguardando confirmação humana (Fila de Confirmação) */
+export async function listarComissoesSugeridas() {
+  const { data, error } = await operacional
+    .from('comissoes')
+    .select('*, apolice:apolices(id, produto, premio, criado_em, numero_apolice, nome_cliente)')
+    .eq('status_confirmacao', 'sugerida')
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(`Erro ao listar comissões sugeridas: ${error.message}`)
+  return anexarNomesOperadoras(data ?? [])
+}
+
+/**
+ * Confirma uma comissão sugerida: humano preenche o valor real e o
+ * percentual aplicado (que varia por seguradora/produto e não é
+ * calculado pelo sistema), e o registro passa a valer como um
+ * lançamento normal do Ledger.
+ */
+export async function confirmarComissaoSugerida(id, { valorComissao, percentualAplicado, formaPagamento, dataPrevistaRecebimento, valorRepasseCorretor, detalhesCalculo }) {
+  if (!valorComissao) throw new Error('Informe o valor da comissão para confirmar o lançamento.')
+  await atualizarComissao(id, {
+    valor_comissao: valorComissao,
+    percentual_aplicado: percentualAplicado || null,
+    forma_pagamento: formaPagamento || null,
+    data_prevista_recebimento: dataPrevistaRecebimento || null,
+    valor_repasse_corretor: valorRepasseCorretor || null,
+    status_repasse: valorRepasseCorretor ? 'pendente' : 'nao_aplicavel',
+    detalhes_calculo: detalhesCalculo || null,
+    status_confirmacao: 'confirmada',
+  })
+}
+
+/**
+ * Descarta uma comissão sugerida (ex.: a apólice era renovação/endosso
+ * e foi marcada errada, ou não deve mesmo gerar comissão). Reaproveita
+ * a exclusão definitiva já existente — sugestão descartada não deixa
+ * rastro no Ledger, diferente de uma comissão confirmada e cancelada.
+ */
+export async function descartarComissaoSugerida(id) {
+  await excluirComissao(id)
 }
 
 /** Atualiza campos de uma comissão já lançada */
@@ -209,18 +287,6 @@ export async function listarComissoesPorApolices(apoliceIds) {
   return anexarNomesOperadoras(data ?? [])
 }
 
-/**
- * Contas a Receber — fila operacional de lançamentos individuais
- * pendentes, ordenada por urgência (mais atrasado primeiro), com
- * classificação de faixa de atraso calculada em tempo de consulta
- * (0-30 / 31-60 / 61-90 / 90+ dias). Não persiste nada novo — é
- * cálculo puro em cima do que já está no Ledger.
- *
- * Complementar à Conciliação, não redundante: a Conciliação responde
- * "está batendo por seguradora?" (visão agregada); Contas a Receber
- * responde "o que eu preciso cobrar agora, e de quem?" (fila acionável
- * por lançamento).
- */
 /**
  * Contas a Receber — fila operacional de lançamentos individuais
  * pendentes, ordenada por urgência (mais atrasado primeiro), com
@@ -546,16 +612,19 @@ export async function buscarComissoesGlobal({
 /**
  * Central de Pendências — consolida, num único lugar, tudo que exige
  * atenção administrativa: recebimentos vencidos/próximos, repasses
- * pendentes/aguardando, e lançamentos com dado cadastral incompleto
- * (sem corretor, sem seguradora). "Sem gestor" depende do Master
- * Center de Seguradoras (`seguradora_gestores`) — feito como consulta
- * best-effort; se a tabela de gestores não puder ser lida por algum
- * motivo, essa checagem específica é pulada sem quebrar o resto.
+ * pendentes/aguardando, lançamentos com dado cadastral incompleto
+ * (sem corretor, sem seguradora), e — desde a Sprint Apólice → Comissão
+ * v1 — comissões sugeridas automaticamente que aguardam confirmação
+ * humana. "Sem gestor" depende do Master Center de Seguradoras
+ * (`seguradora_gestores`) — feito como consulta best-effort; se a
+ * tabela de gestores não puder ser lida por algum motivo, essa checagem
+ * específica é pulada sem quebrar o resto.
  */
 export async function obterCentralPendencias({ diasProximos = 7 } = {}) {
-  const [contasAReceber, repasses] = await Promise.all([
+  const [contasAReceber, repasses, comissoesSugeridas] = await Promise.all([
     listarContasAReceber(),
     listarRepassesAPagar(),
+    listarComissoesSugeridas(),
   ])
 
   const recebimentosVencidos = contasAReceber.filter((c) => c.faixaAtraso)
@@ -606,5 +675,6 @@ export async function obterCentralPendencias({ diasProximos = 7 } = {}) {
     semCorretor: semCorretorData ?? [],
     semSeguradora: semSeguradoraData ?? [],
     semGestor,
+    comissoesSugeridas,
   }
 }

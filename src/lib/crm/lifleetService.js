@@ -1,6 +1,7 @@
 import { operacional } from '../supabaseSchemas'
 import { criarApolice, atualizarApolice, excluirApolice } from './apolicesService'
 import { atualizarClienteProspect, atualizarStatusClienteProspect } from './clientesService'
+import { criarComissaoSugerida } from './comissoesService'
 
 /**
  * Valida a regra de negócio combinada com o Raphael:
@@ -18,8 +19,19 @@ export function validarQuantidadeVeiculos(tipoPessoa, veiculos) {
   }
 }
 
-/** Cria uma apólice de Auto/Frota já vinculada ao cliente, com os veículos dela */
-export async function criarApoliceAuto({ corretorId, organizacaoId, clienteProspectId, tipoPessoa, dados, veiculos }) {
+/**
+ * Cria uma apólice de Auto/Frota já vinculada ao cliente, com os veículos dela.
+ *
+ * `origemVenda` (Sprint: Automação Interna Apólice → Comissão v1):
+ * indica se este lançamento é 'venda_nova', 'renovacao', 'endosso' ou
+ * 'migracao'. Só quando for 'venda_nova' o sistema gera uma SUGESTÃO de
+ * comissão no Finance Center (nunca um lançamento automático definitivo,
+ * e nunca calcula o valor sozinho — só sinaliza que existe algo a
+ * confirmar). Se o parâmetro não for informado, o comportamento de hoje
+ * é preservado: nenhuma sugestão é criada, e o registro fica salvo com
+ * origem 'migracao' por padrão.
+ */
+export async function criarApoliceAuto({ corretorId, organizacaoId, clienteProspectId, tipoPessoa, dados, veiculos, origemVenda }) {
   validarQuantidadeVeiculos(tipoPessoa, veiculos)
 
   // BUG CORRIGIDO: `apolices.nome_cliente` é NOT NULL no banco, mas
@@ -39,6 +51,7 @@ export async function criarApoliceAuto({ corretorId, organizacaoId, clienteProsp
       cliente_prospect_id: clienteProspectId,
       nome_cliente: cliente.razao_social,
       produto: veiculos.length > 1 ? 'Frota' : 'Auto',
+      origem_venda: origemVenda || 'migracao',
     },
   })
 
@@ -52,6 +65,20 @@ export async function criarApoliceAuto({ corretorId, organizacaoId, clienteProsp
   await atualizarStatusClienteProspect(clienteProspectId, 'cliente')
   if (dados.vigencia_fim) {
     await atualizarClienteProspect(clienteProspectId, { data_vigencia: dados.vigencia_fim })
+  }
+
+  // NOVO (Sprint Apólice → Comissão v1): só gera sugestão de comissão
+  // quando a origem for explicitamente "venda_nova" — renovação, endosso
+  // e migração de dado legado não disparam nada aqui.
+  if (origemVenda === 'venda_nova') {
+    await criarComissaoSugerida({
+      organizacaoId,
+      operadoraId: dados.operadora_id || null,
+      apoliceId: apolice.id,
+      corretorId,
+      modulo: 'lifleet',
+      valorPremio: dados.premio || null,
+    })
   }
 
   return apolice
