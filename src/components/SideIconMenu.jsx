@@ -7,6 +7,7 @@ const ITENS = [
   { path: '/perfil', icone: '👤', titulo: 'Meu Perfil' },
   { path: '/mensagens', icone: '💬', titulo: 'Mensagens Padrão' },
   { path: '/financeiro', icone: '💰', titulo: 'Financeiro', somenteMasterAdmin: true },
+  { path: '/auditoria', icone: '🕵️', titulo: 'Auditoria', somenteMasterAdmin: true },
   { path: '/configuracoes', icone: '⚙️', titulo: 'Configurações', somenteMasterAdmin: true },
 ]
 

@@ -9,6 +9,7 @@ import ClienteDetailPage from './features/crm/ClienteDetailPage'
 import ConfiguracoesPage from './features/configuracoes/ConfiguracoesPage'
 import FinanceiroPage from './features/financeiro/FinanceiroPage'
 import PainelExecutivoPage from './features/painel-executivo/PainelExecutivoPage'
+import AuditoriaPage from './features/auditoria/AuditoriaPage'
 import PerfilPage from './features/perfil/PerfilPage'
 import MensagensPage from './features/mensagens/MensagensPage'
 import ApolicesPage from './features/administracao/ApolicesPage'
@@ -52,6 +53,7 @@ function AppShell() {
           <Route path="/configuracoes" element={<ConfiguracoesPage />} />
           <Route path="/financeiro" element={<FinanceiroPage />} />
           <Route path="/painel" element={<PainelExecutivoPage />} />
+          <Route path="/auditoria" element={<AuditoriaPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
           <Route path="/mensagens" element={<MensagensPage />} />
           <Route path="/apolices" element={<ApolicesPage />} />

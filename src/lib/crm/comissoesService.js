@@ -192,6 +192,23 @@ export async function lancarAjuste(comissaoId, valorAjuste, motivo) {
 }
 
 /**
+ * Lista comissões vinculadas a um conjunto de apólices — usado pelo
+ * Report Center pra montar o financeiro de um cliente específico, sem
+ * duplicar lógica de consulta (reaproveita o mesmo padrão de
+ * anexarNomesOperadoras já usado no resto do service).
+ */
+export async function listarComissoesPorApolices(apoliceIds) {
+  if (!apoliceIds?.length) return []
+  const { data, error } = await operacional
+    .from('comissoes')
+    .select('*')
+    .in('apolice_id', apoliceIds)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(`Erro ao listar comissões por apólice: ${error.message}`)
+  return anexarNomesOperadoras(data ?? [])
+}
+
+/**
  * Indicadores operacionais simples: Previsto, Recebido, Pendente,
  * Repassado, quantidade de lançamentos e últimos registros.
  * Sem gráficos, sem BI — só os totais pedidos.
