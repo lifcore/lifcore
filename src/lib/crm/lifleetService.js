@@ -22,12 +22,22 @@ export function validarQuantidadeVeiculos(tipoPessoa, veiculos) {
 export async function criarApoliceAuto({ corretorId, organizacaoId, clienteProspectId, tipoPessoa, dados, veiculos }) {
   validarQuantidadeVeiculos(tipoPessoa, veiculos)
 
+  // BUG CORRIGIDO: `apolices.nome_cliente` é NOT NULL no banco, mas
+  // nunca era preenchido — buscamos o nome do cliente antes de criar.
+  const { data: cliente, error: erroCliente } = await operacional
+    .from('clientes_prospects')
+    .select('razao_social')
+    .eq('id', clienteProspectId)
+    .single()
+  if (erroCliente) throw new Error(`Erro ao buscar dados do cliente: ${erroCliente.message}`)
+
   const apolice = await criarApolice({
     corretorId,
     organizacaoId,
     dados: {
       ...dados,
       cliente_prospect_id: clienteProspectId,
+      nome_cliente: cliente.razao_social,
       produto: veiculos.length > 1 ? 'Frota' : 'Auto',
     },
   })
