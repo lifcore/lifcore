@@ -1,4 +1,5 @@
 import { operacional } from '../supabaseSchemas'
+import { listarContasAReceber, listarRepassesAPagar, obterConciliacao } from './comissoesService'
 
 /**
  * Painel Executivo — agrega dados que já existem em outras tabelas
@@ -114,4 +115,46 @@ export async function contarIndicadoresPorCorretor() {
   }
 
   return porCorretor
+}
+
+/**
+ * Saúde Financeira — bloco do Painel Executivo v2. Não cria nenhuma
+ * consulta nova ao banco: só reaproveita e agrega o que o Finance
+ * Center já expõe (Contas a Receber, Repasses, Conciliação). Zero
+ * Service novo, conforme escopo da Sprint.
+ */
+export async function obterSaudeFinanceira() {
+  const [contasAReceber, repasses, conciliacao] = await Promise.all([
+    listarContasAReceber(),
+    listarRepassesAPagar(),
+    obterConciliacao(),
+  ])
+
+  const totalAReceber = contasAReceber.reduce((s, c) => s + Number(c.valor_comissao || 0), 0)
+  const emAtraso = contasAReceber.filter((c) => c.faixaAtraso)
+  const totalEmAtraso = emAtraso.reduce((s, c) => s + Number(c.valor_comissao || 0), 0)
+  const faixaCritica90 = contasAReceber.filter((c) => c.faixaAtraso === '90+')
+  const totalFaixaCritica90 = faixaCritica90.reduce((s, c) => s + Number(c.valor_comissao || 0), 0)
+
+  const repassesPendentes = repasses.filter((r) => !r.aguardandoRecebimento)
+  const totalRepassesPendentes = repassesPendentes.reduce((s, r) => s + Number(r.valor_repasse_corretor || 0), 0)
+
+  const totalLancadoGeral = conciliacao.reduce((s, c) => s + c.totalLancado, 0)
+  const totalRecebidoGeral = conciliacao.reduce((s, c) => s + c.totalRecebido, 0)
+
+  const percentualEmAtraso = totalAReceber > 0 ? (totalEmAtraso / totalAReceber) * 100 : 0
+  const percentualConciliado = totalLancadoGeral > 0 ? (totalRecebidoGeral / totalLancadoGeral) * 100 : 0
+
+  return {
+    totalAReceber,
+    totalEmAtraso,
+    totalFaixaCritica90,
+    totalRepassesPendentes,
+    totalConciliado: totalRecebidoGeral,
+    percentualEmAtraso,
+    percentualConciliado,
+    volumeAguardandoAcao: totalAReceber + totalRepassesPendentes,
+    quantidadeEmAtraso: emAtraso.length,
+    quantidadeFaixaCritica90: faixaCritica90.length,
+  }
 }

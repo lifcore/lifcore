@@ -1,4 +1,5 @@
 import { operacional, institucional } from '../supabaseSchemas'
+import { listarAuditoria } from './governancaService'
 
 /**
  * Finance Center v3 — Livro-razão de Comissões
@@ -220,6 +221,18 @@ export async function listarComissoesPorApolices(apoliceIds) {
  * responde "o que eu preciso cobrar agora, e de quem?" (fila acionável
  * por lançamento).
  */
+/**
+ * Contas a Receber — fila operacional de lançamentos individuais
+ * pendentes, ordenada por urgência (mais atrasado primeiro), com
+ * classificação de faixa de atraso calculada em tempo de consulta
+ * (0-30 / 31-60 / 61-90 / 90+ dias). Não persiste nada novo — é
+ * cálculo puro em cima do que já está no Ledger.
+ *
+ * Complementar à Conciliação, não redundante: a Conciliação responde
+ * "está batendo por seguradora?" (visão agregada); Contas a Receber
+ * responde "o que eu preciso cobrar agora, e de quem?" (fila acionável
+ * por lançamento).
+ */
 export async function listarContasAReceber({ operadoraId, modulo } = {}) {
   let query = operacional
     .from('comissoes')
@@ -232,21 +245,31 @@ export async function listarContasAReceber({ operadoraId, modulo } = {}) {
   const { data, error } = await query
   if (error) throw new Error(`Erro ao listar contas a receber: ${error.message}`)
 
-  const hoje = new Date()
-  const comFaixa = (data ?? []).map((l) => {
-    let diasAtraso = 0
-    if (l.data_prevista_recebimento) {
-      const prevista = new Date(`${l.data_prevista_recebimento}T00:00:00`)
-      diasAtraso = Math.floor((hoje - prevista) / (1000 * 60 * 60 * 24))
-    }
-    return { ...l, diasAtraso, faixaAtraso: calcularFaixaAtraso(diasAtraso) }
-  })
-
+  const comFaixa = calcularDiasEFaixa(data ?? [], 'data_prevista_recebimento', 'diasAtraso')
   const comOperadora = await anexarNomesOperadoras(comFaixa)
 
   // Urgência: mais atrasado primeiro; entre os não-atrasados, o que
   // vence mais cedo vem primeiro.
   return comOperadora.sort((a, b) => b.diasAtraso - a.diasAtraso)
+}
+
+/**
+ * Helper compartilhado — calcula "dias desde uma data de referência" e
+ * a faixa de atraso correspondente. Usado tanto por Contas a Receber
+ * (referência: data prevista de recebimento) quanto por Repasses
+ * (referência: data em que a comissão foi recebida). Centraliza aqui
+ * pra não duplicar a mesma conta de dias em dois lugares.
+ */
+function calcularDiasEFaixa(linhas, campoData, nomeCampoDias) {
+  const hoje = new Date()
+  return linhas.map((l) => {
+    let dias = 0
+    if (l[campoData]) {
+      const referencia = new Date(`${l[campoData]}T00:00:00`)
+      dias = Math.floor((hoje - referencia) / (1000 * 60 * 60 * 24))
+    }
+    return { ...l, [nomeCampoDias]: dias, faixaAtraso: calcularFaixaAtraso(dias) }
+  })
 }
 
 function calcularFaixaAtraso(diasAtraso) {
@@ -302,20 +325,15 @@ export async function listarRepassesAPagar({ corretorId, modulo } = {}) {
   const { data, error } = await query
   if (error) throw new Error(`Erro ao listar repasses a pagar: ${error.message}`)
 
-  const hoje = new Date()
-  const comFaixa = (data ?? []).map((l) => {
-    const aguardandoRecebimento = l.status_recebimento !== 'recebido'
-    let diasDesdeRecebimento = null
-    let faixaAtraso = null
-    if (!aguardandoRecebimento && l.data_recebimento) {
-      const recebido = new Date(`${l.data_recebimento}T00:00:00`)
-      diasDesdeRecebimento = Math.floor((hoje - recebido) / (1000 * 60 * 60 * 24))
-      faixaAtraso = calcularFaixaAtraso(diasDesdeRecebimento)
-    }
-    return { ...l, aguardandoRecebimento, diasDesdeRecebimento, faixaAtraso }
-  })
+  const marcados = (data ?? []).map((l) => ({ ...l, aguardandoRecebimento: l.status_recebimento !== 'recebido' }))
+  const acionaveis = calcularDiasEFaixa(
+    marcados.filter((l) => !l.aguardandoRecebimento),
+    'data_recebimento',
+    'diasDesdeRecebimento'
+  )
+  const aguardando = marcados.filter((l) => l.aguardandoRecebimento).map((l) => ({ ...l, diasDesdeRecebimento: null, faixaAtraso: null }))
 
-  const comOperadora = await anexarNomesOperadoras(comFaixa)
+  const comOperadora = await anexarNomesOperadoras([...acionaveis, ...aguardando])
 
   // Aguardando recebimento vai pro fim (não é acionável ainda); entre
   // os acionáveis, mais tempo esperando o repasse vem primeiro.
@@ -438,4 +456,155 @@ export async function obterFluxoCaixaPrevisto({ mesesAFrente = 3 } = {}) {
   }
 
   return Object.values(porMes).sort((a, b) => a.mes.localeCompare(b.mes))
+}
+
+/**
+ * Timeline Financeira — histórico completo e rastreável de um
+ * lançamento específico, combinando exclusivamente o que já existe:
+ * Ajustes (comissao_ajustes) e Auditoria (operacional.auditoria,
+ * quando o lançamento já sofreu alguma operação crítica via
+ * Governança Master). Nenhum histórico paralelo é criado — é leitura
+ * combinada de duas fontes já existentes, ordenada no tempo.
+ */
+export async function obterHistoricoLancamento(comissaoId) {
+  const [ajustes, auditoria] = await Promise.all([
+    listarAjustes(comissaoId),
+    listarAuditoria({ tabelaAfetada: 'operacional.comissoes', registroId: comissaoId, limite: 50 }),
+  ])
+
+  const eventos = [
+    ...ajustes.map((a) => ({
+      tipo: 'ajuste',
+      data: a.created_at,
+      descricao: `Ajuste de ${Number(a.valor_ajuste) >= 0 ? '+' : ''}${a.valor_ajuste}`,
+      motivo: a.motivo,
+    })),
+    ...auditoria.map((a) => ({
+      tipo: 'auditoria',
+      data: a.created_at,
+      descricao: `${a.acao} (${a.usuario_papel ?? 'usuário'})`,
+      motivo: a.motivo,
+    })),
+  ]
+
+  return eventos.sort((a, b) => new Date(a.data) - new Date(b.data))
+}
+
+/**
+ * Pesquisa Global Financeira — localiza lançamentos por Corretor,
+ * Seguradora, Apólice (via número), Status, Período ou Valor.
+ *
+ * LIMITAÇÃO ASSUMIDA E REGISTRADA: busca por "Cliente" e por
+ * "Contrato" não está implementada aqui. Motivo: `comissoes` não
+ * possui referência direta a cliente (só a apólice, e apólice a
+ * corretor/operadora — não confirmei se `apolices` tem
+ * `cliente_prospect_id` sem ver o schema real), e não possui
+ * `contrato_id` (decisão em espera, já registrada anteriormente —
+ * Finance Center só vincula via `apolice_id` por enquanto). Implementar
+ * isso às cegas seria arriscar quebrar a busca com suposição de coluna
+ * que talvez não exista.
+ */
+export async function buscarComissoesGlobal({
+  corretorId,
+  operadoraId,
+  numeroApolice,
+  statusRecebimento,
+  statusRepasse,
+  periodoInicio,
+  periodoFim,
+  valorMinimo,
+  valorMaximo,
+} = {}) {
+  let apoliceIds = null
+  if (numeroApolice) {
+    const { data: apolicesEncontradas, error: erroApolices } = await operacional
+      .from('apolices')
+      .select('id')
+      .ilike('numero_apolice', `%${numeroApolice}%`)
+    if (erroApolices) throw new Error(`Erro ao buscar apólice: ${erroApolices.message}`)
+    apoliceIds = (apolicesEncontradas ?? []).map((a) => a.id)
+    if (apoliceIds.length === 0) return [] // nenhuma apólice bate, não adianta continuar
+  }
+
+  let query = operacional.from('comissoes').select('*').order('created_at', { ascending: false }).limit(100)
+
+  if (corretorId) query = query.eq('corretor_id', corretorId)
+  if (operadoraId) query = query.eq('operadora_id', operadoraId)
+  if (apoliceIds) query = query.in('apolice_id', apoliceIds)
+  if (statusRecebimento) query = query.eq('status_recebimento', statusRecebimento)
+  if (statusRepasse) query = query.eq('status_repasse', statusRepasse)
+  if (periodoInicio) query = query.gte('created_at', periodoInicio)
+  if (periodoFim) query = query.lte('created_at', `${periodoFim}T23:59:59`)
+  if (valorMinimo) query = query.gte('valor_comissao', valorMinimo)
+  if (valorMaximo) query = query.lte('valor_comissao', valorMaximo)
+
+  const { data, error } = await query
+  if (error) throw new Error(`Erro na pesquisa global: ${error.message}`)
+  return anexarNomesOperadoras(data ?? [])
+}
+
+/**
+ * Central de Pendências — consolida, num único lugar, tudo que exige
+ * atenção administrativa: recebimentos vencidos/próximos, repasses
+ * pendentes/aguardando, e lançamentos com dado cadastral incompleto
+ * (sem corretor, sem seguradora). "Sem gestor" depende do Master
+ * Center de Seguradoras (`seguradora_gestores`) — feito como consulta
+ * best-effort; se a tabela de gestores não puder ser lida por algum
+ * motivo, essa checagem específica é pulada sem quebrar o resto.
+ */
+export async function obterCentralPendencias({ diasProximos = 7 } = {}) {
+  const [contasAReceber, repasses] = await Promise.all([
+    listarContasAReceber(),
+    listarRepassesAPagar(),
+  ])
+
+  const recebimentosVencidos = contasAReceber.filter((c) => c.faixaAtraso)
+  const hoje = new Date().toISOString().slice(0, 10)
+  const limiteProximo = new Date(Date.now() + diasProximos * 86400000).toISOString().slice(0, 10)
+  const recebimentosProximos = contasAReceber.filter(
+    (c) => !c.faixaAtraso && c.data_prevista_recebimento && c.data_prevista_recebimento >= hoje && c.data_prevista_recebimento <= limiteProximo
+  )
+
+  const repassesPendentesAgora = repasses.filter((r) => !r.aguardandoRecebimento)
+  const repassesAguardando = repasses.filter((r) => r.aguardandoRecebimento)
+
+  const { data: semCorretorData } = await operacional
+    .from('comissoes')
+    .select('id, valor_comissao')
+    .is('corretor_id', null)
+    .neq('status_recebimento', 'cancelado')
+
+  const { data: semSeguradoraData } = await operacional
+    .from('comissoes')
+    .select('id, valor_comissao')
+    .is('operadora_id', null)
+    .neq('status_recebimento', 'cancelado')
+
+  let semGestor = []
+  try {
+    const { listarGestoresPorOperadora } = await import('./seguradorasService')
+    const paresUnicos = new Map()
+    for (const c of [...contasAReceber, ...repasses]) {
+      if (c.operadora_id) paresUnicos.set(`${c.operadora_id}|${c.modulo}`, { operadoraId: c.operadora_id, modulo: c.modulo, nomeOperadora: c.operadora?.nome })
+    }
+    for (const par of paresUnicos.values()) {
+      const gestores = await listarGestoresPorOperadora(par.operadoraId)
+      const temGestor = gestores.some((g) => g.modulo === par.modulo && (g.whatsapp || g.telefone))
+      if (!temGestor) semGestor.push(par)
+    }
+  } catch {
+    // Best-effort: se a checagem de gestor falhar por qualquer motivo,
+    // a Central de Pendências continua funcionando sem essa parte.
+    semGestor = []
+  }
+
+  return {
+    recebimentosVencidos,
+    recebimentosProximos,
+    repassesPendentesAgora,
+    repassesAguardando,
+    semCorretor: semCorretorData ?? [],
+    semSeguradora: semSeguradoraData ?? [],
+    semGestor,
+  }
 }

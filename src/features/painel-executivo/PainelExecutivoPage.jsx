@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { contarClientesPorModulo, contarDemandasAbertas, contarConsultasPorEspecialista, contarIndicadoresPorCorretor } from '../../lib/crm/painelExecutivoService'
+import { contarClientesPorModulo, contarDemandasAbertas, contarConsultasPorEspecialista, contarIndicadoresPorCorretor, obterSaudeFinanceira } from '../../lib/crm/painelExecutivoService'
 import { indicadoresOperacionais } from '../../lib/crm/comissoesService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
 
@@ -22,6 +22,7 @@ export default function PainelExecutivoPage() {
   const [financeiro, setFinanceiro] = useState(null)
   const [consultasPorEspecialista, setConsultasPorEspecialista] = useState(null)
   const [indicadoresPorCorretor, setIndicadoresPorCorretor] = useState(null)
+  const [saudeFinanceira, setSaudeFinanceira] = useState(null)
   const [corretores, setCorretores] = useState([])
   const [carregando, setCarregando] = useState(true)
 
@@ -31,13 +32,14 @@ export default function PainelExecutivoPage() {
 
   async function carregar() {
     setCarregando(true)
-    const [clientes, dem, fin, consultas, porCorretor, listaCorretores] = await Promise.all([
+    const [clientes, dem, fin, consultas, porCorretor, listaCorretores, saude] = await Promise.all([
       contarClientesPorModulo(),
       contarDemandasAbertas(),
       indicadoresOperacionais(),
       contarConsultasPorEspecialista(),
       contarIndicadoresPorCorretor(),
       listarCorretores(),
+      obterSaudeFinanceira(),
     ])
     setClientesPorModulo(clientes)
     setDemandas(dem)
@@ -45,6 +47,7 @@ export default function PainelExecutivoPage() {
     setConsultasPorEspecialista(consultas)
     setIndicadoresPorCorretor(porCorretor)
     setCorretores(listaCorretores)
+    setSaudeFinanceira(saude)
     setCarregando(false)
   }
 
@@ -123,6 +126,37 @@ export default function PainelExecutivoPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <h3 style={{ marginTop: '1.5rem' }}>Saúde Financeira</h3>
+      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap' }}>
+        <Link to="/financeiro?aba=contasareceber" className="ls-card" style={{ textDecoration: 'none', color: 'inherit', minWidth: '160px' }}>
+          <strong>Total a Receber</strong>
+          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatarMoeda(saudeFinanceira.totalAReceber)}</div>
+        </Link>
+        <Link to="/financeiro?aba=contasareceber" className="ls-card" style={{ textDecoration: 'none', color: '#b23b3b', minWidth: '160px' }}>
+          <strong>Total em Atraso</strong>
+          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatarMoeda(saudeFinanceira.totalEmAtraso)}</div>
+          <div className="config-instrucao" style={{ fontSize: '0.75rem' }}>{saudeFinanceira.percentualEmAtraso.toFixed(1)}% do total a receber</div>
+        </Link>
+        <Link to="/financeiro?aba=contasareceber" className="ls-card" style={{ textDecoration: 'none', color: '#b23b3b', minWidth: '160px' }}>
+          <strong>Faixa Crítica (90+ dias)</strong>
+          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatarMoeda(saudeFinanceira.totalFaixaCritica90)}</div>
+          <div className="config-instrucao" style={{ fontSize: '0.75rem' }}>{saudeFinanceira.quantidadeFaixaCritica90} lançamento(s)</div>
+        </Link>
+        <Link to="/financeiro?aba=repasses" className="ls-card" style={{ textDecoration: 'none', color: 'inherit', minWidth: '160px' }}>
+          <strong>Repasses Pendentes</strong>
+          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatarMoeda(saudeFinanceira.totalRepassesPendentes)}</div>
+        </Link>
+        <Link to="/financeiro?aba=conciliacao" className="ls-card" style={{ textDecoration: 'none', color: 'inherit', minWidth: '160px' }}>
+          <strong>Conciliado</strong>
+          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatarMoeda(saudeFinanceira.totalConciliado)}</div>
+          <div className="config-instrucao" style={{ fontSize: '0.75rem' }}>{saudeFinanceira.percentualConciliado.toFixed(1)}% conciliado</div>
+        </Link>
+        <Link to="/financeiro?aba=pendencias" className="ls-card" style={{ textDecoration: 'none', color: 'inherit', minWidth: '160px' }}>
+          <strong>Volume Aguardando Ação</strong>
+          <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatarMoeda(saudeFinanceira.volumeAguardandoAcao)}</div>
+        </Link>
       </div>
 
       <h3 style={{ marginTop: '1.5rem' }}>Financeiro (Comissões)</h3>

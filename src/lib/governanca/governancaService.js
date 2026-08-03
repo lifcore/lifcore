@@ -31,11 +31,12 @@ export async function registrarAuditoria({ usuarioId, usuarioPapel, acao, tabela
 }
 
 /** Lista o histórico de auditoria, com filtros opcionais */
-export async function listarAuditoria({ tabelaAfetada, acao, usuarioId, limite = 50 } = {}) {
+export async function listarAuditoria({ tabelaAfetada, acao, usuarioId, registroId, limite = 50 } = {}) {
   let query = operacional.from('auditoria').select('*').order('created_at', { ascending: false }).limit(limite)
   if (tabelaAfetada) query = query.eq('tabela_afetada', tabelaAfetada)
   if (acao) query = query.eq('acao', acao)
   if (usuarioId) query = query.eq('usuario_id', usuarioId)
+  if (registroId) query = query.eq('registro_id', String(registroId))
   const { data, error } = await query
   if (error) throw new Error(`Erro ao listar auditoria: ${error.message}`)
   return data ?? []

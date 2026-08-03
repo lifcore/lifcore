@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   listarComissoes,
   criarComissao,
@@ -13,6 +14,9 @@ import {
   listarContasAReceber,
   resumirPorFaixaAtraso,
   listarRepassesAPagar,
+  obterCentralPendencias,
+  buscarComissoesGlobal,
+  obterHistoricoLancamento,
 } from '../../lib/crm/comissoesService'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
 import { listarGestoresPorOperadora } from '../../lib/crm/seguradorasService'
@@ -46,7 +50,9 @@ function formatarMoeda(valor) {
 }
 
 export default function FinanceiroPage() {
-  const [abaAtiva, setAbaAtiva] = useState('lancamentos')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const abaAtiva = searchParams.get('aba') || 'lancamentos'
+  function setAbaAtiva(aba) { setSearchParams({ aba }) }
   const [resultado, setResultado] = useState({ linhas: [], total: 0 })
   const [indicadores, setIndicadores] = useState(null)
   const [seguradoras, setSeguradoras] = useState([])
@@ -120,16 +126,20 @@ export default function FinanceiroPage() {
 
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
         <button className={`cliente-aba ${abaAtiva === 'lancamentos' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('lancamentos')}>Comissões</button>
+        <button className={`cliente-aba ${abaAtiva === 'pendencias' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('pendencias')}>Pendências</button>
         <button className={`cliente-aba ${abaAtiva === 'contasareceber' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('contasareceber')}>Contas a Receber</button>
         <button className={`cliente-aba ${abaAtiva === 'repasses' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('repasses')}>Repasses</button>
         <button className={`cliente-aba ${abaAtiva === 'conciliacao' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('conciliacao')}>Conciliação</button>
         <button className={`cliente-aba ${abaAtiva === 'fluxo' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('fluxo')}>Fluxo de Caixa</button>
+        <button className={`cliente-aba ${abaAtiva === 'buscar' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('buscar')}>Buscar</button>
       </div>
 
+      {abaAtiva === 'pendencias' && <PendenciasTab setAbaAtiva={setAbaAtiva} />}
       {abaAtiva === 'contasareceber' && <ContasAReceberTab />}
       {abaAtiva === 'repasses' && <RepassesTab />}
       {abaAtiva === 'conciliacao' && <ConciliacaoTab />}
       {abaAtiva === 'fluxo' && <FluxoCaixaTab />}
+      {abaAtiva === 'buscar' && <BuscaGlobalTab />}
 
       {abaAtiva === 'lancamentos' && (
       <>
@@ -271,6 +281,186 @@ const FAIXAS_LABEL = {
   '31-60': '31–60 dias',
   '61-90': '61–90 dias',
   '90+': 'Acima de 90 dias',
+}
+
+function PendenciasTab({ setAbaAtiva }) {
+  const [dados, setDados] = useState(null)
+  const [carregando, setCarregando] = useState(true)
+
+  useEffect(() => {
+    obterCentralPendencias().then((r) => {
+      setDados(r)
+      setCarregando(false)
+    })
+  }, [])
+
+  if (carregando) return <p className="cliente-carregando">Carregando pendências...</p>
+
+  const cards = [
+    { titulo: 'Recebimentos vencidos', valor: dados.recebimentosVencidos.length, aba: 'contasareceber', critico: dados.recebimentosVencidos.length > 0 },
+    { titulo: 'Recebimentos próximos (7 dias)', valor: dados.recebimentosProximos.length, aba: 'contasareceber' },
+    { titulo: 'Repasses liberados p/ pagar', valor: dados.repassesPendentesAgora.length, aba: 'repasses' },
+    { titulo: 'Repasses aguardando recebimento', valor: dados.repassesAguardando.length, aba: 'repasses' },
+    { titulo: 'Lançamentos sem corretor', valor: dados.semCorretor.length },
+    { titulo: 'Lançamentos sem seguradora', valor: dados.semSeguradora.length },
+    { titulo: 'Seguradoras sem gestor cadastrado', valor: dados.semGestor.length },
+  ]
+
+  return (
+    <div>
+      <p className="config-instrucao">
+        Consolida tudo que exige atenção administrativa agora — clique num card pra ir direto à fila correspondente.
+      </p>
+      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap' }}>
+        {cards.map((c) => (
+          <div
+            key={c.titulo}
+            className="ls-card"
+            style={{ minWidth: '180px', cursor: c.aba ? 'pointer' : 'default' }}
+            onClick={() => c.aba && setAbaAtiva(c.aba)}
+          >
+            <strong>{c.titulo}</strong>
+            <div style={{ fontSize: '1.3rem', fontWeight: 600, color: c.critico ? '#b23b3b' : undefined }}>{c.valor}</div>
+          </div>
+        ))}
+      </div>
+
+      {dados.semGestor.length > 0 && (
+        <div style={{ marginTop: '1rem' }}>
+          <h3>Seguradoras sem gestor cadastrado (por módulo)</h3>
+          <ul>
+            {dados.semGestor.map((g, i) => (
+              <li key={i}>{g.nomeOperadora ?? g.operadoraId} — módulo {g.modulo}</li>
+            ))}
+          </ul>
+          <p className="config-instrucao">Cadastre em Configurações → Seguradoras.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BuscaGlobalTab() {
+  const [corretores, setCorretores] = useState([])
+  const [seguradoras, setSeguradoras] = useState([])
+  const [filtroCorretor, setFiltroCorretor] = useState('')
+  const [filtroSeguradora, setFiltroSeguradora] = useState('')
+  const [filtroNumeroApolice, setFiltroNumeroApolice] = useState('')
+  const [filtroStatus, setFiltroStatus] = useState('')
+  const [filtroPeriodoInicio, setFiltroPeriodoInicio] = useState('')
+  const [filtroPeriodoFim, setFiltroPeriodoFim] = useState('')
+  const [filtroValorMinimo, setFiltroValorMinimo] = useState('')
+  const [filtroValorMaximo, setFiltroValorMaximo] = useState('')
+  const [resultados, setResultados] = useState(null)
+  const [buscando, setBuscando] = useState(false)
+
+  useEffect(() => {
+    listarCorretores().then(setCorretores)
+    listarCatalogoSeguradoras().then(setSeguradoras)
+  }, [])
+
+  async function handleBuscar() {
+    setBuscando(true)
+    try {
+      const r = await buscarComissoesGlobal({
+        corretorId: filtroCorretor || undefined,
+        operadoraId: filtroSeguradora || undefined,
+        numeroApolice: filtroNumeroApolice || undefined,
+        statusRecebimento: filtroStatus || undefined,
+        periodoInicio: filtroPeriodoInicio || undefined,
+        periodoFim: filtroPeriodoFim || undefined,
+        valorMinimo: filtroValorMinimo || undefined,
+        valorMaximo: filtroValorMaximo || undefined,
+      })
+      setResultados(r)
+    } finally {
+      setBuscando(false)
+    }
+  }
+
+  return (
+    <div>
+      <p className="config-instrucao">
+        Busca por Corretor, Seguradora, Nº da Apólice, Status, Período e Valor. Busca por Cliente
+        e por Contrato ainda não disponível aqui — depende de confirmar schema antes de implementar
+        com segurança (registrado como pendência técnica).
+      </p>
+
+      <div className="ls-card" style={{ marginBottom: '1rem' }}>
+        <div className="cotacao-form-linha">
+          <div>
+            <label>Corretor</label>
+            <select value={filtroCorretor} onChange={(e) => setFiltroCorretor(e.target.value)}>
+              <option value="">Todos</option>
+              {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome_completo}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Seguradora</label>
+            <select value={filtroSeguradora} onChange={(e) => setFiltroSeguradora(e.target.value)}>
+              <option value="">Todas</option>
+              {seguradoras.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Nº da Apólice</label>
+            <input value={filtroNumeroApolice} onChange={(e) => setFiltroNumeroApolice(e.target.value)} />
+          </div>
+        </div>
+        <div className="cotacao-form-linha">
+          <div>
+            <label>Status recebimento</label>
+            <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}>
+              <option value="">Todos</option>
+              {STATUS_RECEBIMENTO.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Valor mínimo</label>
+            <input type="number" value={filtroValorMinimo} onChange={(e) => setFiltroValorMinimo(e.target.value)} />
+          </div>
+          <div>
+            <label>Valor máximo</label>
+            <input type="number" value={filtroValorMaximo} onChange={(e) => setFiltroValorMaximo(e.target.value)} />
+          </div>
+        </div>
+        <div className="cotacao-form-linha">
+          <div>
+            <label>Período — de</label>
+            <input type="date" value={filtroPeriodoInicio} onChange={(e) => setFiltroPeriodoInicio(e.target.value)} />
+          </div>
+          <div>
+            <label>Período — até</label>
+            <input type="date" value={filtroPeriodoFim} onChange={(e) => setFiltroPeriodoFim(e.target.value)} />
+          </div>
+        </div>
+        <button className="ls-btn ls-btn-primary" onClick={handleBuscar} disabled={buscando} style={{ marginTop: '0.5rem' }}>
+          {buscando ? 'Buscando...' : 'Buscar'}
+        </button>
+      </div>
+
+      {resultados && (
+        resultados.length === 0 ? (
+          <p className="cliente-vazio">Nenhum resultado encontrado.</p>
+        ) : (
+          <table className="cliente-tabela">
+            <thead><tr><th>Seguradora</th><th>Módulo</th><th>Valor</th><th>Status</th><th>Data</th></tr></thead>
+            <tbody>
+              {resultados.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.operadora?.nome ?? '—'}</td>
+                  <td>{MODULOS.find((m) => m.id === r.modulo)?.label || r.modulo}</td>
+                  <td>{formatarMoeda(r.valor_comissao)}</td>
+                  <td><span className="ls-badge">{r.status_recebimento}</span></td>
+                  <td>{new Date(r.created_at).toLocaleDateString('pt-BR')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
+      )}
+    </div>
+  )
 }
 
 function ContasAReceberTab() {
@@ -740,6 +930,7 @@ function FormNovaComissao({ seguradoras, corretores, onSalvo, onCancelar }) {
 
 function LinhaComissao({ comissao, onAtualizado }) {
   const [mostrarAjuste, setMostrarAjuste] = useState(false)
+  const [mostrarHistorico, setMostrarHistorico] = useState(false)
   const [valorAjuste, setValorAjuste] = useState('')
   const [motivoAjuste, setMotivoAjuste] = useState('')
 
@@ -786,6 +977,7 @@ function LinhaComissao({ comissao, onAtualizado }) {
             <button className="cliente-tabela-btn" onClick={handleRepasse}>Repasse pago</button>
           )}
           <button className="cliente-tabela-btn" onClick={() => setMostrarAjuste(!mostrarAjuste)}>Ajuste</button>
+          <button className="cliente-tabela-btn" onClick={() => setMostrarHistorico(!mostrarHistorico)}>Histórico</button>
           {comissao.status_recebimento === 'pendente' && (
             <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleCancelar}>Cancelar</button>
           )}
@@ -799,6 +991,7 @@ function LinhaComissao({ comissao, onAtualizado }) {
           />
         </td>
       </tr>
+      {mostrarHistorico && <LinhaHistorico comissaoId={comissao.id} />}
       {mostrarAjuste && (
         <tr>
           <td colSpan={6}>
@@ -819,5 +1012,39 @@ function LinhaComissao({ comissao, onAtualizado }) {
         </tr>
       )}
     </>
+  )
+}
+
+/** Timeline Financeira — combina Ajustes + Auditoria de um lançamento,
+ * sem criar nenhum histórico paralelo (só leitura combinada). */
+function LinhaHistorico({ comissaoId }) {
+  const [eventos, setEventos] = useState(null)
+
+  useEffect(() => {
+    obterHistoricoLancamento(comissaoId).then(setEventos)
+  }, [comissaoId])
+
+  return (
+    <tr>
+      <td colSpan={6}>
+        <div className="ls-card" style={{ padding: '0.75rem' }}>
+          <strong style={{ fontSize: '0.85rem' }}>Histórico do lançamento</strong>
+          {!eventos ? (
+            <p className="cliente-carregando">Carregando...</p>
+          ) : eventos.length === 0 ? (
+            <p className="config-instrucao">Nenhum ajuste ou operação crítica registrada ainda.</p>
+          ) : (
+            <ul style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+              {eventos.map((e, i) => (
+                <li key={i}>
+                  <strong>{new Date(e.data).toLocaleString('pt-BR')}</strong> — {e.descricao}
+                  {e.motivo && <span className="config-instrucao"> ({e.motivo})</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </td>
+    </tr>
   )
 }
