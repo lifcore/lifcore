@@ -1,4 +1,4 @@
-import { operacional } from '../supabaseSchemas'
+import { operacional, institucional } from '../supabaseSchemas'
 
 /**
  * Finance Center v3 — Livro-razão de Comissões
@@ -32,7 +32,7 @@ export async function listarComissoes({
   let query = operacional
     .from('comissoes')
     .select(
-      '*, operadora:operadoras!comissoes_operadora_id_fkey(id, nome), apolice:apolices(id, produto, premio, criado_em)',
+      '*, apolice:apolices(id, produto, premio, criado_em)',
       { count: 'exact' }
     )
     .order(campoOrdenacao, { ascending: ordemAscendente })
@@ -53,22 +53,46 @@ export async function listarComissoes({
 
   const { data, error, count } = await query
   if (error) throw new Error(`Erro ao listar comissões: ${error.message}`)
-  return { linhas: data ?? [], total: count ?? 0, pagina, tamanhoPagina }
+
+  const linhas = await anexarNomesOperadoras(data ?? [])
+  return { linhas, total: count ?? 0, pagina, tamanhoPagina }
+}
+
+/**
+ * institucional.operadoras não pode ser embutida diretamente no select
+ * de operacional.comissoes — o PostgREST não resolve relacionamento
+ * entre schemas diferentes (testado e confirmado quebrado). Por isso
+ * buscamos os nomes à parte e anexamos manualmente em JS.
+ */
+async function anexarNomesOperadoras(linhas) {
+  const idsUnicos = [...new Set(linhas.map((l) => l.operadora_id).filter(Boolean))]
+  if (idsUnicos.length === 0) return linhas.map((l) => ({ ...l, operadora: null }))
+
+  const { data: operadoras, error } = await institucional
+    .from('operadoras')
+    .select('id, nome')
+    .in('id', idsUnicos)
+  if (error) throw new Error(`Erro ao buscar nomes de seguradoras: ${error.message}`)
+
+  const nomePorId = Object.fromEntries((operadoras ?? []).map((o) => [o.id, o]))
+  return linhas.map((l) => ({ ...l, operadora: l.operadora_id ? (nomePorId[l.operadora_id] ?? null) : null }))
 }
 
 /** Busca uma comissão específica, com seus ajustes */
 export async function obterComissao(id) {
   const { data, error } = await operacional
     .from('comissoes')
-    .select('*, operadora:operadoras!comissoes_operadora_id_fkey(id, nome), apolice:apolices(id, produto, premio, criado_em)')
+    .select('*, apolice:apolices(id, produto, premio, criado_em)')
     .eq('id', id)
     .single()
   if (error) throw new Error(`Erro ao buscar comissão: ${error.message}`)
 
+  const [comComOperadora] = await anexarNomesOperadoras([data])
+
   const ajustes = await listarAjustes(id)
   const valorAjustado = Number(data.valor_comissao || 0) + ajustes.reduce((s, a) => s + Number(a.valor_ajuste || 0), 0)
 
-  return { ...data, ajustes, valorComissaoAjustado: valorAjustado }
+  return { ...comComOperadora, ajustes, valorComissaoAjustado: valorAjustado }
 }
 
 /** Lança uma nova comissão no livro-razão (registro manual) */
