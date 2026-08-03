@@ -8,6 +8,8 @@ import {
   excluirComissao,
   lancarAjuste,
   indicadoresOperacionais,
+  obterConciliacao,
+  obterFluxoCaixaPrevisto,
 } from '../../lib/crm/comissoesService'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
 import { operacional } from '../../lib/supabaseSchemas'
@@ -38,6 +40,7 @@ function formatarMoeda(valor) {
 }
 
 export default function FinanceiroPage() {
+  const [abaAtiva, setAbaAtiva] = useState('lancamentos')
   const [resultado, setResultado] = useState({ linhas: [], total: 0 })
   const [indicadores, setIndicadores] = useState(null)
   const [seguradoras, setSeguradoras] = useState([])
@@ -107,7 +110,19 @@ export default function FinanceiroPage() {
 
   return (
     <div className="config-page">
-      <h2>Financeiro — Comissões</h2>
+      <h2>Financeiro</h2>
+
+      <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
+        <button className={`cliente-aba ${abaAtiva === 'lancamentos' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('lancamentos')}>Comissões</button>
+        <button className={`cliente-aba ${abaAtiva === 'conciliacao' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('conciliacao')}>Conciliação</button>
+        <button className={`cliente-aba ${abaAtiva === 'fluxo' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('fluxo')}>Fluxo de Caixa</button>
+      </div>
+
+      {abaAtiva === 'conciliacao' && <ConciliacaoTab />}
+      {abaAtiva === 'fluxo' && <FluxoCaixaTab />}
+
+      {abaAtiva === 'lancamentos' && (
+      <>
       <p className="config-instrucao">
         Livro-razão de comissões: registro manual do que foi apurado por apólice.
         Sem cálculo automático — cada valor é lançado por quem apurou.
@@ -234,6 +249,97 @@ export default function FinanceiroPage() {
             <button className="cliente-tabela-btn" disabled={pagina >= totalPaginas} onClick={() => setPagina(pagina + 1)}>Próxima →</button>
           </div>
         </>
+      )}
+      </>
+      )}
+    </div>
+  )
+}
+
+function ConciliacaoTab() {
+  const [linhas, setLinhas] = useState(null)
+  const [carregando, setCarregando] = useState(true)
+
+  useEffect(() => {
+    obterConciliacao().then((r) => {
+      setLinhas(r)
+      setCarregando(false)
+    })
+  }, [])
+
+  if (carregando) return <p className="cliente-carregando">Carregando conciliação...</p>
+
+  return (
+    <div>
+      <p className="config-instrucao">
+        Compara o total lançado com o total já confirmado como recebido, por seguradora.
+        "Atrasado" é o que está pendente com previsão de recebimento já vencida — o ponto
+        que realmente merece atenção, não apenas o que ainda está no prazo.
+      </p>
+
+      {linhas.length === 0 ? (
+        <p className="cliente-vazio">Nenhum lançamento para conciliar ainda.</p>
+      ) : (
+        <table className="cliente-tabela">
+          <thead>
+            <tr>
+              <th>Seguradora</th><th>Total Lançado</th><th>Total Recebido</th><th>Pendente (geral)</th><th>Atrasado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map((l) => (
+              <tr key={l.operadoraId ?? 'sem_seguradora'}>
+                <td>{l.operadora?.nome ?? 'Sem seguradora'}</td>
+                <td>{formatarMoeda(l.totalLancado)}</td>
+                <td>{formatarMoeda(l.totalRecebido)}</td>
+                <td>{formatarMoeda(l.totalPendenteGeral)}</td>
+                <td style={l.totalAtrasado > 0 ? { color: '#b23b3b', fontWeight: 600 } : {}}>
+                  {formatarMoeda(l.totalAtrasado)}
+                  {l.qtdAtrasados > 0 && ` (${l.qtdAtrasados})`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+function FluxoCaixaTab() {
+  const [meses, setMeses] = useState(null)
+  const [carregando, setCarregando] = useState(true)
+
+  useEffect(() => {
+    obterFluxoCaixaPrevisto({ mesesAFrente: 3 }).then((r) => {
+      setMeses(r)
+      setCarregando(false)
+    })
+  }, [])
+
+  if (carregando) return <p className="cliente-carregando">Carregando fluxo de caixa...</p>
+
+  return (
+    <div>
+      <p className="config-instrucao">
+        Soma direta do que já está cadastrado (data prevista de recebimento), pros
+        próximos 3 meses. Sem projeção estatística — só o que já foi lançado.
+      </p>
+
+      {meses.length === 0 ? (
+        <p className="cliente-vazio">Nenhuma previsão de recebimento nos próximos meses.</p>
+      ) : (
+        <div className="cotacao-form-linha" style={{ flexWrap: 'wrap' }}>
+          {meses.map((m) => (
+            <div key={m.mes} className="ls-card" style={{ minWidth: '200px' }}>
+              <strong>{m.mes}</strong>
+              <div style={{ fontSize: '1.2rem', fontWeight: 600, marginTop: '0.25rem' }}>{formatarMoeda(m.totalPrevisto)}</div>
+              <div className="config-instrucao" style={{ fontSize: '0.8rem' }}>
+                {formatarMoeda(m.totalRecebido)} recebido · {formatarMoeda(m.totalPendente)} pendente
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
