@@ -257,8 +257,10 @@ function calcularFaixaAtraso(diasAtraso) {
   return '90+'
 }
 
-/** Resumo por faixa de atraso — pra exibir os cards no topo da fila */
-export function resumirPorFaixaAtraso(linhas) {
+/** Resumo por faixa de atraso — pra exibir os cards no topo da fila.
+ * `campoValor` permite reaproveitar pra Contas a Receber (valor_comissao)
+ * e Repasses (valor_repasse_corretor) sem duplicar a função. */
+export function resumirPorFaixaAtraso(linhas, campoValor = 'valor_comissao') {
   const faixas = ['0-30', '31-60', '61-90', '90+']
   const resumo = Object.fromEntries(faixas.map((f) => [f, { quantidade: 0, total: 0 }]))
   let semAtrasoQuantidade = 0
@@ -267,14 +269,60 @@ export function resumirPorFaixaAtraso(linhas) {
   for (const l of linhas) {
     if (l.faixaAtraso) {
       resumo[l.faixaAtraso].quantidade += 1
-      resumo[l.faixaAtraso].total += Number(l.valor_comissao || 0)
+      resumo[l.faixaAtraso].total += Number(l[campoValor] || 0)
     } else {
       semAtrasoQuantidade += 1
-      semAtrasoTotal += Number(l.valor_comissao || 0)
+      semAtrasoTotal += Number(l[campoValor] || 0)
     }
   }
 
   return { porFaixa: resumo, semAtraso: { quantidade: semAtrasoQuantidade, total: semAtrasoTotal } }
+}
+
+/**
+ * Repasses a Pagar — o outro lado do Ledger: dinheiro que a LifitSeg
+ * deve ao corretor (não à seguradora). Mesma arquitetura de Contas a
+ * Receber, espelhada: fila individual, faixas calculadas em tempo de
+ * consulta, sem persistência nova.
+ *
+ * Urgência aqui é medida a partir de `data_recebimento` (quando a
+ * comissão já foi recebida da seguradora, mas o repasse ainda não foi
+ * pago) — repasse que depende de recebimento que ainda não aconteceu
+ * fica marcado como "aguardando recebimento", não como atrasado.
+ */
+export async function listarRepassesAPagar({ corretorId, modulo } = {}) {
+  let query = operacional
+    .from('comissoes')
+    .select('*')
+    .eq('status_repasse', 'pendente')
+
+  if (corretorId) query = query.eq('corretor_id', corretorId)
+  if (modulo) query = query.eq('modulo', modulo)
+
+  const { data, error } = await query
+  if (error) throw new Error(`Erro ao listar repasses a pagar: ${error.message}`)
+
+  const hoje = new Date()
+  const comFaixa = (data ?? []).map((l) => {
+    const aguardandoRecebimento = l.status_recebimento !== 'recebido'
+    let diasDesdeRecebimento = null
+    let faixaAtraso = null
+    if (!aguardandoRecebimento && l.data_recebimento) {
+      const recebido = new Date(`${l.data_recebimento}T00:00:00`)
+      diasDesdeRecebimento = Math.floor((hoje - recebido) / (1000 * 60 * 60 * 24))
+      faixaAtraso = calcularFaixaAtraso(diasDesdeRecebimento)
+    }
+    return { ...l, aguardandoRecebimento, diasDesdeRecebimento, faixaAtraso }
+  })
+
+  const comOperadora = await anexarNomesOperadoras(comFaixa)
+
+  // Aguardando recebimento vai pro fim (não é acionável ainda); entre
+  // os acionáveis, mais tempo esperando o repasse vem primeiro.
+  return comOperadora.sort((a, b) => {
+    if (a.aguardandoRecebimento !== b.aguardandoRecebimento) return a.aguardandoRecebimento ? 1 : -1
+    return (b.diasDesdeRecebimento ?? 0) - (a.diasDesdeRecebimento ?? 0)
+  })
 }
 
 /**

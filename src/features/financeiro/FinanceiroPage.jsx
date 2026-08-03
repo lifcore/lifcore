@@ -12,6 +12,7 @@ import {
   obterFluxoCaixaPrevisto,
   listarContasAReceber,
   resumirPorFaixaAtraso,
+  listarRepassesAPagar,
 } from '../../lib/crm/comissoesService'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
 import { listarGestoresPorOperadora } from '../../lib/crm/seguradorasService'
@@ -120,11 +121,13 @@ export default function FinanceiroPage() {
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
         <button className={`cliente-aba ${abaAtiva === 'lancamentos' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('lancamentos')}>Comissões</button>
         <button className={`cliente-aba ${abaAtiva === 'contasareceber' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('contasareceber')}>Contas a Receber</button>
+        <button className={`cliente-aba ${abaAtiva === 'repasses' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('repasses')}>Repasses</button>
         <button className={`cliente-aba ${abaAtiva === 'conciliacao' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('conciliacao')}>Conciliação</button>
         <button className={`cliente-aba ${abaAtiva === 'fluxo' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('fluxo')}>Fluxo de Caixa</button>
       </div>
 
       {abaAtiva === 'contasareceber' && <ContasAReceberTab />}
+      {abaAtiva === 'repasses' && <RepassesTab />}
       {abaAtiva === 'conciliacao' && <ConciliacaoTab />}
       {abaAtiva === 'fluxo' && <FluxoCaixaTab />}
 
@@ -386,6 +389,128 @@ function LinhaContaAReceber({ linha, onAtualizado }) {
         <button className="cliente-tabela-btn" onClick={handleCobrar} disabled={cobrando}>
           {cobrando ? '...' : '💬 Cobrar'}
         </button>
+      </td>
+    </tr>
+  )
+}
+
+function RepassesTab() {
+  const [linhas, setLinhas] = useState(null)
+  const [corretores, setCorretores] = useState([])
+  const [filtroFaixa, setFiltroFaixa] = useState('')
+  const [carregando, setCarregando] = useState(true)
+
+  useEffect(() => {
+    carregar()
+  }, [])
+
+  async function carregar() {
+    setCarregando(true)
+    const [r, listaCorretores] = await Promise.all([listarRepassesAPagar(), listarCorretores()])
+    setLinhas(r)
+    setCorretores(listaCorretores)
+    setCarregando(false)
+  }
+
+  if (carregando) return <p className="cliente-carregando">Carregando repasses...</p>
+
+  const nomesPorId = Object.fromEntries(corretores.map((c) => [c.id, c.nome_completo]))
+  const acionaveis = linhas.filter((l) => !l.aguardandoRecebimento)
+  const aguardando = linhas.filter((l) => l.aguardandoRecebimento)
+  const resumo = resumirPorFaixaAtraso(acionaveis, 'valor_repasse_corretor')
+  const linhasFiltradas = filtroFaixa ? acionaveis.filter((l) => l.faixaAtraso === filtroFaixa) : acionaveis
+
+  return (
+    <div>
+      <p className="config-instrucao">
+        O outro lado do Ledger: dinheiro que a LifitSeg deve repassar ao corretor (não à seguradora).
+        Repasses que dependem de uma comissão ainda não recebida aparecem separados, no fim da lista —
+        não são "atrasados", só ainda não estão liberados pra pagamento.
+      </p>
+
+      <div className="cotacao-form-linha" style={{ flexWrap: 'wrap', marginBottom: '1rem' }}>
+        {Object.entries(resumo.porFaixa).map(([faixa, dados]) => (
+          <button
+            key={faixa}
+            className="ls-card"
+            style={{
+              minWidth: '150px', textAlign: 'left', cursor: 'pointer',
+              border: filtroFaixa === faixa ? '2px solid #b23b3b' : undefined,
+            }}
+            onClick={() => setFiltroFaixa(filtroFaixa === faixa ? '' : faixa)}
+          >
+            <strong>{FAIXAS_LABEL[faixa]}</strong>
+            <div style={{ fontSize: '1.2rem', fontWeight: 600, color: faixa !== '0-30' ? '#b23b3b' : undefined }}>
+              {formatarMoeda(dados.total)}
+            </div>
+            <div className="config-instrucao" style={{ fontSize: '0.8rem' }}>{dados.quantidade} repasse(s)</div>
+          </button>
+        ))}
+      </div>
+
+      {linhasFiltradas.length === 0 ? (
+        <p className="cliente-vazio">Nenhum repasse liberado pra pagamento {filtroFaixa ? 'nessa faixa' : ''}.</p>
+      ) : (
+        <table className="cliente-tabela">
+          <thead>
+            <tr><th>Corretor</th><th>Seguradora</th><th>Módulo</th><th>Valor</th><th>Recebido em</th><th>Situação</th><th>Ações</th></tr>
+          </thead>
+          <tbody>
+            {linhasFiltradas.map((l) => (
+              <LinhaRepasse key={l.id} linha={l} nomeCorretor={nomesPorId[l.corretor_id]} onAtualizado={carregar} />
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {aguardando.length > 0 && (
+        <>
+          <h3 style={{ marginTop: '1.5rem' }}>Aguardando recebimento da seguradora ({aguardando.length})</h3>
+          <table className="cliente-tabela">
+            <thead>
+              <tr><th>Corretor</th><th>Seguradora</th><th>Módulo</th><th>Valor</th></tr>
+            </thead>
+            <tbody>
+              {aguardando.map((l) => (
+                <tr key={l.id}>
+                  <td>{nomesPorId[l.corretor_id] ?? '—'}</td>
+                  <td>{l.operadora?.nome ?? '—'}</td>
+                  <td>{MODULOS.find((m) => m.id === l.modulo)?.label || l.modulo}</td>
+                  <td>{formatarMoeda(l.valor_repasse_corretor)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
+  )
+}
+
+function LinhaRepasse({ linha, nomeCorretor, onAtualizado }) {
+  async function handleMarcarPago() {
+    await marcarRepasseComoPago(linha.id)
+    onAtualizado()
+  }
+
+  return (
+    <tr>
+      <td>{nomeCorretor ?? '—'}</td>
+      <td>{linha.operadora?.nome || '—'}</td>
+      <td>{MODULOS.find((m) => m.id === linha.modulo)?.label || linha.modulo}</td>
+      <td>{formatarMoeda(linha.valor_repasse_corretor)}</td>
+      <td>{linha.data_recebimento ? formatarDataBR(linha.data_recebimento) : '—'}</td>
+      <td>
+        {linha.faixaAtraso ? (
+          <span className="ls-badge" style={{ background: '#f5d9d9', color: '#b23b3b' }}>
+            {linha.diasDesdeRecebimento}d esperando
+          </span>
+        ) : (
+          <span className="ls-badge">Recente</span>
+        )}
+      </td>
+      <td className="cliente-tabela-acoes">
+        <button className="cliente-tabela-btn" onClick={handleMarcarPago}>Marcar repasse pago</button>
       </td>
     </tr>
   )
