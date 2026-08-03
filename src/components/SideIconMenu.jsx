@@ -9,6 +9,7 @@ const ITENS = [
   { path: '/financeiro', icone: '💰', titulo: 'Financeiro', somenteMasterAdmin: true },
   { path: '/claims', icone: '🗂️', titulo: 'Claims Center' },
   { path: '/growth', icone: '📈', titulo: 'Growth Center' },
+  { path: '/knowledge', icone: '📚', titulo: 'Knowledge Center', somenteMasterAdmin: true },
   { path: '/auditoria', icone: '🕵️', titulo: 'Auditoria', somenteMasterAdmin: true },
   { path: '/configuracoes', icone: '⚙️', titulo: 'Configurações', somenteMasterAdmin: true },
 ]

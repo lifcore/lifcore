@@ -10,23 +10,77 @@ export async function listarTemplates(modulo = 'lifcare') {
   return data ?? []
 }
 
-export async function criarTemplate({ organizacaoId, modulo, titulo, corpo, usuarioId }) {
+/**
+ * Knowledge Center v1 — Template Registry: visão cross-módulo pra
+ * governança (categoria, status, versão), diferente de `listarTemplates`
+ * que é escopado a 1 módulo (uso original, dentro do modal de WhatsApp).
+ * Mesma tabela, consulta diferente — sem duplicar lógica de escrita.
+ */
+export async function listarTodosTemplates({ categoria, modulo, status, busca } = {}) {
+  let query = operacional.from('templates_mensagens').select('*').order('modulo').order('titulo')
+  if (categoria) query = query.eq('categoria', categoria)
+  if (modulo) query = query.eq('modulo', modulo)
+  if (status) query = query.eq('status', status)
+  const { data, error } = await query
+  if (error) throw new Error(`Erro ao listar templates (registry): ${error.message}`)
+  const linhas = data ?? []
+  if (!busca) return linhas
+  const termo = busca.toLowerCase()
+  return linhas.filter((t) => t.titulo?.toLowerCase().includes(termo) || t.corpo?.toLowerCase().includes(termo))
+}
+
+export async function criarTemplate({ organizacaoId, modulo, titulo, corpo, usuarioId, categoria }) {
   const { error } = await operacional.from('templates_mensagens').insert({
     organizacao_id: organizacaoId,
     modulo,
     titulo,
     corpo,
     criado_por: usuarioId,
+    categoria: categoria || null,
   })
   if (error) throw new Error(`Erro ao criar template: ${error.message}`)
 }
 
+/** Atualização "de conteúdo" (usada no fluxo original de mensagens) —
+ * comportamento inalterado, não mexe em versão. */
 export async function atualizarTemplate(id, dados) {
   const { error } = await operacional
     .from('templates_mensagens')
     .update({ ...dados, atualizado_em: new Date().toISOString() })
     .eq('id', id)
   if (error) throw new Error(`Erro ao atualizar template: ${error.message}`)
+}
+
+/**
+ * Knowledge Center v1 — atualização com governança: incrementa versão
+ * e permite ajustar categoria/status. Função separada de
+ * `atualizarTemplate` pra não alterar o comportamento já usado no
+ * fluxo original de mensagens (que não precisa de versionamento).
+ */
+export async function atualizarTemplateComGovernanca(id, dados) {
+  const { data: atual, error: erroAtual } = await operacional
+    .from('templates_mensagens')
+    .select('versao')
+    .eq('id', id)
+    .single()
+  if (erroAtual) throw new Error(`Erro ao buscar template: ${erroAtual.message}`)
+
+  const { error } = await operacional
+    .from('templates_mensagens')
+    .update({ ...dados, versao: (atual.versao ?? 1) + 1, atualizado_em: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw new Error(`Erro ao atualizar template: ${error.message}`)
+}
+
+/** Inativa um template sem excluir (preserva histórico de uso) */
+export async function inativarTemplate(id) {
+  const { error } = await operacional.from('templates_mensagens').update({ status: 'inativo' }).eq('id', id)
+  if (error) throw new Error(`Erro ao inativar template: ${error.message}`)
+}
+
+export async function reativarTemplate(id) {
+  const { error } = await operacional.from('templates_mensagens').update({ status: 'ativo' }).eq('id', id)
+  if (error) throw new Error(`Erro ao reativar template: ${error.message}`)
 }
 
 export async function excluirTemplate(id) {
