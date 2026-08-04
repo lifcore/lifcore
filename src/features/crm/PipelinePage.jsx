@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../../styles/lcds-tokens.css'
 import { useNavigate } from 'react-router-dom'
 import {
   listarClientesProspects,
@@ -8,6 +9,7 @@ import {
 import { listarCorretores } from '../../lib/crm/apolicesService'
 import NovoClienteModal from './NovoClienteModal'
 import { formatarDataBR, dataLocalISO } from '../../lib/utils/formatarData'
+import { calcularNivelPrazo } from '../../lib/utils/prazoBadge'
 import { useAuth } from '../auth/AuthContext'
 import SeletorCarteira from '../../components/SeletorCarteira'
 
@@ -84,7 +86,7 @@ export default function PipelinePage() {
   const hoje = dataLocalISO()
 
   return (
-    <div className="pipeline-page">
+    <div className="pipeline-page" data-theme="lcds">
       <div className="pipeline-header">
         <h2>Lifcare — Saúde&amp;Odonto</h2>
         <div className="pipeline-header-acoes">
@@ -135,7 +137,8 @@ export default function PipelinePage() {
               <div className="pipeline-coluna-cards">
                 {itensDaColuna(coluna.status).map((item) => {
                   const contatoPrincipal = item.contatos?.find((c) => c.tipo === 'primario')
-                  const atrasada = item.proxima_acao_data && item.proxima_acao_data < hoje
+                  const nivelPrazo = calcularNivelPrazo(item.proxima_acao_data)
+                  const atrasada = nivelPrazo === 'vencido'
                   return (
                     <div
                       key={item.id}
@@ -145,10 +148,8 @@ export default function PipelinePage() {
                       onClick={() => navigate(`/clientes/${item.id}`)}
                     >
                       <div className="pipeline-card-topo">
-                        <span className={`pipeline-card-data ${atrasada ? 'pipeline-card-data-atrasada' : ''}`}>
-                          {item.proxima_acao_data
-                            ? formatarDataBR(item.proxima_acao_data)
-                            : 'Sem data definida'}
+                        <span className={`pipeline-badge-data pipeline-badge-data-${nivelPrazo}`}>
+                          {item.proxima_acao_data ? formatarDataBR(item.proxima_acao_data) : 'Sem data'}
                         </span>
                         <span className={`pipeline-card-status-badge ${atrasada ? 'pipeline-card-status-atrasado' : 'pipeline-card-status-ok'}`}>
                           {TRADUZIR_SITUACAO[item.situacaoDemandaAtual] ?? (atrasada ? 'Atrasada' : item.proxima_acao_data ? 'No prazo' : '—')}
@@ -181,7 +182,7 @@ export default function PipelinePage() {
                   onClick={() => navigate(`/clientes/${v.id}`)}
                 >
                   <div className="pipeline-card-topo">
-                    <span className="pipeline-card-data">{formatarDataBR(v.data_vigencia)}</span>
+                    <span className={`pipeline-badge-data pipeline-badge-data-${calcularNivelPrazo(v.data_vigencia)}`}>{formatarDataBR(v.data_vigencia)}</span>
                   </div>
                   <div className="pipeline-card-nome">{v.razao_social}</div>
                 </div>

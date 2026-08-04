@@ -120,6 +120,79 @@
   color: var(--lcds-danger);
 }
 
+/* ============================================================
+   LCDS-003 — Pipeline Opportunity Card
+   ============================================================ */
+
+/* Badge de status — cantos moderados (6px), não mais pill cheia,
+   consistente com a regra de botões (seção 12-C) */
+[data-theme="lcds"] .pipeline-card-status-badge {
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+[data-theme="lcds"] .pipeline-card-status-ok {
+  background: var(--lcds-gold-soft);
+  color: var(--lcds-gold);
+}
+
+/* Badge de data — 3 níveis de risco visual */
+[data-theme="lcds"] .pipeline-badge-data {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+
+[data-theme="lcds"] .pipeline-badge-data-vencido {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.25);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
+}
+
+[data-theme="lcds"] .pipeline-badge-data-critico {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.25);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15);
+}
+
+[data-theme="lcds"] .pipeline-badge-data-no_prazo {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.2);
+}
+
+/* Hover mais perceptível nos cards (Sugestão 3 — micro-feedback) */
+[data-theme="lcds"] .pipeline-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  transition: border-color 150ms ease;
+}
+
+/* Scrollbar elegante nas colunas do Kanban (Chrome/Edge/Safari) */
+[data-theme="lcds"] .pipeline-coluna-cards::-webkit-scrollbar {
+  width: 6px;
+}
+[data-theme="lcds"] .pipeline-coluna-cards::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+}
+[data-theme="lcds"] .pipeline-coluna-cards::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+[data-theme="lcds"] .pipeline-coluna-cards::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+
 [data-theme="lcds"] .cotacao-form {
   background: var(--lcds-surface-card);
   border: 1px solid var(--lcds-border);

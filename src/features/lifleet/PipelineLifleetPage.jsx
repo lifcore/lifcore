@@ -8,6 +8,7 @@ import {
 } from '../../lib/crm/clientesService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
 import { formatarDataBR, dataLocalISO } from '../../lib/utils/formatarData'
+import { calcularNivelPrazo } from '../../lib/utils/prazoBadge'
 import NovoClienteLifleetModal from './NovoClienteLifleetModal'
 import { useAuth } from '../auth/AuthContext'
 import SeletorCarteira from '../../components/SeletorCarteira'
@@ -131,7 +132,8 @@ export default function PipelineLifleetPage() {
               <div className="pipeline-coluna-cards">
                 {itensDaColuna(coluna.status).map((item) => {
                   const contatoPrincipal = item.contatos?.find((c) => c.tipo === 'primario')
-                  const atrasada = item.proxima_acao_data && item.proxima_acao_data < hoje
+                  const nivelPrazo = calcularNivelPrazo(item.proxima_acao_data)
+                  const atrasada = nivelPrazo === 'vencido'
                   return (
                     <div
                       key={item.id}
@@ -141,10 +143,8 @@ export default function PipelineLifleetPage() {
                       onClick={() => navigate(`/lifleet/clientes/${item.id}`)}
                     >
                       <div className="pipeline-card-topo">
-                        <span className={`pipeline-card-data ${atrasada ? 'pipeline-card-data-atrasada' : ''}`}>
-                          {item.proxima_acao_data
-                            ? formatarDataBR(item.proxima_acao_data)
-                            : 'Sem data definida'}
+                        <span className={`pipeline-badge-data pipeline-badge-data-${nivelPrazo}`}>
+                          {item.proxima_acao_data ? formatarDataBR(item.proxima_acao_data) : 'Sem data'}
                         </span>
                         <span className={`pipeline-card-status-badge ${atrasada ? 'pipeline-card-status-atrasado' : 'pipeline-card-status-ok'}`}>
                           {TRADUZIR_SITUACAO[item.situacaoDemandaAtual] ?? (atrasada ? 'Atrasada' : item.proxima_acao_data ? 'No prazo' : '—')}
@@ -177,7 +177,7 @@ export default function PipelineLifleetPage() {
                   onClick={() => navigate(`/lifleet/clientes/${v.id}`)}
                 >
                   <div className="pipeline-card-topo">
-                    <span className="pipeline-card-data">{formatarDataBR(v.data_vigencia)}</span>
+                    <span className={`pipeline-badge-data pipeline-badge-data-${calcularNivelPrazo(v.data_vigencia)}`}>{formatarDataBR(v.data_vigencia)}</span>
                   </div>
                   <div className="pipeline-card-nome">{v.razao_social}</div>
                 </div>
