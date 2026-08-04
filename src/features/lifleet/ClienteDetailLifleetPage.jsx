@@ -11,6 +11,8 @@ import {
   atualizarDemanda,
   adicionarAtualizacaoManual,
   excluirCotacao,
+  fecharCotacaoComOpcao,
+  aprovarPropostaCotacao,
 } from '../../lib/crm/clientesService'
 import { listarApolicesDoCliente, excluirApoliceAuto } from '../../lib/crm/lifleetService'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
@@ -137,7 +139,7 @@ export default function ClienteDetailLifleetPage() {
         )}
 
         {abaAtiva === 'Cotações' && (
-          <CotacoesAutoTab clienteId={cliente.id} cotacoes={cotacoes} onAtualizado={carregar} />
+          <CotacoesAutoTab clienteId={cliente.id} cotacoes={cotacoes} onAtualizado={carregar} perfil={perfil} navigate={navigate} />
         )}
 
         {abaAtiva === 'Apólices' && (
@@ -166,14 +168,44 @@ export default function ClienteDetailLifleetPage() {
   )
 }
 
-function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado }) {
+function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado, perfil, navigate }) {
   const [mostrarComparativo, setMostrarComparativo] = useState(false)
   const [cotacaoEditando, setCotacaoEditando] = useState(null)
+  const [processando, setProcessando] = useState(null)
+  const [erroWorkflow, setErroWorkflow] = useState(null)
 
   async function handleExcluir(cotacaoId) {
     if (!window.confirm('Excluir esta cotação?')) return
     await excluirCotacao(cotacaoId)
     onAtualizado()
+  }
+
+  async function handleFechar(cotacaoId) {
+    if (!window.confirm('Fechar com esta seguradora? As demais opções desta rodada serão marcadas como recusadas automaticamente.')) return
+    setProcessando(cotacaoId)
+    setErroWorkflow(null)
+    try {
+      await fecharCotacaoComOpcao(cotacaoId, perfil?.id)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
+  }
+
+  async function handleAprovar(cotacaoId) {
+    if (!window.confirm('Aprovar esta proposta? Um rascunho de apólice será gerado automaticamente — você ainda vai precisar completar os dados do veículo na aba Apólices.')) return
+    setProcessando(cotacaoId)
+    setErroWorkflow(null)
+    try {
+      await aprovarPropostaCotacao(cotacaoId, perfil?.id)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
   }
 
   // Agrupa as cotações por rodada de comparação (grupo_comparacao_id).
@@ -223,8 +255,18 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado }) {
         <p className="cliente-vazio">Nenhuma cotação registrada ainda.</p>
       ) : (
         <div className="cotacoes-historico" style={{ marginTop: '1rem' }}>
+          {erroWorkflow && <p className="ls-modal-erro">{erroWorkflow}</p>}
+
           {Object.entries(grupos).map(([grupoId, itensGrupo]) => (
-            <GrupoComparativo key={grupoId} itens={itensGrupo} onEditar={setCotacaoEditando} onExcluir={handleExcluir} />
+            <GrupoComparativo
+              key={grupoId}
+              itens={itensGrupo}
+              onEditar={setCotacaoEditando}
+              onExcluir={handleExcluir}
+              onFechar={handleFechar}
+              onAprovar={handleAprovar}
+              processando={processando}
+            />
           ))}
 
           {semGrupo.map((cot) => (
@@ -246,9 +288,16 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado }) {
   )
 }
 
-function GrupoComparativo({ itens, onEditar, onExcluir }) {
+function GrupoComparativo({ itens, onEditar, onExcluir, onFechar, onAprovar, processando }) {
   const menorValor = Math.min(...itens.map((i) => Number(i.valor_total ?? Infinity)))
   const contexto = itens[0]?.contexto_veiculo
+
+  const ROTULO_STATUS = {
+    em_analise: { texto: 'Em análise', cor: 'var(--lcds-text-secondary, #94a3b8)' },
+    proposta_emitida: { texto: 'Proposta emitida', cor: 'var(--lcds-gold, #f59e0b)' },
+    aprovada: { texto: 'Aprovada', cor: 'var(--lcds-success, #10b981)' },
+    recusada: { texto: 'Recusada', cor: 'var(--lcds-text-muted, #64748b)' },
+  }
 
   function handleImprimir() {
     const janela = window.open('', '_blank')
@@ -295,20 +344,39 @@ function GrupoComparativo({ itens, onEditar, onExcluir }) {
       </div>
       <table className="cliente-tabela">
         <thead>
-          <tr><th>Seguradora</th><th>Valor</th><th>Detalhes</th><th>Ações</th></tr>
+          <tr><th>Seguradora</th><th>Valor</th><th>Detalhes</th><th>Status</th><th>Ações</th></tr>
         </thead>
         <tbody>
-          {itens.map((i) => (
-            <tr key={i.id} style={Number(i.valor_total) === menorValor ? { background: 'var(--ls-accent-soft)', fontWeight: 600 } : {}}>
-              <td>{i.operadora?.nome ?? i.operadora_nome_livre ?? '—'}{Number(i.valor_total) === menorValor && ' 🏆'}</td>
-              <td>R$ {Number(i.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-              <td>{i.observacoes ?? '—'}</td>
-              <td className="cliente-tabela-acoes">
-                <button className="cliente-tabela-btn" onClick={() => onEditar(i)}>Editar</button>
-                <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => onExcluir(i.id)}>Excluir</button>
-              </td>
-            </tr>
-          ))}
+          {itens.map((i) => {
+            const status = ROTULO_STATUS[i.status ?? 'em_analise'] ?? ROTULO_STATUS.em_analise
+            const podeFechar = (i.status ?? 'em_analise') === 'em_analise'
+            const podeAprovar = i.status === 'proposta_emitida'
+            return (
+              <tr key={i.id} style={Number(i.valor_total) === menorValor ? { background: 'var(--ls-accent-soft)', fontWeight: 600 } : {}}>
+                <td>{i.operadora?.nome ?? i.operadora_nome_livre ?? '—'}{Number(i.valor_total) === menorValor && ' 🏆'}</td>
+                <td>R$ {Number(i.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                <td>{i.observacoes ?? '—'}</td>
+                <td style={{ color: status.cor, fontWeight: 600 }}>
+                  {status.texto}
+                  {i.apolice_id && <div style={{ fontSize: '0.75rem', fontWeight: 400 }}>Rascunho de apólice gerado — complete em Apólices</div>}
+                </td>
+                <td className="cliente-tabela-acoes">
+                  {podeFechar && (
+                    <button className="cliente-tabela-btn" disabled={processando === i.id} onClick={() => onFechar(i.id)}>
+                      {processando === i.id ? '...' : 'Fechar com esta'}
+                    </button>
+                  )}
+                  {podeAprovar && (
+                    <button className="cliente-tabela-btn" disabled={processando === i.id} onClick={() => onAprovar(i.id)}>
+                      {processando === i.id ? '...' : 'Aprovar Proposta'}
+                    </button>
+                  )}
+                  <button className="cliente-tabela-btn" onClick={() => onEditar(i)}>Editar</button>
+                  <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => onExcluir(i.id)}>Excluir</button>
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

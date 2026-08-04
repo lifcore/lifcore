@@ -1,6 +1,8 @@
 import { institucional, operacional } from '../supabaseSchemas'
 import { supabase } from '../supabaseClient'
 import { dataLocalISO } from '../utils/formatarData'
+import { registrarEventoComercial } from './eventosComerciaisService'
+import { criarApolice } from './apolicesService'
 
 /** Retorna a data de hoje no formato YYYY-MM-DD, usando o horário LOCAL (não UTC) */
 function dataLocalHoje(diasAFrente = 0) {
@@ -73,6 +75,29 @@ export async function definirProximaAcao(id, data, descricao) {
   if (error) throw new Error(`Erro ao definir próxima ação: ${error.message}`)
 }
 
+/**
+ * Sprint Master Data Alignment — Operadoras: institucional.operadoras
+ * não pode ser embutida diretamente no select de operacional.cotacoes
+ * (mesmo problema de cross-schema já confirmado no Finance Center, em
+ * comissoesService.js). Por isso buscamos os nomes à parte e anexamos
+ * manualmente em JS. Cotações antigas, ainda sem operadora_id (não
+ * normalizadas), voltam com `operadora: null` — quem exibe decide o
+ * fallback para operadora_nome_livre.
+ */
+async function anexarOperadorasCotacoes(cotacoes) {
+  const idsUnicos = [...new Set(cotacoes.map((c) => c.operadora_id).filter(Boolean))]
+  if (idsUnicos.length === 0) return cotacoes.map((c) => ({ ...c, operadora: null }))
+
+  const { data: operadoras, error } = await institucional
+    .from('operadoras')
+    .select('id, nome')
+    .in('id', idsUnicos)
+  if (error) throw new Error(`Erro ao buscar nomes de seguradoras: ${error.message}`)
+
+  const nomePorId = Object.fromEntries((operadoras ?? []).map((o) => [o.id, o]))
+  return cotacoes.map((c) => ({ ...c, operadora: c.operadora_id ? (nomePorId[c.operadora_id] ?? null) : null }))
+}
+
 /** Busca um cliente/prospect específico, com contatos, contratos e cotações */
 export async function buscarClienteProspectCompleto(id) {
   const { data: cliente, error: erroCliente } = await operacional
@@ -99,6 +124,8 @@ export async function buscarClienteProspectCompleto(id) {
     .eq('cliente_prospect_id', id)
     .order('data_cotacao', { ascending: false })
 
+  const cotacoesComOperadora = await anexarOperadorasCotacoes(cotacoes ?? [])
+
   const { data: demandas } = await operacional
     .from('casos')
     .select('*')
@@ -116,7 +143,7 @@ export async function buscarClienteProspectCompleto(id) {
     grupoInfo = { nomeGrupo: grupo?.nome_grupo, outrosMembros: membros, totalVidasGrupo: totalVidas + (cliente.numero_colaboradores ?? 0) }
   }
 
-  return { cliente, contatos: contatos ?? [], contratos: contratos ?? [], cotacoes: cotacoes ?? [], demandas: demandas ?? [], grupoInfo }
+  return { cliente, contatos: contatos ?? [], contratos: contratos ?? [], cotacoes: cotacoesComOperadora, demandas: demandas ?? [], grupoInfo }
 }
 
 /**
@@ -270,7 +297,11 @@ export function parseValorBR(texto) {
   return isNaN(valor) ? 0 : valor
 }
 
-/** Lista o catálogo institucional de operadoras (para sugestão/autocomplete, reduz erro de digitação) */
+/** Lista o catálogo institucional de operadoras (para sugestão/autocomplete, reduz erro de digitação)
+ * NOTA (Sprint Master Data Alignment): esta função e `listarCatalogoSeguradoras`, em
+ * apolicesService.js, fazem a mesma consulta. É um débito arquitetural já
+ * conhecido (duas fontes de acesso ao mesmo catálogo) — registrado aqui,
+ * não resolvido nesta Sprint para não ampliar o escopo. */
 export async function listarCatalogoOperadoras() {
   const { data, error } = await institucional
     .from('operadoras')
@@ -355,6 +386,14 @@ export async function cadastrarCorretor({ email, nomeCompleto, papel }) {
   if (error) throw new Error(`Erro ao cadastrar corretor: ${error.message}`)
   return data
 }
+
+/**
+ * Cria uma cotação. `dados` é passado adiante como veio — pode conter
+ * `operadora_id` (Sprint Master Data Alignment, preferido) e/ou
+ * `operadora_nome_livre` (legado). A descrição da próxima ação tenta
+ * usar o nome livre primeiro (mais rápido, já vem pronto); se só houver
+ * operadora_id, busca o nome oficial no catálogo institucional.
+ */
 export async function criarCotacao({ clienteProspectId, casoId, dados, itens }) {
   const { data: cotacao, error } = await operacional
     .from('cotacoes')
@@ -380,6 +419,16 @@ export async function criarCotacao({ clienteProspectId, casoId, dados, itens }) 
   // padrão caso a validade não tenha sido preenchida. O status só avança
   // para "Em Negociação" se o cliente ainda for um prospect novo — nunca
   // REBAIXA quem já é "Cliente Ativo" (ex: cotação de renovação).
+  let nomeOperadoraDescricao = dados.operadora_nome_livre ?? null
+  if (!nomeOperadoraDescricao && dados.operadora_id) {
+    const { data: operadora } = await institucional
+      .from('operadoras')
+      .select('nome')
+      .eq('id', dados.operadora_id)
+      .maybeSingle()
+    nomeOperadoraDescricao = operadora?.nome ?? null
+  }
+
   const { data: clienteAtual } = await operacional
     .from('clientes_prospects')
     .select('status')
@@ -388,7 +437,7 @@ export async function criarCotacao({ clienteProspectId, casoId, dados, itens }) 
 
   const patchCliente = {
     proxima_acao_data: dados.validade || dataLocalISO(7),
-    proxima_acao_descricao: `Retomar cotação (${dados.operadora_nome_livre ?? 'operadora'})`,
+    proxima_acao_descricao: `Retomar cotação (${nomeOperadoraDescricao ?? 'operadora'})`,
     atualizado_em: new Date().toISOString(),
   }
   if (clienteAtual?.status === 'prospect') {
@@ -419,6 +468,151 @@ export async function atualizarCotacao(cotacaoId, dados, itens = null) {
 export async function excluirCotacao(cotacaoId) {
   const { error } = await operacional.from('cotacoes').delete().eq('id', cotacaoId)
   if (error) throw new Error(`Erro ao excluir cotação: ${error.message}`)
+}
+
+/**
+ * Fila de Normalização (Sprint Master Data Alignment — Operadoras):
+ * lista cotações que ainda têm apenas o nome da seguradora em texto
+ * livre, sem vínculo com o catálogo institucional. Escopo restrito ao
+ * Lifleet, por decisão do Chief Systems Analyst — identificamos essas
+ * cotações pelos campos que só o Cotador Auto/Comparativo preenche
+ * (`contexto_veiculo` ou `grupo_comparacao_id`), sem mexer em cotações
+ * de outros módulos.
+ */
+export async function listarCotacoesParaNormalizar() {
+  const { data, error } = await operacional
+    .from('cotacoes')
+    .select('*')
+    .is('operadora_id', null)
+    .not('operadora_nome_livre', 'is', null)
+    .or('contexto_veiculo.not.is.null,grupo_comparacao_id.not.is.null')
+    .order('data_cotacao', { ascending: false })
+  if (error) throw new Error(`Erro ao listar cotações para normalizar: ${error.message}`)
+  return data ?? []
+}
+
+/**
+ * Confirma manualmente qual seguradora do catálogo institucional
+ * corresponde a uma cotação com nome livre. Nunca decide isso sozinho
+ * (sem heurística de similaridade de texto) — só grava a escolha
+ * humana. `operadora_nome_livre` é preservado como está, servindo de
+ * referência histórica do texto original digitado.
+ */
+export async function normalizarOperadoraCotacao(cotacaoId, operadoraId) {
+  if (!operadoraId) throw new Error('Selecione a seguradora oficial correspondente.')
+  await atualizarCotacao(cotacaoId, { operadora_id: operadoraId })
+}
+
+/**
+ * Sprint Ciclo de Fechamento Comercial — Cotação → Proposta → Apólice.
+ *
+ * "Fecha" o comparativo com a opção escolhida: essa cotação vira
+ * Proposta Emitida, e todas as outras da mesma rodada de comparação
+ * (mesmo grupo_comparacao_id) são marcadas como Recusada automaticamente
+ * (apontamento 4 do Chief) — o histórico de todas é preservado, nunca
+ * excluído, só o status muda.
+ *
+ * Cada transição gera um evento no Commercial Event History (domínio
+ * próprio, eventosComerciaisService — nunca a tabela `eventos` de Claims).
+ */
+export async function fecharCotacaoComOpcao(cotacaoId, usuarioId) {
+  const { data: cotacao, error } = await operacional
+    .from('cotacoes')
+    .select('id, grupo_comparacao_id, operadora_nome_livre')
+    .eq('id', cotacaoId)
+    .single()
+  if (error) throw new Error(`Erro ao buscar cotação: ${error.message}`)
+
+  await atualizarCotacao(cotacaoId, { status: 'proposta_emitida' })
+  await registrarEventoComercial({
+    entidadeTipo: 'cotacao',
+    entidadeId: cotacaoId,
+    tipoEvento: 'proposta_emitida',
+    descricao: `Proposta emitida — ${cotacao.operadora_nome_livre ?? 'seguradora selecionada'}`,
+    usuarioId,
+  })
+
+  if (cotacao.grupo_comparacao_id) {
+    const { data: outras } = await operacional
+      .from('cotacoes')
+      .select('id')
+      .eq('grupo_comparacao_id', cotacao.grupo_comparacao_id)
+      .neq('id', cotacaoId)
+
+    for (const outra of outras ?? []) {
+      await atualizarCotacao(outra.id, { status: 'recusada' })
+      await registrarEventoComercial({
+        entidadeTipo: 'cotacao',
+        entidadeId: outra.id,
+        tipoEvento: 'recusada',
+        descricao: 'Recusada automaticamente — outra opção da mesma rodada de comparação foi escolhida',
+        usuarioId,
+      })
+    }
+  }
+}
+
+/**
+ * Aprova a Proposta e gera o rascunho de Apólice — nunca automático,
+ * sempre com o corretor completando os dados que faltam (veículo,
+ * número da apólice oficial, etc.) antes de confirmar de vez.
+ *
+ * Rastreabilidade completa (apontamento 5 do Chief): a apólice gerada
+ * fica referenciada em `cotacoes.apolice_id`.
+ */
+export async function aprovarPropostaCotacao(cotacaoId, usuarioId) {
+  const { data: cotacao, error } = await operacional
+    .from('cotacoes')
+    .select('*')
+    .eq('id', cotacaoId)
+    .single()
+  if (error) throw new Error(`Erro ao buscar cotação: ${error.message}`)
+
+  if (cotacao.status !== 'proposta_emitida') {
+    throw new Error('Só é possível aprovar uma cotação que já esteja como Proposta Emitida.')
+  }
+
+  await atualizarCotacao(cotacaoId, { status: 'aprovada' })
+  await registrarEventoComercial({
+    entidadeTipo: 'cotacao',
+    entidadeId: cotacaoId,
+    tipoEvento: 'aprovada',
+    descricao: 'Proposta aprovada — gerando rascunho de apólice',
+    usuarioId,
+  })
+
+  const { data: cliente } = await operacional
+    .from('clientes_prospects')
+    .select('razao_social')
+    .eq('id', cotacao.cliente_prospect_id)
+    .single()
+
+  const { data: org } = await operacional.from('organizacoes').select('id').limit(1).single()
+
+  const apolice = await criarApolice({
+    corretorId: usuarioId,
+    organizacaoId: org?.id,
+    dados: {
+      cliente_prospect_id: cotacao.cliente_prospect_id,
+      nome_cliente: cliente?.razao_social ?? null,
+      operadora_id: cotacao.operadora_id ?? null,
+      operadora_nome_livre: cotacao.operadora_nome_livre ?? null,
+      premio: cotacao.valor_total ?? null,
+      produto: cotacao.contexto_veiculo ? 'Auto' : null,
+      origem_venda: 'venda_nova',
+    },
+  })
+
+  await atualizarCotacao(cotacaoId, { apolice_id: apolice.id })
+  await registrarEventoComercial({
+    entidadeTipo: 'cotacao',
+    entidadeId: cotacaoId,
+    tipoEvento: 'apolice_gerada',
+    descricao: 'Rascunho de apólice gerado — falta completar dados do veículo e confirmar',
+    usuarioId,
+  })
+
+  return apolice
 }
 
 /** Abre uma demanda manual (sem passar pelo Especialista) — usado no botão "Nova Demanda" da aba Demandas */
@@ -507,6 +701,7 @@ export async function recalcularProximaAcaoCliente(clienteProspectId) {
     })
     .eq('id', clienteProspectId)
 }
+
 export async function listarVigenciasProximas(diasLimite = 90, modulo = 'saude', corretorId = null) {
   let query = operacional
     .from('clientes_prospects')
