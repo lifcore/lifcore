@@ -3,7 +3,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.85rem 2rem;
-  background: var(--ls-primary);
+  background: #14181f; /* chumbo mais escuro que a sidebar (#1c212b) — cria hierarquia */
   color: white;
   gap: 2rem;
 }
