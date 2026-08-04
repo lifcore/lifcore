@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
+import '../../styles/lcds-tokens.css'
 import { Link } from 'react-router-dom'
 import {
   listarCarteiraConsolidada,
@@ -23,7 +24,7 @@ export default function GrowthCenterPage() {
   const [abaAtiva, setAbaAtiva] = useState('central')
 
   return (
-    <div className="config-page">
+    <div className="config-page" data-theme="lcds">
       <h2>Growth Center — Customer Journey & Pipeline Hub</h2>
       <p className="config-instrucao">
         Consolida CRM e Pipeline dos 5 Workspaces (já compartilham a mesma base — só faltava a visão única).

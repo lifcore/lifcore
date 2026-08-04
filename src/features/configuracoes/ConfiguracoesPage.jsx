@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../../styles/lcds-tokens.css'
 import { cadastrarCorretor } from '../../lib/crm/clientesService'
 import { listarPerfis, atualizarPerfil, desativarPerfil, reativarPerfil, transferirCarteira } from '../../lib/crm/perfisService'
 import {
@@ -27,7 +28,7 @@ export default function ConfiguracoesPage() {
 
   if (!podeAcessar) {
     return (
-      <div className="config-page">
+      <div className="config-page" data-theme="lcds">
         <h2>Configurações</h2>
         <p className="config-instrucao">Esta área é restrita a Master e Administrador.</p>
       </div>
@@ -63,7 +64,7 @@ export default function ConfiguracoesPage() {
   }
 
   return (
-    <div className="config-page">
+    <div className="config-page" data-theme="lcds">
       <h2>Configurações</h2>
 
       <div className="config-abas" style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--ls-border)', paddingBottom: '0' }}>

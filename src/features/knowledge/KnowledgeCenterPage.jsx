@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
+import '../../styles/lcds-tokens.css'
 import {
   listarRegras, criarRegra, atualizarRegra, inativarRegra, reativarRegra, CATEGORIAS,
   buscarConhecimentoGlobal,
@@ -14,7 +15,7 @@ export default function KnowledgeCenterPage() {
   const [abaAtiva, setAbaAtiva] = useState('regras')
 
   return (
-    <div className="config-page">
+    <div className="config-page" data-theme="lcds">
       <h2>Knowledge Center — Rule Registry & Template Governance</h2>
       <p className="config-instrucao">
         Catálogo corporativo de regras e templates. Nesta v1, apenas registro e consulta —

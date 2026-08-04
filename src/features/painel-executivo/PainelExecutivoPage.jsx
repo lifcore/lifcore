@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
+import '../../styles/lcds-tokens.css'
 import { Link } from 'react-router-dom'
 import { contarClientesPorModulo, contarDemandasAbertas, contarConsultasPorEspecialista, contarIndicadoresPorCorretor, obterSaudeFinanceira, obterSaudeOperacional } from '../../lib/crm/painelExecutivoService'
 import { indicadoresOperacionais } from '../../lib/crm/comissoesService'
@@ -67,7 +68,7 @@ export default function PainelExecutivoPage() {
     .sort((a, b) => b.clientesAtivos - a.clientesAtivos)
 
   return (
-    <div className="config-page">
+    <div className="config-page" data-theme="lcds">
       <h2>Painel Executivo</h2>
       <p className="config-instrucao">
         Visão consolidada dos 5 módulos — clientes por etapa, demandas em aberto

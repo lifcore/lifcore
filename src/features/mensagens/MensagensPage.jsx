@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../../styles/lcds-tokens.css'
 import { useAuth } from '../auth/AuthContext'
 import { listarTemplates, criarTemplate, atualizarTemplate, excluirTemplate } from '../../lib/crm/templatesService'
 import { operacional } from '../../lib/supabaseSchemas'
@@ -65,7 +66,7 @@ export default function MensagensPage() {
   }
 
   return (
-    <div className="config-page" style={{ maxWidth: 720 }}>
+    <div className="config-page" data-theme="lcds" style={{ maxWidth: 720 }}>
       <h2>Mensagens Padrão</h2>
       <p className="pipeline-subtitulo">Cadastre mensagens prontas para enviar via WhatsApp direto do sistema.</p>
       <p className="config-instrucao">

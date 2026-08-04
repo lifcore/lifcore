@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../../styles/lcds-tokens.css'
 import { useAuth } from '../auth/AuthContext'
 import ApoliceForm from '../crm/ApoliceForm'
 import {
@@ -52,7 +53,7 @@ export default function ApolicesPage() {
   const totalGeral = gruposFechamento.reduce((s, g) => s + g.totalPremio, 0)
 
   return (
-    <div className="config-page" style={{ maxWidth: 960 }}>
+    <div className="config-page" data-theme="lcds" style={{ maxWidth: 960 }}>
       <div className="pipeline-header">
         <div>
           <h2>Apólices — Administração</h2>

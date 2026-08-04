@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
+import '../../styles/lcds-tokens.css'
 import { Link } from 'react-router-dom'
 import {
   listarCasosConsolidado,
@@ -58,7 +59,7 @@ export default function ClaimsCenterPage() {
   ]
 
   return (
-    <div className="config-page">
+    <div className="config-page" data-theme="lcds">
       <h2>Claims Center — Central Operacional</h2>
       <p className="config-instrucao">
         Consolida os Casos (Demandas) dos 5 Workspaces num único motor operacional —

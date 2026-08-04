@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../../styles/lcds-tokens.css'
 import { listarAuditoria } from '../../lib/governanca/governancaService'
 
 const ACOES = [
@@ -31,7 +32,7 @@ export default function AuditoriaPage() {
   }
 
   return (
-    <div className="config-page">
+    <div className="config-page" data-theme="lcds">
       <h2>Auditoria</h2>
       <p className="config-instrucao">
         Histórico de operações administrativas críticas (exclusão definitiva, saneamento,

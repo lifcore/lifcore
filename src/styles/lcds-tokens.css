@@ -53,6 +53,15 @@
   --lcds-dur: 160ms;
   --lcds-ease: ease;
 
+  /* Redefine as variáveis originais do tokens.css (--ls-*) também,
+     só dentro do tema escuro. Várias telas usam var(--ls-border) e
+     var(--ls-text-muted) direto em style inline — CSS custom
+     properties resolvem pela cascata, então essa redefinição conserta
+     automaticamente esses casos, sem precisar caçar um por um. */
+  --ls-border: rgba(255, 255, 255, 0.12);
+  --ls-text-muted: #94a3b8;
+  --ls-accent-soft: rgba(245, 158, 11, 0.12);
+
   background: var(--lcds-bg);
   color: var(--lcds-text-primary);
   font-family: var(--lcds-font-display);
@@ -337,6 +346,31 @@
 }
 
 
+[data-theme="lcds"] .config-sucesso {
+  color: var(--lcds-success);
+}
+
+[data-theme="lcds"] .ls-mono {
+  font-family: var(--lcds-font-mono);
+  color: var(--lcds-text-secondary);
+}
+
+[data-theme="lcds"] .ls-badge-prospect {
+  background: var(--lcds-gold-soft);
+  color: var(--lcds-gold);
+}
+
+[data-theme="lcds"] .ls-badge-cliente {
+  background: var(--lcds-success-soft);
+  color: var(--lcds-success);
+}
+
+[data-theme="lcds"] .ls-badge-inativo {
+  background: var(--lcds-border-strong);
+  color: var(--lcds-text-secondary);
+}
+
+/* Foco visível — obrigatório pelo capítulo 10 (Acessibilidade) do LCDS-001 */
 [data-theme="lcds"] :focus-visible {
   outline: 2px solid var(--lcds-gold);
   outline-offset: 2px;

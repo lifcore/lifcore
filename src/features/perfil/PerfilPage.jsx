@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../../styles/lcds-tokens.css'
 import { useAuth } from '../auth/AuthContext'
 import { supabase } from '../../lib/supabaseClient'
 import { operacional } from '../../lib/supabaseSchemas'
@@ -71,7 +72,7 @@ export default function PerfilPage() {
   }
 
   return (
-    <div className="config-page">
+    <div className="config-page" data-theme="lcds">
       <h2>Meu Perfil</h2>
       <div className="ls-card config-card">
         <div className="config-form-grid">
