@@ -4,7 +4,7 @@
   top: 64px; /* abaixo do topnav */
   bottom: 0;
   width: 56px;
-  background: var(--ls-primary, #0e2a3d);
+  background: #1c212b; /* chumbo — separa visualmente da navy do topnav */
   display: flex;
   flex-direction: column;
   align-items: center;
