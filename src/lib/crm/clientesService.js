@@ -721,3 +721,37 @@ export async function listarVigenciasProximas(diasLimite = 90, modulo = 'saude',
   if (error) throw new Error(`Erro ao consultar vigências: ${error.message}`)
   return data ?? []
 }
+
+/**
+ * Propostas emitidas aguardando aprovação — estado real, persistido
+ * (cotacoes.status = 'proposta_emitida'), usado pela Operational Work
+ * Queue (Sprint 003). Nunca infere nada: só lê o status que o Ciclo de
+ * Fechamento Comercial já grava.
+ */
+export async function listarPropostasPendentes({ corretorId } = {}) {
+  let query = operacional
+    .from('cotacoes')
+    .select('id, cliente_prospect_id, operadora_nome_livre, valor_total, data_cotacao')
+    .eq('status', 'proposta_emitida')
+    .order('data_cotacao', { ascending: true })
+
+  const { data: cotacoes, error } = await query
+  if (error) throw new Error(`Erro ao listar propostas pendentes: ${error.message}`)
+  if (!cotacoes?.length) return []
+
+  const idsClientes = [...new Set(cotacoes.map((c) => c.cliente_prospect_id))]
+  let clientesQuery = operacional
+    .from('clientes_prospects')
+    .select('id, razao_social, corretor_id, modulo')
+    .in('id', idsClientes)
+  if (corretorId) clientesQuery = clientesQuery.eq('corretor_id', corretorId)
+
+  const { data: clientes, error: erroClientes } = await clientesQuery
+  if (erroClientes) throw new Error(`Erro ao buscar clientes das propostas: ${erroClientes.message}`)
+
+  const clientePorId = Object.fromEntries((clientes ?? []).map((c) => [c.id, c]))
+
+  return cotacoes
+    .filter((c) => clientePorId[c.cliente_prospect_id])
+    .map((c) => ({ ...c, cliente: clientePorId[c.cliente_prospect_id] }))
+}
