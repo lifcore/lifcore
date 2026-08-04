@@ -78,6 +78,8 @@
 
 [data-theme="lcds"] .config-instrucao {
   color: var(--lcds-text-secondary);
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border);
 }
 
 [data-theme="lcds"] .cliente-carregando {
@@ -177,6 +179,30 @@
 }
 
 [data-theme="lcds"] .filtros-linha > div label {
+  color: var(--lcds-text-secondary);
+}
+
+[data-theme="lcds"] input:where(:not([type="checkbox"]):not([type="radio"])),
+[data-theme="lcds"] select,
+[data-theme="lcds"] textarea {
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border);
+  color: var(--lcds-text-primary);
+}
+
+[data-theme="lcds"] input::placeholder,
+[data-theme="lcds"] textarea::placeholder {
+  color: var(--lcds-text-muted);
+}
+
+[data-theme="lcds"] input:focus,
+[data-theme="lcds"] select:focus,
+[data-theme="lcds"] textarea:focus {
+  border-color: var(--lcds-gold);
+  box-shadow: 0 0 0 3px var(--lcds-gold-soft);
+}
+
+[data-theme="lcds"] label {
   color: var(--lcds-text-secondary);
 }
 
