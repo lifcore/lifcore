@@ -74,6 +74,8 @@
 [data-theme="lcds"] .config-page {
   background: var(--lcds-bg);
   color: var(--lcds-text-primary);
+  padding: 1.5rem 2rem;
+  border-radius: var(--lcds-radius);
 }
 
 [data-theme="lcds"] .config-instrucao {
