@@ -1,4 +1,4 @@
-import { NavLink, Link } from 'react-router-dom'
+import { NavLink, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/AuthContext'
 
 const MODULOS = [
@@ -9,8 +9,22 @@ const MODULOS = [
   { id: 'lifplan', label: 'Lifplan', path: '/lifplan', ativo: true },
 ]
 
+/**
+ * Lifcare mora na raiz ("/"), que é prefixo de tudo — por isso não dá
+ * pra usar "startsWith" puro pra ele, senão ficaria sempre ativo. Cada
+ * módulo é considerado ativo quando a rota atual é a dele (Pipeline)
+ * ou uma ficha de cliente dentro dele (/clientes/:id ou /lifleet/clientes/:id).
+ */
+function moduloEstaAtivo(modulo, pathname) {
+  if (modulo.id === 'lifcare') {
+    return pathname === '/' || pathname.startsWith('/clientes/')
+  }
+  return pathname.startsWith(modulo.path)
+}
+
 export default function TopNav() {
   const { perfil, logout } = useAuth()
+  const location = useLocation()
 
   return (
     <header className="topnav">
@@ -22,16 +36,13 @@ export default function TopNav() {
       <nav className="topnav-modulos">
         {MODULOS.map((m) =>
           m.ativo ? (
-            <NavLink
+            <Link
               key={m.id}
               to={m.path}
-              end
-              className={({ isActive }) =>
-                `topnav-modulo ${isActive ? 'topnav-modulo-ativo' : ''}`
-              }
+              className={`topnav-modulo ${moduloEstaAtivo(m, location.pathname) ? 'topnav-modulo-ativo' : ''}`}
             >
               {m.label}
-            </NavLink>
+            </Link>
           ) : (
             <span key={m.id} className="topnav-modulo topnav-modulo-em-breve" title="Em breve">
               {m.label}
