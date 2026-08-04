@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import InfoTooltip from '../../components/InfoTooltip'
 import {
   listarCatalogoSeguradoras,
   criarSeguradora,
@@ -37,13 +38,13 @@ export default function SeguradorasCard() {
 
   return (
     <div className="ls-card" style={{ marginTop: '1.5rem' }}>
-      <h3>🏢 Seguradoras</h3>
-      <p className="config-instrucao">
-        Cadastro central das seguradoras — mesma tabela já usada nos formulários
-        de Apólice (fonte única, sem duplicidade) — e o gestor de relacionamento
-        responsável por cada módulo (a mesma seguradora pode ter um gestor
-        diferente pra Auto e outro pra Saúde, por exemplo).
-      </p>
+      <h3>
+        🏢 Seguradoras
+        <InfoTooltip
+          titulo="Seguradoras"
+          texto="Cadastro central das seguradoras — mesma tabela já usada nos formulários de Apólice (fonte única, sem duplicidade) — e o gestor de relacionamento responsável por cada módulo (a mesma seguradora pode ter um gestor diferente pra Auto e outro pra Saúde, por exemplo)."
+        />
+      </h3>
 
       {!mostrarForm ? (
         <button className="ls-btn ls-btn-accent" onClick={() => setMostrarForm(true)}>

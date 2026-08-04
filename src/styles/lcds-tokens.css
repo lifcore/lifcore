@@ -209,8 +209,13 @@ body {
 [data-theme="lcds"] .kpi-card {
   background: var(--lcds-surface-card);
   border: 1px solid var(--lcds-border);
-  border-radius: var(--lcds-radius);
-  padding: 1rem;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 92px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   transition: transform var(--lcds-dur) var(--lcds-ease), border-color var(--lcds-dur) var(--lcds-ease);
 }
 
@@ -238,6 +243,16 @@ body {
 
 [data-theme="lcds"] .kpi-detalhe {
   color: var(--lcds-text-muted);
+  margin-top: 4px;
+}
+
+[data-theme="lcds"] .kpi-detalhe-positivo {
+  color: var(--lcds-success);
+}
+
+[data-theme="lcds"] .kpi-detalhe-atencao {
+  color: var(--lcds-gold);
+  font-weight: 600;
 }
 
 [data-theme="lcds"] .card-clicavel {
