@@ -1,4 +1,4 @@
-import { askAI } from '../aiProvider'
+import { askSpecialist } from './specialistGateway'
 import {
   buscarBibliotecaRelevanteLishield,
   buscarCasosRelevantesLishield,
@@ -19,7 +19,7 @@ import {
  * e o Princípio da Prudência Técnica — na dúvida, pede mais dados,
  * nunca assume premissa.
  */
-export async function gerarRespostaEspecialistaLishield({ demandaTexto, historicoContexto = '', historicoMensagens = [], imagens = [] }) {
+export async function gerarRespostaEspecialistaLishield({ demandaTexto, historicoContexto = '', historicoMensagens = [], imagens = [], usuarioId = null }) {
   const textoBusca = historicoContexto ? `${historicoContexto}\n${demandaTexto}` : demandaTexto
 
   const [
@@ -132,7 +132,8 @@ para ESSE caso — sempre priorizando obter informação antes de concluir (Prin
       content: m.autor === 'sistema' ? `[Atualização registrada no caso pelo corretor]: ${m.texto}` : m.texto,
     }))
 
-  const resultado = await askAI({
+  const resultado = await askSpecialist({
+    usuarioId,
     systemPrompt,
     messages: [...turnosAnteriores, { role: 'user', content: demandaTexto }],
     maxTokens: 4000,

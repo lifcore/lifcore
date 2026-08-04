@@ -3,9 +3,11 @@ import '../../styles/lcds-tokens.css'
 import { useAuth } from '../auth/AuthContext'
 import { supabase } from '../../lib/supabaseClient'
 import { operacional } from '../../lib/supabaseSchemas'
+import { buscarPreferenciasIa, salvarPreferenciasIa, PREFERENCIAS_IA_PADRAO } from '../../lib/especialista/preferenciasIaService'
 
 export default function PerfilPage() {
   const { perfil } = useAuth()
+  const [abaAtiva, setAbaAtiva] = useState('perfil')
   const [nome, setNome] = useState(perfil?.nome_completo ?? '')
   const [telefone, setTelefone] = useState(perfil?.telefone ?? '')
   const [cpf, setCpf] = useState(perfil?.cpf ?? '')
@@ -74,6 +76,16 @@ export default function PerfilPage() {
   return (
     <div className="config-page" data-theme="lcds">
       <h2>Meu Perfil</h2>
+
+      <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
+        <button className={`cliente-aba ${abaAtiva === 'perfil' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('perfil')}>Perfil</button>
+        <button className={`cliente-aba ${abaAtiva === 'ia' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('ia')}>🤖 Experiência Inteligente</button>
+      </div>
+
+      {abaAtiva === 'ia' && <ExperienciaInteligenteTab usuarioId={perfil?.id} />}
+
+      {abaAtiva === 'perfil' && (
+      <>
       <div className="ls-card config-card">
         <div className="config-form-grid">
           <div>
@@ -202,6 +214,205 @@ export default function PerfilPage() {
           <p className="config-instrucao">Somente master/administrador podem editar estes dados.</p>
         )}
       </div>
+      </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Aba "🤖 Experiência Inteligente" (Sprint Meu Perfil v2 — AI
+ * Experience Engine). Todas as preferências ficam num único JSONB
+ * (preferencias_ia), lidas/gravadas via preferenciasIaService — nunca
+ * direto pelo componente. O Especialista nunca lê essa tabela
+ * diretamente: sempre passa pelo specialistGateway.
+ */
+function ExperienciaInteligenteTab({ usuarioId }) {
+  const [prefs, setPrefs] = useState(PREFERENCIAS_IA_PADRAO)
+  const [carregando, setCarregando] = useState(true)
+  const [salvando, setSalvando] = useState(false)
+  const [sucesso, setSucesso] = useState(null)
+  const [erro, setErro] = useState(null)
+
+  useEffect(() => {
+    if (!usuarioId) return
+    buscarPreferenciasIa(usuarioId)
+      .then(setPrefs)
+      .finally(() => setCarregando(false))
+  }, [usuarioId])
+
+  function atualizar(campo, valor) {
+    setPrefs((p) => ({ ...p, [campo]: valor }))
+    setSucesso(null)
+  }
+
+  function atualizarRecurso(chave, valor) {
+    setPrefs((p) => ({ ...p, recursos: { ...p.recursos, [chave]: valor } }))
+    setSucesso(null)
+  }
+
+  function atualizarEspecialista(chave, valor) {
+    setPrefs((p) => ({ ...p, especialistas: { ...p.especialistas, [chave]: valor } }))
+    setSucesso(null)
+  }
+
+  async function handleSalvar() {
+    setSalvando(true)
+    setErro(null)
+    setSucesso(null)
+    try {
+      await salvarPreferenciasIa(usuarioId, prefs)
+      setSucesso('Preferências salvas — os Especialistas já vão aplicar a partir da próxima mensagem.')
+    } catch (err) {
+      setErro(err.message)
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  if (carregando) return <p className="cliente-carregando">Carregando preferências...</p>
+
+  return (
+    <div className="ls-card config-card">
+      <p className="config-instrucao">
+        Essas preferências mudam SÓ a forma como os Especialistas de IA se comunicam com você — o
+        conhecimento e as regras de cada um continuam exatamente os mesmos.
+      </p>
+
+      <div className="config-form-grid">
+        <div>
+          <label>Estilo de comunicação</label>
+          <select value={prefs.estilo} onChange={(e) => atualizar('estilo', e.target.value)}>
+            <option value="executivo">Executivo</option>
+            <option value="equilibrado">Equilibrado</option>
+            <option value="consultivo">Consultivo</option>
+            <option value="didatico">Didático</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Profundidade das respostas</label>
+          <select value={prefs.profundidade} onChange={(e) => atualizar('profundidade', e.target.value)}>
+            <option value="rapida">Resposta rápida</option>
+            <option value="completa">Completa</option>
+            <option value="estrategica">Análise estratégica</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Formato preferido</label>
+          <select value={prefs.formato} onChange={(e) => atualizar('formato', e.target.value)}>
+            <option value="texto_corrido">Texto corrido</option>
+            <option value="topicos">Tópicos</option>
+            <option value="checklist">Checklist</option>
+            <option value="plano_acao">Plano de ação</option>
+            <option value="comparativo">Comparativo (quando aplicável)</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Tom da comunicação</label>
+          <select value={prefs.tom} onChange={(e) => atualizar('tom', e.target.value)}>
+            <option value="corporativo">Corporativo</option>
+            <option value="tecnico">Técnico</option>
+            <option value="consultivo">Consultivo</option>
+            <option value="amigavel">Amigável</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Perfil operacional</label>
+          <select value={prefs.perfil} onChange={(e) => atualizar('perfil', e.target.value)}>
+            <option value="diretor">Diretor</option>
+            <option value="gestor">Gestor</option>
+            <option value="comercial">Comercial</option>
+            <option value="analista">Analista</option>
+            <option value="operacional">Operacional</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Objetivo principal</label>
+          <select value={prefs.objetivo} onChange={(e) => atualizar('objetivo', e.target.value)}>
+            <option value="vendas">Vendas</option>
+            <option value="gestao">Gestão</option>
+            <option value="operacao">Operação</option>
+            <option value="financeiro">Financeiro</option>
+            <option value="aprendizado">Aprendizado</option>
+            <option value="produtividade">Produtividade</option>
+          </select>
+        </div>
+      </div>
+
+      <h4 style={{ marginTop: '1.5rem' }}>Nível de Iniciativa da IA</h4>
+      <p className="config-instrucao">
+        A IA apenas recomenda — nunca executa nada automaticamente, em nenhum dos três níveis.
+      </p>
+      <div className="config-form-grid">
+        <div>
+          <select value={prefs.iniciativa} onChange={(e) => atualizar('iniciativa', e.target.value)}>
+            <option value="passiva">Passiva — responde só o que foi perguntado</option>
+            <option value="assistiva">Assistiva — responde + sugestões relacionadas</option>
+            <option value="proativa">Proativa — responde + sugestões + riscos/oportunidades</option>
+          </select>
+        </div>
+      </div>
+
+      <h4 style={{ marginTop: '1.5rem' }}>Recursos Inteligentes</h4>
+      <div className="config-form-grid">
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={prefs.recursos.sugestoes} onChange={(e) => atualizarRecurso('sugestoes', e.target.checked)} />
+          Sugestões automáticas
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={prefs.recursos.resumos} onChange={(e) => atualizarRecurso('resumos', e.target.checked)} />
+          Resumos inteligentes
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={prefs.recursos.alertas} onChange={(e) => atualizarRecurso('alertas', e.target.checked)} />
+          Alertas contextuais
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={prefs.recursos.recomendacoes} onChange={(e) => atualizarRecurso('recomendacoes', e.target.checked)} />
+          Recomendações operacionais
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={prefs.recursos.explicacoes} onChange={(e) => atualizarRecurso('explicacoes', e.target.checked)} />
+          Explicações detalhadas
+        </label>
+      </div>
+
+      <h4 style={{ marginTop: '1.5rem' }}>Especialistas Disponíveis</h4>
+      <p className="config-instrucao">Ocultar não desativa o especialista — só simplifica sua interface.</p>
+      <div className="config-form-grid">
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={prefs.especialistas.saude} onChange={(e) => atualizarEspecialista('saude', e.target.checked)} />
+          GIN (Saúde)
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={prefs.especialistas.auto} onChange={(e) => atualizarEspecialista('auto', e.target.checked)} />
+          Auto/Frota
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={prefs.especialistas.lifsure} onChange={(e) => atualizarEspecialista('lifsure', e.target.checked)} />
+          LifSure
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={prefs.especialistas.lishield} onChange={(e) => atualizarEspecialista('lishield', e.target.checked)} />
+          LiShield
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={prefs.especialistas.lifplan} onChange={(e) => atualizarEspecialista('lifplan', e.target.checked)} />
+          LifPlan
+        </label>
+      </div>
+
+      {erro && <p className="ls-modal-erro">{erro}</p>}
+      {sucesso && <p className="config-sucesso">{sucesso}</p>}
+
+      <button className="ls-btn ls-btn-primary" onClick={handleSalvar} disabled={salvando} style={{ marginTop: '1.25rem' }}>
+        {salvando ? 'Salvando...' : 'Salvar preferências'}
+      </button>
     </div>
   )
 }
