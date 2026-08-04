@@ -3,6 +3,7 @@ import '../../styles/lcds-tokens.css'
 import { useAuth } from '../auth/AuthContext'
 import { listarTemplates, criarTemplate, atualizarTemplate, excluirTemplate } from '../../lib/crm/templatesService'
 import { operacional } from '../../lib/supabaseSchemas'
+import InfoTooltip from '../../components/InfoTooltip'
 
 const MODULOS = [
   { id: 'lifcare', label: 'Lifcare (Saúde/Odonto)' },
@@ -67,14 +68,18 @@ export default function MensagensPage() {
 
   return (
     <div className="config-page" data-theme="lcds" style={{ maxWidth: 720 }}>
-      <h2>Mensagens Padrão</h2>
+      <h2>
+        Mensagens Padrão
+        <InfoTooltip
+          titulo="Placeholders disponíveis"
+          texto={
+            <>
+              Use <strong>{'{{nome}}'}</strong> para o nome do contato, <strong>{'{{empresa}}'}</strong> para o nome da empresa/cliente, <strong>{'{{vigencia}}'}</strong> para a data de vigência, e — no Lifleet — <strong>{'{{veiculo}}'}</strong> para o(s) veículo(s) da apólice mais recente do cliente (ex: "Olá {'{{nome}}'}, sua apólice do veículo {'{{veiculo}}'} vence em {'{{vigencia}}'}").
+            </>
+          }
+        />
+      </h2>
       <p className="pipeline-subtitulo">Cadastre mensagens prontas para enviar via WhatsApp direto do sistema.</p>
-      <p className="config-instrucao">
-        💡 Use <strong>{'{{nome}}'}</strong> para o nome do contato, <strong>{'{{empresa}}'}</strong> para
-        o nome da empresa/cliente, <strong>{'{{vigencia}}'}</strong> para a data de vigência, e — no
-        Lifleet — <strong>{'{{veiculo}}'}</strong> para o(s) veículo(s) da apólice mais recente do cliente
-        (ex: "Olá {'{{nome}}'}, sua apólice do veículo {'{{veiculo}}'} vence em {'{{vigencia}}'}").
-      </p>
 
       <div className="mensagens-modulos">
         {MODULOS.map((m) => (

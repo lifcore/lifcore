@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
 import '../../styles/lcds-tokens.css'
+import InfoTooltip from '../../components/InfoTooltip'
 import {
   listarRegras, criarRegra, atualizarRegra, inativarRegra, reativarRegra, CATEGORIAS,
   buscarConhecimentoGlobal,
@@ -16,11 +17,13 @@ export default function KnowledgeCenterPage() {
 
   return (
     <div className="config-page" data-theme="lcds">
-      <h2>Knowledge Center — Rule Registry & Template Governance</h2>
-      <p className="config-instrucao">
-        Catálogo corporativo de regras e templates. Nesta v1, apenas registro e consulta —
-        nenhuma regra aqui cadastrada é executada automaticamente por nenhum outro Center.
-      </p>
+      <h2>
+        Knowledge Center — Rule Registry & Template Governance
+        <InfoTooltip
+          titulo="Knowledge Center"
+          texto="Catálogo corporativo de regras e templates. Nesta v1, apenas registro e consulta — nenhuma regra aqui cadastrada é executada automaticamente por nenhum outro Center."
+        />
+      </h2>
 
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
         <button className={`cliente-aba ${abaAtiva === 'regras' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('regras')}>Regras</button>
@@ -210,10 +213,12 @@ function TemplatesTab() {
 
   return (
     <div>
-      <p className="config-instrucao">
-        Visão de governança dos templates já usados no WhatsApp de cada módulo — mesma tabela,
-        agora com categoria/versão/status. Edição de conteúdo continua no fluxo original (Mensagens Padrão).
-      </p>
+      <div style={{ marginBottom: '0.5rem' }}>
+        <InfoTooltip
+          titulo="Templates"
+          texto="Visão de governança dos templates já usados no WhatsApp de cada módulo — mesma tabela, agora com categoria/versão/status. Edição de conteúdo continua no fluxo original (Mensagens Padrão)."
+        />
+      </div>
       {carregando ? (
         <p className="cliente-carregando">Carregando templates...</p>
       ) : templates.length === 0 ? (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
 import '../../styles/lcds-tokens.css'
+import InfoTooltip from '../../components/InfoTooltip'
 import { Link } from 'react-router-dom'
 import {
   listarCarteiraConsolidada,
@@ -25,11 +26,13 @@ export default function GrowthCenterPage() {
 
   return (
     <div className="config-page" data-theme="lcds">
-      <h2>Growth Center — Customer Journey & Pipeline Hub</h2>
-      <p className="config-instrucao">
-        Consolida CRM e Pipeline dos 5 Workspaces (já compartilham a mesma base — só faltava a visão única).
-        Campanhas, Ads e automações externas seguem congeladas até o Connect Center ser homologado.
-      </p>
+      <h2>
+        Growth Center — Customer Journey & Pipeline Hub
+        <InfoTooltip
+          titulo="Growth Center"
+          texto="Consolida CRM e Pipeline dos 5 Workspaces (já compartilham a mesma base — só faltava a visão única). Campanhas, Ads e automações externas seguem congeladas até o Connect Center ser homologado."
+        />
+      </h2>
 
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
         <button className={`cliente-aba ${abaAtiva === 'central' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('central')}>Central</button>

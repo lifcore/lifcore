@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
 import '../../styles/lcds-tokens.css'
+import InfoTooltip from '../../components/InfoTooltip'
 import { Link } from 'react-router-dom'
 import {
   listarCasosConsolidado,
@@ -60,11 +61,13 @@ export default function ClaimsCenterPage() {
 
   return (
     <div className="config-page" data-theme="lcds">
-      <h2>Claims Center — Central Operacional</h2>
-      <p className="config-instrucao">
-        Consolida os Casos (Demandas) dos 5 Workspaces num único motor operacional —
-        mesma tabela de sempre (`casos`), agora com visão cruzada.
-      </p>
+      <h2>
+        Claims Center — Central Operacional
+        <InfoTooltip
+          titulo="Claims Center"
+          texto="Consolida os Casos (Demandas) dos 5 Workspaces num único motor operacional — mesma tabela de sempre (casos), agora com visão cruzada."
+        />
+      </h2>
 
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
         <button className={`cliente-aba ${abaAtiva === 'central' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('central')}>Central</button>
@@ -321,10 +324,12 @@ function PorEspecialistaTab() {
 
   return (
     <div>
-      <p className="config-instrucao">
-        "Especialista" aqui é sinônimo de Módulo/Workspace — não existe uma entidade humana
-        separada de especialista no sistema hoje (GIN=Lifcare, LifAuto=Lifleet, etc).
-      </p>
+      <div style={{ marginBottom: '0.5rem' }}>
+        <InfoTooltip
+          titulo="Por Especialista"
+          texto={'"Especialista" aqui é sinônimo de Módulo/Workspace — não existe uma entidade humana separada de especialista no sistema hoje (GIN=Lifcare, LifAuto=Lifleet, etc).'}
+        />
+      </div>
       <div className="kpi-grid">
         {MODULOS.map((m) => (
           <button
@@ -398,11 +403,12 @@ function BuscaGlobalCasos() {
 
   return (
     <div>
-      <p className="config-instrucao">
-        Busca por Cliente (nome, CPF ou CNPJ), Código do caso, Situação, Período e Corretor.
-        Busca por Contrato/Apólice/Especialista ainda não disponível — registrado como pendência
-        técnica (depende de decisão de como vincular caso a produto específico).
-      </p>
+      <div style={{ marginBottom: '0.5rem' }}>
+        <InfoTooltip
+          titulo="Buscar casos"
+          texto="Busca por Cliente (nome, CPF ou CNPJ), Código do caso, Situação, Período e Corretor. Busca por Contrato/Apólice/Especialista ainda não disponível — registrado como pendência técnica (depende de decisão de como vincular caso a produto específico)."
+        />
+      </div>
 
       <div className="ls-card" style={{ marginBottom: '1rem' }}>
         <div className="cotacao-form-linha">

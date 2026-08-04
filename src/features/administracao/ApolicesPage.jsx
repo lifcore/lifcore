@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import '../../styles/lcds-tokens.css'
+import InfoTooltip from '../../components/InfoTooltip'
 import { useAuth } from '../auth/AuthContext'
 import ApoliceForm from '../crm/ApoliceForm'
 import {
@@ -100,7 +101,13 @@ export default function ApolicesPage() {
 
       {ehMaster && gruposFechamento.length > 0 && (
         <div className="ls-card" style={{ padding: '1rem', marginBottom: '1.25rem', background: 'var(--ls-accent-soft)' }}>
-          <h4 style={{ marginTop: 0 }}>Fechamento — Faturamento Bruto por Corretor e Produto</h4>
+          <h4 style={{ marginTop: 0 }}>
+            Fechamento — Faturamento Bruto por Corretor e Produto
+            <InfoTooltip
+              titulo="Fechamento"
+              texto="Este é o bruto de referência para o fechamento manual — o percentual de comissão de cada corretor ainda é lançado à parte, conforme o relatório real da seguradora naquele mês."
+            />
+          </h4>
           <table className="cliente-tabela">
             <thead>
               <tr><th>Corretor</th><th>Produto</th><th>Qtd. Apólices</th><th>Prêmio Total</th></tr>
@@ -118,10 +125,6 @@ export default function ApolicesPage() {
           </table>
           <p style={{ textAlign: 'right', fontWeight: 700, marginTop: '0.5rem' }}>
             Total geral: R$ {totalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="config-instrucao">
-            Este é o bruto de referência para o fechamento manual — o percentual de comissão de cada corretor
-            ainda é lançado à parte, conforme o relatório real da seguradora naquele mês.
           </p>
         </div>
       )}

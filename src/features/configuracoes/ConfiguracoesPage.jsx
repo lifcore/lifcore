@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import '../../styles/lcds-tokens.css'
+import InfoTooltip from '../../components/InfoTooltip'
 import { cadastrarCorretor } from '../../lib/crm/clientesService'
 import { listarPerfis, atualizarPerfil, desativarPerfil, reativarPerfil, transferirCarteira } from '../../lib/crm/perfisService'
 import {
@@ -83,13 +84,19 @@ export default function ConfiguracoesPage() {
       {abaAtiva === 'corretores' && (
         <>
           <div className="ls-card config-card">
-            <h4>Cadastrar Corretor</h4>
-            <p className="config-instrucao">
-              <strong>Passo 1:</strong> crie o login da pessoa no painel do Supabase
-              (Authentication → Users → Add User), com e-mail e senha provisória.
-              <br />
-              <strong>Passo 2:</strong> preencha abaixo com o mesmo e-mail para vincular o perfil.
-            </p>
+            <h4>
+              Cadastrar Corretor
+              <InfoTooltip
+                titulo="Cadastrar Corretor"
+                texto={
+                  <>
+                    <strong>Passo 1:</strong> crie o login da pessoa no painel do Supabase (Authentication → Users → Add User), com e-mail e senha provisória.
+                    <br />
+                    <strong>Passo 2:</strong> preencha abaixo com o mesmo e-mail para vincular o perfil.
+                  </>
+                }
+              />
+            </h4>
 
             <div className="config-form-grid">
               <div className="config-campo-largo">
@@ -175,11 +182,13 @@ function ListaCorretores() {
 
   return (
     <div className="ls-card config-card" style={{ marginTop: '1.25rem' }}>
-      <h4>Corretores Cadastrados</h4>
-      <p className="config-instrucao">
-        Editar aqui atualiza só os dados de exibição no sistema. Para trocar o e-mail de
-        login de verdade, é preciso alterar também em Authentication → Users no Supabase.
-      </p>
+      <h4>
+        Corretores Cadastrados
+        <InfoTooltip
+          titulo="Corretores Cadastrados"
+          texto="Editar aqui atualiza só os dados de exibição no sistema. Para trocar o e-mail de login de verdade, é preciso alterar também em Authentication → Users no Supabase."
+        />
+      </h4>
 
       {carregando ? (
         <p>Carregando...</p>
@@ -282,11 +291,13 @@ function TransferirCarteiraCard() {
 
   return (
     <div className="ls-card config-card" style={{ marginTop: '1.25rem' }}>
-      <h4>Transferir Carteira</h4>
-      <p className="config-instrucao">
-        Use quando um corretor sai da empresa: transfere de uma vez todos os clientes dele
-        para outro corretor, preservando o histórico completo (contratos, cotações, demandas).
-      </p>
+      <h4>
+        Transferir Carteira
+        <InfoTooltip
+          titulo="Transferir Carteira"
+          texto="Use quando um corretor sai da empresa: transfere de uma vez todos os clientes dele para outro corretor, preservando o histórico completo (contratos, cotações, demandas)."
+        />
+      </h4>
 
       <div className="config-form-grid">
         <div>
@@ -351,11 +362,13 @@ function ConexoesOperadorasCard() {
 
   return (
     <div className="ls-card" style={{ marginTop: '1.5rem' }}>
-      <h3>🔌 Conexões com Operadoras/Seguradoras</h3>
-      <p className="config-instrucao">
-        Acompanhe quais operadoras têm integração ativa, por tabela importada ou totalmente manual —
-        essa tela nunca guarda chave, token ou credencial nenhuma, só o status de cada conexão.
-      </p>
+      <h3>
+        🔌 Conexões com Operadoras/Seguradoras
+        <InfoTooltip
+          titulo="Conexões"
+          texto="Acompanhe quais operadoras têm integração ativa, por tabela importada ou totalmente manual — essa tela nunca guarda chave, token ou credencial nenhuma, só o status de cada conexão."
+        />
+      </h3>
 
       <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         {MODULOS_CONEXAO.map((m) => (

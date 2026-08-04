@@ -1,0 +1,68 @@
+.info-tooltip {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 8px;
+}
+
+.info-tooltip-gatilho {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--lcds-border, rgba(255, 255, 255, 0.12));
+  background: var(--lcds-surface-card, #1b2130);
+  color: var(--lcds-text-secondary, #94a3b8);
+  font-size: 11px;
+  font-style: italic;
+  font-family: Georgia, serif;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.info-tooltip-gatilho:hover,
+.info-tooltip-gatilho[aria-expanded="true"] {
+  border-color: var(--lcds-gold, #f59e0b);
+  color: var(--lcds-gold, #f59e0b);
+  background: var(--lcds-gold-soft, rgba(245, 158, 11, 0.12));
+}
+
+.info-tooltip-painel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 70;
+  width: 320px;
+  max-width: min(320px, calc(100vw - 2rem));
+  background: var(--lcds-surface-card, #1b2130);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #94a3b8;
+  font-weight: 400;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.45);
+  animation: info-tooltip-entrada 120ms ease;
+}
+
+@keyframes info-tooltip-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .info-tooltip-painel {
+    animation: none;
+  }
+}

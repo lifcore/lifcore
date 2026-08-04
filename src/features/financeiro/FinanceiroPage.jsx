@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
 import '../../styles/lcds-tokens.css'
+import InfoTooltip from '../../components/InfoTooltip'
 import { useSearchParams } from 'react-router-dom'
 import {
   listarComissoes,
@@ -49,6 +50,16 @@ const STATUS_REPASSE = [
 
 function formatarMoeda(valor) {
   return (Number(valor) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+const TEXTOS_ABA = {
+  lancamentos: 'Livro-razão de comissões: registro manual do que foi apurado por apólice. Sem cálculo automático — cada valor é lançado por quem apurou.',
+  pendencias: 'Consolida tudo que exige atenção administrativa agora — clique num card pra ir direto à fila correspondente.',
+  contasareceber: 'Fila de lançamentos pendentes, ordenada por urgência — o que está mais atrasado aparece primeiro. Complementa a Conciliação (que mostra visão agregada por seguradora): aqui é por lançamento individual.',
+  repasses: 'O outro lado do Ledger: dinheiro que a LifitSeg deve repassar ao corretor (não à seguradora). Repasses que dependem de uma comissão ainda não recebida aparecem separados, no fim da lista — não são "atrasados", só ainda não estão liberados pra pagamento.',
+  conciliacao: 'Compara o total lançado com o total já confirmado como recebido, por seguradora. "Atrasado" é o que está pendente com previsão de recebimento já vencida.',
+  fluxo: 'Soma direta do que já está cadastrado (data prevista de recebimento), pros próximos 3 meses. Sem projeção estatística — só o que já foi lançado.',
+  buscar: 'Busca por Corretor, Seguradora, Nº da Apólice, Status, Período e Valor. Busca por Cliente e por Contrato ainda não disponível aqui — depende de confirmar schema antes de implementar com segurança (registrado como pendência técnica).',
 }
 
 export default function FinanceiroPage() {
@@ -124,7 +135,10 @@ export default function FinanceiroPage() {
 
   return (
     <div className="config-page" data-theme="lcds">
-      <h2>Financeiro</h2>
+      <h2>
+        Financeiro
+        <InfoTooltip texto={TEXTOS_ABA[abaAtiva]} titulo="Financeiro" />
+      </h2>
 
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
         <button className={`cliente-aba ${abaAtiva === 'lancamentos' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('lancamentos')}>Comissões</button>
@@ -145,10 +159,6 @@ export default function FinanceiroPage() {
 
       {abaAtiva === 'lancamentos' && (
       <>
-      <p className="config-instrucao">
-        Livro-razão de comissões: registro manual do que foi apurado por apólice.
-        Sem cálculo automático — cada valor é lançado por quem apurou.
-      </p>
 
       {indicadores && (
         <div className="cotacao-form-linha" style={{ marginBottom: '1rem', flexWrap: 'wrap' }}>
@@ -310,9 +320,6 @@ function PendenciasTab({ setAbaAtiva }) {
 
   return (
     <div>
-      <p className="config-instrucao">
-        Consolida tudo que exige atenção administrativa agora — clique num card pra ir direto à fila correspondente.
-      </p>
       <div className="kpi-grid">
         {cards.map((c) => (
           <div
@@ -381,12 +388,6 @@ function BuscaGlobalTab() {
 
   return (
     <div>
-      <p className="config-instrucao">
-        Busca por Corretor, Seguradora, Nº da Apólice, Status, Período e Valor. Busca por Cliente
-        e por Contrato ainda não disponível aqui — depende de confirmar schema antes de implementar
-        com segurança (registrado como pendência técnica).
-      </p>
-
       <div className="ls-card" style={{ marginBottom: '1rem' }}>
         <div className="cotacao-form-linha">
           <div>
@@ -487,10 +488,6 @@ function ContasAReceberTab() {
 
   return (
     <div>
-      <p className="config-instrucao">
-        Fila de lançamentos pendentes, ordenada por urgência — o que está mais atrasado aparece primeiro.
-        Complementa a Conciliação (que mostra visão agregada por seguradora): aqui é por lançamento individual.
-      </p>
 
       <div className="kpi-grid">
         {Object.entries(resumo.porFaixa).map(([faixa, dados]) => (
@@ -609,11 +606,6 @@ function RepassesTab() {
 
   return (
     <div>
-      <p className="config-instrucao">
-        O outro lado do Ledger: dinheiro que a LifitSeg deve repassar ao corretor (não à seguradora).
-        Repasses que dependem de uma comissão ainda não recebida aparecem separados, no fim da lista —
-        não são "atrasados", só ainda não estão liberados pra pagamento.
-      </p>
 
       <div className="kpi-grid">
         {Object.entries(resumo.porFaixa).map(([faixa, dados]) => (
@@ -714,11 +706,6 @@ function ConciliacaoTab() {
 
   return (
     <div>
-      <p className="config-instrucao">
-        Compara o total lançado com o total já confirmado como recebido, por seguradora.
-        "Atrasado" é o que está pendente com previsão de recebimento já vencida — o ponto
-        que realmente merece atenção, não apenas o que ainda está no prazo.
-      </p>
 
       {linhas.length === 0 ? (
         <p className="cliente-vazio">Nenhum lançamento para conciliar ainda.</p>
@@ -764,10 +751,6 @@ function FluxoCaixaTab() {
 
   return (
     <div>
-      <p className="config-instrucao">
-        Soma direta do que já está cadastrado (data prevista de recebimento), pros
-        próximos 3 meses. Sem projeção estatística — só o que já foi lançado.
-      </p>
 
       {meses.length === 0 ? (
         <p className="cliente-vazio">Nenhuma previsão de recebimento nos próximos meses.</p>

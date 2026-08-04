@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import '../../styles/lcds-tokens.css'
+import InfoTooltip from '../../components/InfoTooltip'
 import { listarAuditoria } from '../../lib/governanca/governancaService'
 
 const ACOES = [
@@ -33,11 +34,13 @@ export default function AuditoriaPage() {
 
   return (
     <div className="config-page" data-theme="lcds">
-      <h2>Auditoria</h2>
-      <p className="config-instrucao">
-        Histórico de operações administrativas críticas (exclusão definitiva, saneamento,
-        recuperação, reorganização) executadas via Governança Master, nos últimos 50 registros.
-      </p>
+      <h2>
+        Auditoria
+        <InfoTooltip
+          titulo="Auditoria"
+          texto="Histórico de operações administrativas críticas (exclusão definitiva, saneamento, recuperação, reorganização) executadas via Governança Master, nos últimos 50 registros."
+        />
+      </h2>
 
       <div className="cotacao-form-linha" style={{ marginBottom: '1rem' }}>
         <div>

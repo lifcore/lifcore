@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
 import '../../styles/lcds-tokens.css'
+import InfoTooltip from '../../components/InfoTooltip'
 import { Link } from 'react-router-dom'
 import { contarClientesPorModulo, contarDemandasAbertas, contarConsultasPorEspecialista, contarIndicadoresPorCorretor, obterSaudeFinanceira, obterSaudeOperacional } from '../../lib/crm/painelExecutivoService'
 import { indicadoresOperacionais } from '../../lib/crm/comissoesService'
@@ -69,11 +70,13 @@ export default function PainelExecutivoPage() {
 
   return (
     <div className="config-page" data-theme="lcds">
-      <h2>Painel Executivo</h2>
-      <p className="config-instrucao">
-        Visão consolidada dos 5 módulos — clientes por etapa, demandas em aberto
-        e indicadores financeiros, tudo em um lugar só.
-      </p>
+      <h2>
+        Painel Executivo
+        <InfoTooltip
+          titulo="Painel Executivo"
+          texto="Visão consolidada dos 5 módulos — clientes por etapa, demandas em aberto e indicadores financeiros, tudo em um lugar só."
+        />
+      </h2>
 
       <h3 className="secao-titulo">Clientes por módulo</h3>
       <div className="kpi-grid">
