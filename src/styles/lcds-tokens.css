@@ -64,6 +64,9 @@
   --ls-primary: #ffffff;
   --ls-accent: #f59e0b;
   --ls-danger: #ef4444;
+  --ls-bg: #1b2130;
+  --ls-surface: #1b2130;
+  --ls-text: #ffffff;
 
   background: var(--lcds-bg);
   color: var(--lcds-text-primary);
@@ -426,6 +429,32 @@
   background: var(--lcds-border-strong);
   color: var(--lcds-text-secondary);
 }
+
+[data-theme="lcds"] .especialista-pendencia {
+  background: var(--lcds-gold-soft);
+  border: 1px solid var(--lcds-border-gold);
+  color: var(--lcds-text-primary);
+}
+
+[data-theme="lcds"] .especialista-bolha-sistema {
+  background: var(--lcds-gold-soft);
+  color: var(--lcds-gold);
+}
+
+[data-theme="lcds"] .especialista-continuacao-aviso {
+  background: var(--lcds-success-soft);
+  color: var(--lcds-success);
+}
+
+[data-theme="lcds"] .especialista-bolha-corretor {
+  background: var(--lcds-gold);
+  color: #0b0f17;
+}
+
+[data-theme="lcds"] .especialista-bolha-corretor .especialista-bolha-autor {
+  color: rgba(11, 15, 23, 0.65);
+}
+
 
 /* Foco visível — obrigatório pelo capítulo 10 (Acessibilidade) do LCDS-001 */
 [data-theme="lcds"] :focus-visible {
