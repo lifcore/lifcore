@@ -61,6 +61,8 @@
   --ls-border: rgba(255, 255, 255, 0.12);
   --ls-text-muted: #94a3b8;
   --ls-accent-soft: rgba(245, 158, 11, 0.12);
+  --ls-primary: #ffffff;
+  --ls-accent: #f59e0b;
 
   background: var(--lcds-bg);
   color: var(--lcds-text-primary);
@@ -74,6 +76,60 @@
   color: var(--lcds-text-primary);
   font-family: var(--lcds-font-display);
 }
+
+/* ============================================================
+   Pipeline (Kanban) e Cotação/Contrato — usam "background: white"
+   fixo no CSS original (não variável), então a redefinição de
+   --ls-primary/--ls-accent acima não alcança essas propriedades.
+   Cobertura explícita aqui.
+   ============================================================ */
+[data-theme="lcds"].cliente-detail-page,
+[data-theme="lcds"] .cliente-detail-page,
+[data-theme="lcds"].pipeline-page,
+[data-theme="lcds"] .pipeline-page {
+  padding: 1.5rem 2rem;
+  border-radius: var(--lcds-radius);
+}
+
+[data-theme="lcds"] .pipeline-coluna {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="lcds"] .pipeline-card {
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border);
+  box-shadow: none;
+}
+
+[data-theme="lcds"] .pipeline-alerta-item {
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border);
+}
+
+[data-theme="lcds"] .pipeline-coluna-contador {
+  background: var(--lcds-border-strong);
+  color: var(--lcds-text-secondary);
+}
+
+[data-theme="lcds"] .pipeline-card-status-atrasado {
+  background: var(--lcds-danger-soft);
+  color: var(--lcds-danger);
+}
+
+[data-theme="lcds"] .cotacao-form {
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border);
+}
+
+[data-theme="lcds"] .cotacao-resumo {
+  background: var(--lcds-bg);
+}
+
+[data-theme="lcds"] .ls-modal {
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border-strong);
+}
+
 
 /* ============================================================
    Casca da página (título, abas, textos auxiliares) — cobre o
