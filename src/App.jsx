@@ -25,6 +25,7 @@ import ClienteDetailLifplanPage from './features/lifplan/ClienteDetailLifplanPag
 import PipelineLishieldPage from './features/lishield/PipelineLishieldPage'
 import ClienteDetailLishieldPage from './features/lishield/ClienteDetailLishieldPage'
 import './components/sideiconmenu.css'
+import './styles/lcds-tokens.css'
 
 function AppShell() {
   const { user, carregando } = useAuth()
@@ -41,31 +42,33 @@ function AppShell() {
     <BrowserRouter>
       <TopNav />
       <SideIconMenu />
-      <main className="app-main">
-        <Routes>
-          <Route path="/" element={<PipelinePage />} />
-          <Route path="/clientes/:id" element={<ClienteDetailPage />} />
-          <Route path="/lifleet" element={<PipelineLifleetPage />} />
-          <Route path="/lifleet/clientes/:id" element={<ClienteDetailLifleetPage />} />
-          <Route path="/lifsure" element={<PipelineLifsurePage />} />
-          <Route path="/lifsure/clientes/:id" element={<ClienteDetailLifsurePage />} />
-          <Route path="/lifplan" element={<PipelineLifplanPage />} />
-          <Route path="/lifplan/clientes/:id" element={<ClienteDetailLifplanPage />} />
-          <Route path="/lishield" element={<PipelineLishieldPage />} />
-          <Route path="/lishield/clientes/:id" element={<ClienteDetailLishieldPage />} />
-          <Route path="/configuracoes" element={<ConfiguracoesPage />} />
-          <Route path="/financeiro" element={<FinanceiroPage />} />
-          <Route path="/painel" element={<PainelExecutivoPage />} />
-          <Route path="/auditoria" element={<AuditoriaPage />} />
-          <Route path="/claims" element={<ClaimsCenterPage />} />
-          <Route path="/growth" element={<GrowthCenterPage />} />
-          <Route path="/knowledge" element={<KnowledgeCenterPage />} />
-          <Route path="/perfil" element={<PerfilPage />} />
-          <Route path="/mensagens" element={<MensagensPage />} />
-          <Route path="/apolices" element={<ApolicesPage />} />
-        </Routes>
-      </main>
-      <EspecialistaSwitcherCondicional />
+      <div data-theme="lcds">
+        <main className="app-main">
+          <Routes>
+            <Route path="/" element={<PipelinePage />} />
+            <Route path="/clientes/:id" element={<ClienteDetailPage />} />
+            <Route path="/lifleet" element={<PipelineLifleetPage />} />
+            <Route path="/lifleet/clientes/:id" element={<ClienteDetailLifleetPage />} />
+            <Route path="/lifsure" element={<PipelineLifsurePage />} />
+            <Route path="/lifsure/clientes/:id" element={<ClienteDetailLifsurePage />} />
+            <Route path="/lifplan" element={<PipelineLifplanPage />} />
+            <Route path="/lifplan/clientes/:id" element={<ClienteDetailLifplanPage />} />
+            <Route path="/lishield" element={<PipelineLishieldPage />} />
+            <Route path="/lishield/clientes/:id" element={<ClienteDetailLishieldPage />} />
+            <Route path="/configuracoes" element={<ConfiguracoesPage />} />
+            <Route path="/financeiro" element={<FinanceiroPage />} />
+            <Route path="/painel" element={<PainelExecutivoPage />} />
+            <Route path="/auditoria" element={<AuditoriaPage />} />
+            <Route path="/claims" element={<ClaimsCenterPage />} />
+            <Route path="/growth" element={<GrowthCenterPage />} />
+            <Route path="/knowledge" element={<KnowledgeCenterPage />} />
+            <Route path="/perfil" element={<PerfilPage />} />
+            <Route path="/mensagens" element={<MensagensPage />} />
+            <Route path="/apolices" element={<ApolicesPage />} />
+          </Routes>
+        </main>
+        <EspecialistaSwitcherCondicional />
+      </div>
     </BrowserRouter>
   )
 }
