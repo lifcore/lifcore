@@ -139,6 +139,10 @@
    Casca da página (título, abas, textos auxiliares) — cobre o
    que a página do Financeiro usa por fora dos cards do centers.css
    ============================================================ */
+.lcds-app-shell {
+  min-height: 100vh;
+}
+
 [data-theme="lcds"].config-page,
 [data-theme="lcds"] .config-page {
   background: var(--lcds-bg);
@@ -456,7 +460,26 @@
 }
 
 
-/* Foco visível — obrigatório pelo capítulo 10 (Acessibilidade) do LCDS-001 */
+[data-theme="lcds"] .especialista-flutuante-btn {
+  background: var(--lcds-gold);
+  color: #0b0f17;
+  box-shadow: 0 10px 25px -5px rgba(245, 158, 11, 0.35), 0 0 0 1px rgba(245, 158, 11, 0.15);
+}
+
+[data-theme="lcds"] .especialista-flutuante-btn:hover {
+  background: #d97706;
+  transform: translateY(-2px);
+}
+
+[data-theme="lcds"] .especialista-flutuante-icone {
+  color: #0b0f17;
+}
+
+[data-theme="lcds"] .especialista-painel-overlay {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+
 [data-theme="lcds"] :focus-visible {
   outline: 2px solid var(--lcds-gold);
   outline-offset: 2px;
