@@ -500,7 +500,7 @@ function ContasAReceberTab() {
             <div className={faixa !== '0-30' ? 'kpi-valor-critico' : 'kpi-valor'}>
               {formatarMoeda(dados.total)}
             </div>
-            <div className="config-instrucao" style={{ fontSize: '0.8rem' }}>{dados.quantidade} lançamento(s)</div>
+            <div className="kpi-detalhe" style={{ fontSize: '0.8rem' }}>{dados.quantidade} lançamento(s)</div>
           </button>
         ))}
       </div>
@@ -618,7 +618,7 @@ function RepassesTab() {
             <div className={faixa !== '0-30' ? 'kpi-valor-critico' : 'kpi-valor'}>
               {formatarMoeda(dados.total)}
             </div>
-            <div className="config-instrucao" style={{ fontSize: '0.8rem' }}>{dados.quantidade} repasse(s)</div>
+            <div className="kpi-detalhe" style={{ fontSize: '0.8rem' }}>{dados.quantidade} repasse(s)</div>
           </button>
         ))}
       </div>
@@ -760,7 +760,7 @@ function FluxoCaixaTab() {
             <div key={m.mes} className="ls-card kpi-card">
               <strong>{m.mes}</strong>
               <div style={{ fontSize: '1.2rem', fontWeight: 600, marginTop: '0.25rem' }}>{formatarMoeda(m.totalPrevisto)}</div>
-              <div className="config-instrucao" style={{ fontSize: '0.8rem' }}>
+              <div className="kpi-detalhe" style={{ fontSize: '0.8rem' }}>
                 {formatarMoeda(m.totalRecebido)} recebido · {formatarMoeda(m.totalPendente)} pendente
               </div>
             </div>
