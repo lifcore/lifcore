@@ -8,6 +8,7 @@ import { contarClientesPorModulo, contarDemandasAbertas, contarConsultasPorEspec
 import { indicadoresOperacionais } from '../../lib/crm/comissoesService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
 import { obterFilaOperacional, obterResumoFilaOperacional } from '../../lib/crm/operationalQueueService'
+import { executarValidacaoIntegridade, obterResumoIntegridade } from '../../lib/crm/masterDataIntegrityService'
 import { useAuth } from '../auth/AuthContext'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 
@@ -40,6 +41,7 @@ export default function PainelExecutivoPage() {
   const [somenteMeuTrabalho, setSomenteMeuTrabalho] = useState(true)
   const [filtroPrioridade, setFiltroPrioridade] = useState('')
   const [carregandoFila, setCarregandoFila] = useState(true)
+  const [abaAtiva, setAbaAtiva] = useState('geral')
 
   useEffect(() => {
     carregar()
@@ -105,6 +107,15 @@ export default function PainelExecutivoPage() {
         />
       </h2>
 
+      <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
+        <button className={`cliente-aba ${abaAtiva === 'geral' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('geral')}>Visão Geral</button>
+        <button className={`cliente-aba ${abaAtiva === 'integridade' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('integridade')}>🛡️ Integridade dos Dados</button>
+      </div>
+
+      {abaAtiva === 'integridade' && <IntegridadeDadosTab />}
+
+      {abaAtiva === 'geral' && (
+      <>
       <h3 className="secao-titulo">
         Fila Operacional
         <InfoTooltip
@@ -316,6 +327,107 @@ export default function PainelExecutivoPage() {
       <Link to="/financeiro" className="ls-btn ls-btn-ghost" style={{ marginTop: '0.75rem', display: 'inline-block' }}>
         Ver detalhes no Financeiro →
       </Link>
+      </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Aba "Integridade dos Dados" (Sprint 004 — Master Data Integrity
+ * Engine v1). Só lê e classifica — nunca corrige nada aqui. Cada linha
+ * leva direto pro módulo de origem, onde a correção de verdade
+ * acontece (diretriz "domínio é dono dos seus próprios dados").
+ */
+const SEVERIDADE_LABEL = {
+  critica: { texto: '🔴 Crítica', badge: 'lcds-badge-critico' },
+  alta: { texto: '🟠 Alta', badge: 'lcds-badge-alerta' },
+  media: { texto: '🟡 Média', badge: 'lcds-badge-alerta' },
+  baixa: { texto: '🔵 Baixa', badge: 'ls-badge' },
+}
+
+function IntegridadeDadosTab() {
+  const [resumo, setResumo] = useState(null)
+  const [inconsistencias, setInconsistencias] = useState([])
+  const [filtroSeveridade, setFiltroSeveridade] = useState('')
+  const [carregando, setCarregando] = useState(true)
+
+  useEffect(() => {
+    carregar()
+  }, [])
+
+  async function carregar() {
+    setCarregando(true)
+    const [r, itens] = await Promise.all([obterResumoIntegridade(), executarValidacaoIntegridade()])
+    setResumo(r)
+    setInconsistencias(itens)
+    setCarregando(false)
+  }
+
+  if (carregando) return <p className="cliente-carregando">Analisando integridade da plataforma...</p>
+
+  const filtradas = filtroSeveridade ? inconsistencias.filter((i) => i.severidade === filtroSeveridade) : inconsistencias
+
+  return (
+    <div>
+      <p className="config-instrucao">
+        Detecta referências quebradas e inconsistências entre módulos — nunca corrige nada automaticamente.
+        A correção continua sendo responsabilidade de cada módulo de origem.
+      </p>
+
+      <div className="kpi-grid">
+        <KpiCard label="Total de inconsistências" valor={resumo.total} />
+        <KpiCard
+          label="Críticas"
+          valor={resumo.criticas}
+          trendTexto={resumo.criticas > 0 ? 'requer atenção imediata' : 'nenhuma agora'}
+          trendTipo={resumo.criticas > 0 ? 'negativo' : 'positivo'}
+          destacado={resumo.criticas > 0}
+        />
+        <KpiCard label="Altas" valor={resumo.altas} />
+        <KpiCard label="Médias" valor={resumo.medias} />
+        <KpiCard label="Baixas" valor={resumo.baixas} />
+      </div>
+
+      <div className="filtros-linha" style={{ marginTop: '1rem', marginBottom: '0.75rem' }}>
+        <div>
+          <label>Severidade</label>
+          <select value={filtroSeveridade} onChange={(e) => setFiltroSeveridade(e.target.value)}>
+            <option value="">Todas</option>
+            <option value="critica">Crítica</option>
+            <option value="alta">Alta</option>
+            <option value="media">Média</option>
+            <option value="baixa">Baixa</option>
+          </select>
+        </div>
+      </div>
+
+      {filtradas.length === 0 ? (
+        <p className="cliente-vazio">Nenhuma inconsistência encontrada — plataforma consistente.</p>
+      ) : (
+        <div className="ls-card" style={{ padding: 0 }}>
+          <table className="cliente-tabela">
+            <thead>
+              <tr><th>Código</th><th>Severidade</th><th>Categoria</th><th>Módulo</th><th>Descrição</th><th></th></tr>
+            </thead>
+            <tbody>
+              {filtradas.slice(0, 50).map((i, idx) => (
+                <tr key={idx}>
+                  <td className="ls-mono">{i.codigo}</td>
+                  <td><span className={SEVERIDADE_LABEL[i.severidade].badge}>{SEVERIDADE_LABEL[i.severidade].texto}</span></td>
+                  <td>{i.categoria}</td>
+                  <td>{i.modulo}</td>
+                  <td className="kpi-detalhe" style={{ margin: 0 }}>{i.descricao}</td>
+                  <td>{i.rota && <Link to={i.rota} className="cliente-tabela-btn">Abrir Registro</Link>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filtradas.length > 50 && (
+            <p className="config-instrucao">Mostrando 50 de {filtradas.length} — refine o filtro de severidade para ver mais.</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
