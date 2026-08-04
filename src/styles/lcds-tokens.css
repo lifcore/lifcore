@@ -139,6 +139,14 @@
    Casca da página (título, abas, textos auxiliares) — cobre o
    que a página do Financeiro usa por fora dos cards do centers.css
    ============================================================ */
+/* Rede de segurança: garante que o fundo da página nunca fique claro,
+   mesmo em telas mais altas que o conteúdo (onde só min-height:100vh
+   na casca poderia não ser suficiente). Aplicado direto no body, sem
+   depender do atributo data-theme, já que é o "chão" de tudo. */
+body {
+  background: #12161f;
+}
+
 .lcds-app-shell {
   min-height: 100vh;
 }
