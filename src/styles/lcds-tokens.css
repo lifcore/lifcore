@@ -1,0 +1,244 @@
+/* ============================================================
+   LCDS-001 — LifCore Design System (tema escuro)
+   ============================================================
+   Este arquivo NÃO substitui tokens.css. Ele é um tema adicional,
+   ativado apenas em quem tiver o atributo data-theme="lcds" num
+   elemento ancestral (ex: a página inteira do Finance Center, ou
+   futuramente <body> quando o rollout avançar). Enquanto isso, o
+   resto do sistema continua 100% no tema claro original.
+
+   Refinamento aplicado (feedback do Raphael): fundo um degrau menos
+   pesado que o hex original do Gemini (#0B0F17 → #12161F), e uma
+   segunda camada de superfície para os "cards de entidade" (cliente,
+   comissão, etc.) — pra eles se destacarem do fundo ao redor, em vez
+   de formar um bloco único.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+[data-theme="lcds"] {
+  /* Superfícies — 3 níveis de profundidade, não 2 */
+  --lcds-bg: #12161f;              /* fundo da página (mais leve que o #0B0F17 original) */
+  --lcds-chrome: #070a0f;          /* header/sidebar — mais escuro que o fundo, dá continuidade */
+  --lcds-surface-container: transparent; /* colunas/agrupadores — sem cor própria, só organiza */
+  --lcds-surface-card: #1b2130;    /* cards de entidade (cliente, lançamento, comissão) — destaque real */
+  --lcds-surface-card-hover: #212838;
+
+  /* Bordas */
+  --lcds-border: rgba(255, 255, 255, 0.06);
+  --lcds-border-strong: rgba(255, 255, 255, 0.12);
+  --lcds-border-gold: rgba(245, 158, 11, 0.28);
+
+  /* Cor semântica (Diretriz LCDS-001, seção 4) */
+  --lcds-gold: #f59e0b;
+  --lcds-gold-soft: rgba(245, 158, 11, 0.12);
+  --lcds-success: #10b981;
+  --lcds-success-soft: rgba(16, 185, 129, 0.12);
+  --lcds-danger: #ef4444;
+  --lcds-danger-soft: rgba(239, 68, 68, 0.12);
+  --lcds-info: #38bdf8;
+
+  /* Texto */
+  --lcds-text-primary: #ffffff;
+  --lcds-text-secondary: #94a3b8;
+  --lcds-text-muted: #64748b;
+
+  /* Tipografia */
+  --lcds-font-display: 'Plus Jakarta Sans', sans-serif;
+  --lcds-font-mono: 'JetBrains Mono', monospace;
+
+  /* Forma e movimento (LCDS-001, cap. 9 — Interaction Language) */
+  --lcds-radius: 12px;
+  --lcds-radius-sm: 8px;
+  --lcds-dur: 160ms;
+  --lcds-ease: ease;
+
+  background: var(--lcds-bg);
+  color: var(--lcds-text-primary);
+  font-family: var(--lcds-font-display);
+}
+
+[data-theme="lcds"] h1,
+[data-theme="lcds"] h2,
+[data-theme="lcds"] h3,
+[data-theme="lcds"] h4 {
+  color: var(--lcds-text-primary);
+  font-family: var(--lcds-font-display);
+}
+
+/* ============================================================
+   Casca da página (título, abas, textos auxiliares) — cobre o
+   que a página do Financeiro usa por fora dos cards do centers.css
+   ============================================================ */
+[data-theme="lcds"].config-page,
+[data-theme="lcds"] .config-page {
+  background: var(--lcds-bg);
+  color: var(--lcds-text-primary);
+}
+
+[data-theme="lcds"] .config-instrucao {
+  color: var(--lcds-text-secondary);
+}
+
+[data-theme="lcds"] .cliente-carregando {
+  color: var(--lcds-text-secondary);
+}
+
+[data-theme="lcds"] .cliente-abas {
+  border-bottom: 1px solid var(--lcds-border);
+}
+
+[data-theme="lcds"] .cliente-aba {
+  color: var(--lcds-text-secondary);
+  background: transparent;
+  transition: color var(--lcds-dur) var(--lcds-ease);
+}
+
+[data-theme="lcds"] .cliente-aba:hover {
+  color: var(--lcds-text-primary);
+}
+
+[data-theme="lcds"] .cliente-aba-ativa {
+  color: var(--lcds-gold);
+  border-bottom-color: var(--lcds-gold);
+}
+
+[data-theme="lcds"] ul,
+[data-theme="lcds"] li {
+  color: var(--lcds-text-secondary);
+}
+
+/* ============================================================
+   Sobrescreve a classe ls-card global (tokens.css, tema claro)
+   quando usada junto com kpi-card dentro do LCDS — maior
+   especificidade (atributo + classe) garante que esta regra vence
+   independente da ordem de import.
+   ============================================================ */
+[data-theme="lcds"] .ls-card {
+  background: var(--lcds-surface-card);
+  border-color: var(--lcds-border);
+  box-shadow: none;
+}
+
+
+[data-theme="lcds"] .kpi-card {
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border);
+  border-radius: var(--lcds-radius);
+  padding: 1rem;
+  transition: transform var(--lcds-dur) var(--lcds-ease), border-color var(--lcds-dur) var(--lcds-ease);
+}
+
+[data-theme="lcds"] .kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--lcds-border-gold);
+}
+
+[data-theme="lcds"] .kpi-card-label {
+  color: var(--lcds-text-secondary);
+}
+
+[data-theme="lcds"] .kpi-valor {
+  color: var(--lcds-text-primary);
+  font-family: var(--lcds-font-mono);
+  font-feature-settings: 'tnum' on, 'lnum' on;
+}
+
+[data-theme="lcds"] .kpi-valor-critico {
+  color: var(--lcds-gold);
+  font-family: var(--lcds-font-mono);
+  font-feature-settings: 'tnum' on, 'lnum' on;
+}
+
+[data-theme="lcds"] .kpi-detalhe {
+  color: var(--lcds-text-muted);
+}
+
+[data-theme="lcds"] .card-clicavel {
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border);
+}
+
+[data-theme="lcds"] .card-clicavel:hover {
+  border-color: var(--lcds-border-gold);
+}
+
+[data-theme="lcds"] .card-clicavel-ativo {
+  border-color: var(--lcds-gold);
+  background: var(--lcds-gold-soft);
+}
+
+[data-theme="lcds"] .card-clicavel-critico {
+  color: var(--lcds-gold);
+}
+
+[data-theme="lcds"] .secao-titulo {
+  color: var(--lcds-text-primary);
+}
+
+[data-theme="lcds"] .filtros-linha > div label {
+  color: var(--lcds-text-secondary);
+}
+
+[data-theme="lcds"] .filtros-linha button,
+[data-theme="lcds"] .filtros-linha select,
+[data-theme="lcds"] .filtros-linha input {
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border);
+  color: var(--lcds-text-primary);
+}
+
+/* ============================================================
+   Botão de ação primária — único elemento em Dourado LifCore por
+   tela (regra do LCDS-001, seção 5)
+   ============================================================ */
+[data-theme="lcds"] .lcds-btn-primaria {
+  background: var(--lcds-gold);
+  color: #0b0f17;
+  font-weight: 700;
+  border: none;
+  border-radius: var(--lcds-radius-sm);
+  padding: 0.55rem 1.1rem;
+  cursor: pointer;
+  transition: transform 100ms var(--lcds-ease), background var(--lcds-dur) var(--lcds-ease);
+}
+
+[data-theme="lcds"] .lcds-btn-primaria:hover {
+  background: #d97706;
+}
+
+[data-theme="lcds"] .lcds-btn-primaria:active {
+  transform: scale(0.97);
+}
+
+/* Badges de status — mesma semântica de cor da seção 4 do LCDS-001 */
+[data-theme="lcds"] .lcds-badge-sucesso {
+  background: var(--lcds-success-soft);
+  color: var(--lcds-success);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+[data-theme="lcds"] .lcds-badge-alerta {
+  background: var(--lcds-gold-soft);
+  color: var(--lcds-gold);
+  border: 1px solid var(--lcds-border-gold);
+}
+
+[data-theme="lcds"] .lcds-badge-critico {
+  background: var(--lcds-danger-soft);
+  color: var(--lcds-danger);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* Foco visível — obrigatório pelo capítulo 10 (Acessibilidade) do LCDS-001 */
+[data-theme="lcds"] :focus-visible {
+  outline: 2px solid var(--lcds-gold);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="lcds"] * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

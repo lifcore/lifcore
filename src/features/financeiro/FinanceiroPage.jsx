@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
+import '../../styles/lcds-tokens.css'
 import { useSearchParams } from 'react-router-dom'
 import {
   listarComissoes,
@@ -122,7 +123,7 @@ export default function FinanceiroPage() {
   const totalPaginas = Math.max(1, Math.ceil(resultado.total / TAMANHO_PAGINA))
 
   return (
-    <div className="config-page">
+    <div className="config-page" data-theme="lcds">
       <h2>Financeiro</h2>
 
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
