@@ -221,6 +221,7 @@ body {
 
 [data-theme="lcds"] .kpi-card-label {
   color: var(--lcds-text-secondary);
+  margin-bottom: 8px;
 }
 
 [data-theme="lcds"] .kpi-valor {
@@ -271,7 +272,17 @@ body {
   background: var(--lcds-surface-card);
   border: 1px solid var(--lcds-border);
   color: var(--lcds-text-primary);
-  line-height: 1.3;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 13px;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+[data-theme="lcds"] textarea {
+  height: auto;
+  padding: 10px 12px;
+  line-height: 1.4;
 }
 
 [data-theme="lcds"] input::placeholder,
@@ -288,6 +299,7 @@ body {
 
 [data-theme="lcds"] label {
   color: var(--lcds-text-secondary);
+  margin-bottom: 6px;
 }
 
 [data-theme="lcds"] .filtros-linha button,
@@ -411,6 +423,17 @@ body {
 [data-theme="lcds"] .ls-btn-ghost:hover {
   color: var(--lcds-text-primary);
   border-color: var(--lcds-text-secondary);
+}
+
+[data-theme="lcds"] .ls-btn {
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 [data-theme="lcds"] .ls-btn:active {
