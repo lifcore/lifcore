@@ -216,7 +216,14 @@ body {
   justify-content: center;
   min-height: 92px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  color: var(--lcds-text-primary);
+  text-decoration: none;
   transition: transform var(--lcds-dur) var(--lcds-ease), border-color var(--lcds-dur) var(--lcds-ease);
+}
+
+[data-theme="lcds"] .kpi-card strong {
+  color: var(--lcds-text-primary);
+  font-weight: 600;
 }
 
 [data-theme="lcds"] .kpi-card:hover {
@@ -233,6 +240,8 @@ body {
   color: var(--lcds-text-primary);
   font-family: var(--lcds-font-mono);
   font-feature-settings: 'tnum' on, 'lnum' on;
+  font-size: 24px;
+  font-weight: 700;
 }
 
 [data-theme="lcds"] .kpi-valor-critico {
