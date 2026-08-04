@@ -9,7 +9,7 @@ export { PRODUTOS_APOLICE }
 export async function listarCatalogoSeguradoras() {
   const { data, error } = await institucional
     .from('operadoras')
-    .select('id, codigo, nome, categoria_seguro, observacoes_comissionamento, cnpj, razao_social, site')
+    .select('id, codigo, nome, categoria_seguro, observacoes_comissionamento, cnpj, razao_social, site, tipo_parceiro, modelo_financeiro, competencia_financeira, situacao_integracao')
     .eq('status', 'ativa')
     .order('nome')
   if (error) throw new Error(`Erro ao listar seguradoras: ${error.message}`)
