@@ -229,7 +229,7 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado }) {
           {semGrupo.map((cot) => (
             <div key={cot.id} className="ls-card cotacao-item">
               <div className="cotacao-item-header">
-                <strong>{cot.operadora_nome_livre}</strong>
+                <strong>{cot.operadora?.nome ?? cot.operadora_nome_livre ?? '—'}</strong>
                 <span>R$ {Number(cot.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                 <span>Válida até: {cot.validade ? formatarDataBR(cot.validade) : '—'}</span>
               </div>
@@ -255,7 +255,7 @@ function GrupoComparativo({ itens, onEditar, onExcluir }) {
       .map(
         (i) => `
         <tr style="${Number(i.valor_total) === menorValor ? 'background:#eafaf0; font-weight:600;' : ''}">
-          <td style="padding:8px 12px; border-bottom:1px solid #eee;">${i.operadora_nome_livre}</td>
+          <td style="padding:8px 12px; border-bottom:1px solid #eee;">${i.operadora?.nome ?? i.operadora_nome_livre ?? '—'}</td>
           <td style="padding:8px 12px; border-bottom:1px solid #eee;">R$ ${Number(i.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
           <td style="padding:8px 12px; border-bottom:1px solid #eee;">${i.observacoes ?? '—'}</td>
         </tr>`
@@ -299,7 +299,7 @@ function GrupoComparativo({ itens, onEditar, onExcluir }) {
         <tbody>
           {itens.map((i) => (
             <tr key={i.id} style={Number(i.valor_total) === menorValor ? { background: 'var(--ls-accent-soft)', fontWeight: 600 } : {}}>
-              <td>{i.operadora_nome_livre}{Number(i.valor_total) === menorValor && ' 🏆'}</td>
+              <td>{i.operadora?.nome ?? i.operadora_nome_livre ?? '—'}{Number(i.valor_total) === menorValor && ' 🏆'}</td>
               <td>R$ {Number(i.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
               <td>{i.observacoes ?? '—'}</td>
               <td className="cliente-tabela-acoes">
