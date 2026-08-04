@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
 import '../../styles/lcds-tokens.css'
 import InfoTooltip from '../../components/InfoTooltip'
+import KpiCard from '../../components/KpiCard'
 import { Link } from 'react-router-dom'
 import {
   listarCarteiraConsolidada,
@@ -74,11 +75,11 @@ function CentralTab() {
     <div>
       {indicadores && (
         <div className="kpi-grid">
-          <div className="ls-card kpi-card"><strong>Carteira Ativa</strong><div className="kpi-valor">{indicadores.totalAtivos}</div></div>
-          <div className="ls-card kpi-card card-clicavel-critico"><strong>Ações Atrasadas</strong><div className="kpi-valor">{indicadores.atrasados}</div></div>
-          <div className="ls-card kpi-card"><strong>Sem Corretor</strong><div className="kpi-valor">{indicadores.semCorretor}</div></div>
-          <div className="ls-card kpi-card"><strong>Sem Próxima Ação</strong><div className="kpi-valor">{indicadores.semProximaAcao}</div></div>
-          <div className="ls-card kpi-card"><strong>Inativos</strong><div className="kpi-valor">{indicadores.totalInativos}</div></div>
+          <KpiCard label="Carteira Ativa" valor={indicadores.totalAtivos} />
+          <KpiCard label="Ações Atrasadas" valor={indicadores.atrasados} trendTexto="requer atenção" trendTipo="negativo" destacado />
+          <KpiCard label="Sem Corretor" valor={indicadores.semCorretor} />
+          <KpiCard label="Sem Próxima Ação" valor={indicadores.semProximaAcao} />
+          <KpiCard label="Inativos" valor={indicadores.totalInativos} />
         </div>
       )}
 
@@ -104,15 +105,13 @@ function CentralTab() {
       {indicadores && (
         <div className="kpi-grid">
           {Object.entries(STATUS_LABEL).map(([k, label]) => (
-            <button
+            <KpiCard
               key={k}
-              className="ls-card"
-              className={`ls-card kpi-card card-clicavel ${filtroStatus === k ? 'card-clicavel-ativo' : ''}`}
+              label={label}
+              valor={indicadores.porStatus[k]}
+              destacado={filtroStatus === k}
               onClick={() => setFiltroStatus(filtroStatus === k ? '' : k)}
-            >
-              <strong>{label}</strong>
-              <div className="kpi-valor">{indicadores.porStatus[k]}</div>
-            </button>
+            />
           ))}
         </div>
       )}
@@ -221,11 +220,17 @@ function PainelCorretorTab({ perfil, ehMaster }) {
       )}
 
       <div className="kpi-grid">
-        <div className="ls-card kpi-card"><strong>Minha Carteira</strong><div className="kpi-valor">{painel.totalCarteira}</div></div>
-        <div className="ls-card kpi-card"><strong>Prospects</strong><div className="kpi-valor">{painel.porStatus.prospect}</div></div>
-        <div className="ls-card kpi-card"><strong>Em Negociação</strong><div className="kpi-valor">{painel.porStatus.em_negociacao}</div></div>
-        <div className="ls-card kpi-card"><strong>Clientes Ativos</strong><div className="kpi-valor">{painel.porStatus.cliente}</div></div>
-        <div className="ls-card kpi-card card-clicavel-critico"><strong>Negociações Críticas</strong><div className="kpi-valor">{painel.negociacoesCriticas.length}</div></div>
+        <KpiCard label="Minha Carteira" valor={painel.totalCarteira} />
+        <KpiCard label="Prospects" valor={painel.porStatus.prospect} />
+        <KpiCard label="Em Negociação" valor={painel.porStatus.em_negociacao} />
+        <KpiCard label="Clientes Ativos" valor={painel.porStatus.cliente} />
+        <KpiCard
+          label="Negociações Críticas"
+          valor={painel.negociacoesCriticas.length}
+          trendTexto="requer atenção"
+          trendTipo="negativo"
+          destacado
+        />
       </div>
 
       <h3>Ações Atrasadas</h3>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
 import '../../styles/lcds-tokens.css'
 import InfoTooltip from '../../components/InfoTooltip'
+import KpiCard from '../../components/KpiCard'
 import { useSearchParams } from 'react-router-dom'
 import {
   listarComissoes,
@@ -161,12 +162,12 @@ export default function FinanceiroPage() {
       <>
 
       {indicadores && (
-        <div className="cotacao-form-linha" style={{ marginBottom: '1rem', flexWrap: 'wrap' }}>
-          <div className="ls-card"><strong>Total Previsto</strong><div>{formatarMoeda(indicadores.totalPrevisto)}</div></div>
-          <div className="ls-card"><strong>Total Recebido</strong><div>{formatarMoeda(indicadores.totalRecebido)}</div></div>
-          <div className="ls-card"><strong>Total Pendente</strong><div>{formatarMoeda(indicadores.totalPendente)}</div></div>
-          <div className="ls-card"><strong>Total Repassado</strong><div>{formatarMoeda(indicadores.totalRepassado)}</div></div>
-          <div className="ls-card"><strong>Lançamentos</strong><div>{indicadores.quantidadeLancamentos}</div></div>
+        <div className="kpi-grid" style={{ marginBottom: '1rem' }}>
+          <KpiCard label="Total Previsto" valor={formatarMoeda(indicadores.totalPrevisto)} />
+          <KpiCard label="Total Recebido" valor={formatarMoeda(indicadores.totalRecebido)} />
+          <KpiCard label="Total Pendente" valor={formatarMoeda(indicadores.totalPendente)} />
+          <KpiCard label="Total Repassado" valor={formatarMoeda(indicadores.totalRepassado)} />
+          <KpiCard label="Lançamentos" valor={indicadores.quantidadeLancamentos} />
         </div>
       )}
 
@@ -322,14 +323,13 @@ function PendenciasTab({ setAbaAtiva }) {
     <div>
       <div className="kpi-grid">
         {cards.map((c) => (
-          <div
+          <KpiCard
             key={c.titulo}
-            className={`ls-card kpi-card ${c.aba ? 'card-clicavel' : ''}`}
-            onClick={() => c.aba && setAbaAtiva(c.aba)}
-          >
-            <strong>{c.titulo}</strong>
-            <div className={c.critico ? 'kpi-valor-critico' : 'kpi-valor'}>{c.valor}</div>
-          </div>
+            label={c.titulo}
+            valor={c.valor}
+            destacado={c.critico}
+            onClick={c.aba ? () => setAbaAtiva(c.aba) : undefined}
+          />
         ))}
       </div>
 
@@ -491,17 +491,15 @@ function ContasAReceberTab() {
 
       <div className="kpi-grid">
         {Object.entries(resumo.porFaixa).map(([faixa, dados]) => (
-          <button
+          <KpiCard
             key={faixa}
-            className={`ls-card kpi-card card-clicavel ${filtroFaixa === faixa ? 'card-clicavel-ativo' : ''}`}
+            label={FAIXAS_LABEL[faixa]}
+            valor={formatarMoeda(dados.total)}
+            trendTexto={`${dados.quantidade} lançamento(s)`}
+            trendTipo={faixa !== '0-30' ? 'negativo' : 'neutro'}
+            destacado={filtroFaixa === faixa}
             onClick={() => setFiltroFaixa(filtroFaixa === faixa ? '' : faixa)}
-          >
-            <strong>{FAIXAS_LABEL[faixa]}</strong>
-            <div className={faixa !== '0-30' ? 'kpi-valor-critico' : 'kpi-valor'}>
-              {formatarMoeda(dados.total)}
-            </div>
-            <div className="kpi-detalhe" style={{ fontSize: '0.8rem' }}>{dados.quantidade} lançamento(s)</div>
-          </button>
+          />
         ))}
       </div>
 
@@ -609,17 +607,15 @@ function RepassesTab() {
 
       <div className="kpi-grid">
         {Object.entries(resumo.porFaixa).map(([faixa, dados]) => (
-          <button
+          <KpiCard
             key={faixa}
-            className={`ls-card kpi-card card-clicavel ${filtroFaixa === faixa ? 'card-clicavel-ativo' : ''}`}
+            label={FAIXAS_LABEL[faixa]}
+            valor={formatarMoeda(dados.total)}
+            trendTexto={`${dados.quantidade} repasse(s)`}
+            trendTipo={faixa !== '0-30' ? 'negativo' : 'neutro'}
+            destacado={filtroFaixa === faixa}
             onClick={() => setFiltroFaixa(filtroFaixa === faixa ? '' : faixa)}
-          >
-            <strong>{FAIXAS_LABEL[faixa]}</strong>
-            <div className={faixa !== '0-30' ? 'kpi-valor-critico' : 'kpi-valor'}>
-              {formatarMoeda(dados.total)}
-            </div>
-            <div className="kpi-detalhe" style={{ fontSize: '0.8rem' }}>{dados.quantidade} repasse(s)</div>
-          </button>
+          />
         ))}
       </div>
 
@@ -757,13 +753,13 @@ function FluxoCaixaTab() {
       ) : (
         <div className="kpi-grid">
           {meses.map((m) => (
-            <div key={m.mes} className="ls-card kpi-card">
-              <strong>{m.mes}</strong>
-              <div style={{ fontSize: '1.2rem', fontWeight: 600, marginTop: '0.25rem' }}>{formatarMoeda(m.totalPrevisto)}</div>
-              <div className="kpi-detalhe" style={{ fontSize: '0.8rem' }}>
-                {formatarMoeda(m.totalRecebido)} recebido · {formatarMoeda(m.totalPendente)} pendente
-              </div>
-            </div>
+            <KpiCard
+              key={m.mes}
+              label={m.mes}
+              valor={formatarMoeda(m.totalPrevisto)}
+              trendTexto={`${formatarMoeda(m.totalRecebido)} recebido · ${formatarMoeda(m.totalPendente)} pendente`}
+              trendTipo="neutro"
+            />
           ))}
         </div>
       )}

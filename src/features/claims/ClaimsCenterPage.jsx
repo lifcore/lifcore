@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
 import '../../styles/lcds-tokens.css'
 import InfoTooltip from '../../components/InfoTooltip'
+import KpiCard from '../../components/KpiCard'
 import { Link } from 'react-router-dom'
 import {
   listarCasosConsolidado,
@@ -84,11 +85,21 @@ export default function ClaimsCenterPage() {
         <>
           {indicadores && (
             <div className="kpi-grid">
-              <div className="ls-card kpi-card"><strong>Total de Casos</strong><div className="kpi-valor">{indicadores.totalCasos}</div></div>
-              <div className="ls-card kpi-card"><strong>Abertos</strong><div className="kpi-valor">{indicadores.totalAbertos}</div></div>
-              <div className="ls-card kpi-card card-clicavel-critico"><strong>Críticos (15+ dias)</strong><div className="kpi-valor">{indicadores.totalCriticos}</div></div>
-              <div className="ls-card kpi-card"><strong>Tempo Médio de Resolução</strong><div className="kpi-valor">{indicadores.tempoMedioResolucaoDias ?? '—'}{indicadores.tempoMedioResolucaoDias !== null && ' dias'}</div></div>
-              <div className="ls-card kpi-card"><strong>Concluídas (7 dias)</strong><div className="kpi-valor">{indicadores.totalConcluidosRecentemente}</div></div>
+              <KpiCard label="Total de Casos" valor={indicadores.totalCasos} />
+              <KpiCard label="Abertos" valor={indicadores.totalAbertos} />
+              <KpiCard
+                label="Críticos (15+ dias)"
+                valor={indicadores.totalCriticos}
+                trendTexto="requer atenção"
+                trendTipo="negativo"
+                destacado
+              />
+              <KpiCard
+                label="Tempo Médio de Resolução"
+                valor={indicadores.tempoMedioResolucaoDias ?? '—'}
+                unidade={indicadores.tempoMedioResolucaoDias !== null ? 'dias' : undefined}
+              />
+              <KpiCard label="Concluídas (7 dias)" valor={indicadores.totalConcluidosRecentemente} />
             </div>
           )}
 
@@ -113,15 +124,13 @@ export default function ClaimsCenterPage() {
 
           <div className="kpi-grid">
             {CARDS_SITUACAO.map((c) => (
-              <button
+              <KpiCard
                 key={c.situacao}
-                className="ls-card"
-                className={`ls-card kpi-card card-clicavel ${filtroSituacao === c.situacao ? 'card-clicavel-ativo' : ''}`}
+                label={c.label}
+                valor={indicadores?.porSituacao[c.situacao] ?? 0}
+                destacado={filtroSituacao === c.situacao}
                 onClick={() => setFiltroSituacao(filtroSituacao === c.situacao ? '' : c.situacao)}
-              >
-                <strong>{c.label}</strong>
-                <div className="kpi-valor">{indicadores?.porSituacao[c.situacao] ?? 0}</div>
-              </button>
+              />
             ))}
           </div>
 
@@ -213,23 +222,23 @@ function LinhaTimeline({ caso }) {
             <>
               <div className="cotacao-form-linha" style={{ flexWrap: 'wrap', marginTop: '0.5rem' }}>
                 <div className="ls-card kpi-card">
-                  <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>ABERTURA</span>
+                  <span className="kpi-card-label">ABERTURA</span>
                   <div style={{ fontSize: '0.85rem' }}>{new Date(caso.criado_em).toLocaleString('pt-BR')}</div>
                 </div>
                 <div className="ls-card kpi-card">
-                  <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>PRIMEIRO ATENDIMENTO</span>
+                  <span className="kpi-card-label">PRIMEIRO ATENDIMENTO</span>
                   <div style={{ fontSize: '0.85rem' }}>{primeiroEvento ? new Date(primeiroEvento.data).toLocaleString('pt-BR') : 'Ainda sem registro'}</div>
                 </div>
                 <div className="ls-card kpi-card">
-                  <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>ÚLTIMA ATUALIZAÇÃO</span>
+                  <span className="kpi-card-label">ÚLTIMA ATUALIZAÇÃO</span>
                   <div style={{ fontSize: '0.85rem' }}>{ultimoEvento ? new Date(ultimoEvento.data).toLocaleString('pt-BR') : 'Sem movimentação ainda'}</div>
                 </div>
                 <div className="ls-card kpi-card">
-                  <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>SITUAÇÃO ATUAL</span>
+                  <span className="kpi-card-label">SITUAÇÃO ATUAL</span>
                   <div style={{ fontSize: '0.85rem' }}>{SITUACAO_LABEL[caso.situacao] ?? caso.situacao}</div>
                 </div>
                 <div className="ls-card kpi-card">
-                  <span className="config-instrucao" style={{ fontSize: '0.7rem' }}>PRÓXIMA AÇÃO</span>
+                  <span className="kpi-card-label">PRÓXIMA AÇÃO</span>
                   <div style={{ fontSize: '0.85rem' }}>{caso.data_proxima_acao ? formatarDataBR(caso.data_proxima_acao) : 'Não definida'}</div>
                 </div>
               </div>
@@ -332,15 +341,13 @@ function PorEspecialistaTab() {
       </div>
       <div className="kpi-grid">
         {MODULOS.map((m) => (
-          <button
+          <KpiCard
             key={m.id}
-            className="ls-card"
-            className={`ls-card kpi-card card-clicavel ${moduloSelecionado === m.id ? 'card-clicavel-ativo' : ''}`}
+            label={m.label}
+            valor={indicadores.porEspecialista[m.id]}
+            destacado={moduloSelecionado === m.id}
             onClick={() => verCasos(m.id)}
-          >
-            <strong>{m.label}</strong>
-            <div className="kpi-valor">{indicadores.porEspecialista[m.id]}</div>
-          </button>
+          />
         ))}
       </div>
 

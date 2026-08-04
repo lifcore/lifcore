@@ -85,32 +85,29 @@ export default function PainelExecutivoPage() {
           const c = clientesPorModulo[m.id]
           const totalAtivo = c.prospect + c.em_negociacao + c.cliente
           return (
-            <Link key={m.id} to={m.rota} className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
-              <strong>{m.label}</strong>
-              <div className="kpi-valor">{totalAtivo}</div>
-              <div className="kpi-detalhe" style={{ fontSize: '0.8rem' }}>
-                {c.prospect} prospect · {c.em_negociacao} negociação · {c.cliente} ativos
-              </div>
-              <div className="kpi-detalhe" style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                {demandas.porModulo[m.id]} demanda(s) em aberto
-              </div>
-            </Link>
+            <KpiCard
+              key={m.id}
+              to={m.rota}
+              label={m.label}
+              valor={totalAtivo}
+              trendTexto={`${c.prospect} prospect · ${c.em_negociacao} negociação · ${c.cliente} ativos`}
+              trendTipo="neutro"
+              rodapeLabel="Demandas"
+              rodapeValor={`${demandas.porModulo[m.id]} em aberto`}
+            />
           )
         })}
       </div>
 
       <h3 className="secao-titulo">Demandas em aberto (total)</h3>
-      <div className="ls-card" style={{ maxWidth: '220px' }}>
-        <div className="kpi-valor">{demandas.total}</div>
+      <div className="kpi-grid" style={{ maxWidth: '220px' }}>
+        <KpiCard label="Demandas em aberto" valor={demandas.total} />
       </div>
 
       <h3 className="secao-titulo">Consultas por especialista (histórico total)</h3>
       <div className="kpi-grid">
         {MODULOS.map((m) => (
-          <div key={m.id} className="ls-card kpi-card">
-            <strong>{m.label}</strong>
-            <div className="kpi-valor">{consultasPorEspecialista[m.id]}</div>
-          </div>
+          <KpiCard key={m.id} label={m.label} valor={consultasPorEspecialista[m.id]} />
         ))}
       </div>
 
@@ -139,23 +136,21 @@ export default function PainelExecutivoPage() {
 
       <h3 className="secao-titulo">Saúde Operacional</h3>
       <div className="kpi-grid">
-        <Link to="/claims" className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
-          <strong>Casos Abertos</strong>
-          <div className="kpi-valor">{saudeOperacional.totalAbertos}</div>
-        </Link>
-        <Link to="/claims" className="ls-card kpi-card card-clicavel-critico" style={{ textDecoration: 'none' }}>
-          <strong>Casos Críticos</strong>
-          <div className="kpi-valor">{saudeOperacional.totalCriticos}</div>
-          <div className="kpi-detalhe" style={{ fontSize: '0.75rem' }}>abertos há 15+ dias</div>
-        </Link>
-        <div className="ls-card kpi-card">
-          <strong>Tempo Médio de Resolução</strong>
-          <div className="kpi-valor">{saudeOperacional.tempoMedioResolucaoDias ?? '—'}{saudeOperacional.tempoMedioResolucaoDias !== null && ' dias'}</div>
-        </div>
-        <div className="ls-card kpi-card">
-          <strong>Total de Casos</strong>
-          <div className="kpi-valor">{saudeOperacional.totalCasos}</div>
-        </div>
+        <KpiCard to="/claims" label="Casos Abertos" valor={saudeOperacional.totalAbertos} />
+        <KpiCard
+          to="/claims"
+          label="Casos Críticos"
+          valor={saudeOperacional.totalCriticos}
+          trendTexto="abertos há 15+ dias"
+          trendTipo="atencao"
+          destacado
+        />
+        <KpiCard
+          label="Tempo Médio de Resolução"
+          valor={saudeOperacional.tempoMedioResolucaoDias ?? '—'}
+          unidade={saudeOperacional.tempoMedioResolucaoDias !== null ? 'dias' : undefined}
+        />
+        <KpiCard label="Total de Casos" valor={saudeOperacional.totalCasos} />
       </div>
 
       <h3 className="secao-titulo">Saúde Financeira</h3>
@@ -202,10 +197,10 @@ export default function PainelExecutivoPage() {
 
       <h3 className="secao-titulo">Financeiro (Comissões)</h3>
       <div className="kpi-grid">
-        <div className="ls-card"><strong>Previsto</strong><div>{formatarMoeda(financeiro.totalPrevisto)}</div></div>
-        <div className="ls-card"><strong>Recebido</strong><div>{formatarMoeda(financeiro.totalRecebido)}</div></div>
-        <div className="ls-card"><strong>Pendente</strong><div>{formatarMoeda(financeiro.totalPendente)}</div></div>
-        <div className="ls-card"><strong>Repassado</strong><div>{formatarMoeda(financeiro.totalRepassado)}</div></div>
+        <KpiCard label="Previsto" valor={formatarMoeda(financeiro.totalPrevisto)} />
+        <KpiCard label="Recebido" valor={formatarMoeda(financeiro.totalRecebido)} />
+        <KpiCard label="Pendente" valor={formatarMoeda(financeiro.totalPendente)} />
+        <KpiCard label="Repassado" valor={formatarMoeda(financeiro.totalRepassado)} />
       </div>
       <Link to="/financeiro" className="ls-btn ls-btn-ghost" style={{ marginTop: '0.75rem', display: 'inline-block' }}>
         Ver detalhes no Financeiro →
