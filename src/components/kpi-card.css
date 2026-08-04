@@ -1,0 +1,127 @@
+/* ============================================================
+   KPI Card v2 (LCDS-002) — anatomia de 5 camadas.
+   Dimensões e cores seguem a especificação numérica exata
+   recebida do Chief/Gemini, sem arredondar pra tokens antigos.
+   ============================================================ */
+
+.kpi-card-v2 {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20px;
+  border-radius: 12px;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-decoration: none;
+  color: inherit;
+  cursor: default;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  font-family: inherit;
+}
+
+a.kpi-card-v2,
+button.kpi-card-v2 {
+  cursor: pointer;
+}
+
+a.kpi-card-v2:hover,
+button.kpi-card-v2:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.kpi-card-v2-destacado {
+  border-color: rgba(245, 158, 11, 0.8);
+  box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.08);
+}
+
+/* ---- Bloco superior (Label + Valor + Trend) ---- */
+
+.kpi-card-v2-topo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kpi-card-v2-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.kpi-card-v2-valor-linha {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.kpi-card-v2-valor {
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffffff;
+  font-family: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.kpi-card-v2-unidade {
+  font-size: 13px;
+  font-weight: 400;
+  color: #64748b;
+}
+
+.kpi-card-v2-trend {
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kpi-card-v2-trend-positivo {
+  color: #10b981;
+}
+
+.kpi-card-v2-trend-atencao {
+  color: #f59e0b;
+}
+
+.kpi-card-v2-trend-negativo {
+  color: #ef4444;
+}
+
+.kpi-card-v2-trend-neutro {
+  color: #64748b;
+}
+
+/* ---- Rodapé (divisor + par chave:valor) ---- */
+
+.kpi-card-v2-rodape {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.kpi-card-v2-rodape-label {
+  color: #64748b;
+  font-weight: 400;
+}
+
+.kpi-card-v2-rodape-valor {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  a.kpi-card-v2,
+  button.kpi-card-v2 {
+    transition: none;
+  }
+}
