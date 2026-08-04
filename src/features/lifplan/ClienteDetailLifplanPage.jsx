@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../../styles/lcds-tokens.css'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   buscarClienteProspectCompleto,
@@ -65,7 +66,7 @@ export default function ClienteDetailLifplanPage() {
   const contatoSecundario = contatos.find((c) => c.tipo === 'secundario') ?? {}
 
   return (
-    <div className="cliente-detail-page">
+    <div className="cliente-detail-page" data-theme="lcds">
       <button className="cliente-voltar" onClick={() => navigate('/lifplan')}>&larr; Voltar ao pipeline</button>
 
       <div className="cliente-detail-header">

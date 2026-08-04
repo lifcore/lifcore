@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '../../styles/lcds-tokens.css'
 import { useNavigate } from 'react-router-dom'
 import {
   listarClientesProspects,
@@ -79,7 +80,7 @@ export default function PipelineLifleetPage() {
   const hoje = dataLocalISO()
 
   return (
-    <div className="pipeline-page">
+    <div className="pipeline-page" data-theme="lcds">
       <div className="pipeline-header">
         <h2>Lifleet — Auto&amp;Frota</h2>
         <div className="pipeline-header-acoes">

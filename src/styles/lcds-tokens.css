@@ -63,6 +63,7 @@
   --ls-accent-soft: rgba(245, 158, 11, 0.12);
   --ls-primary: #ffffff;
   --ls-accent: #f59e0b;
+  --ls-danger: #ef4444;
 
   background: var(--lcds-bg);
   color: var(--lcds-text-primary);
