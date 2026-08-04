@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import '../../styles/centers.css'
 import '../../styles/lcds-tokens.css'
 import InfoTooltip from '../../components/InfoTooltip'
+import KpiCard from '../../components/KpiCard'
 import { Link } from 'react-router-dom'
 import { contarClientesPorModulo, contarDemandasAbertas, contarConsultasPorEspecialista, contarIndicadoresPorCorretor, obterSaudeFinanceira, obterSaudeOperacional } from '../../lib/crm/painelExecutivoService'
 import { indicadoresOperacionais } from '../../lib/crm/comissoesService'
@@ -87,10 +88,10 @@ export default function PainelExecutivoPage() {
             <Link key={m.id} to={m.rota} className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
               <strong>{m.label}</strong>
               <div className="kpi-valor">{totalAtivo}</div>
-              <div className="config-instrucao" style={{ fontSize: '0.8rem' }}>
+              <div className="kpi-detalhe" style={{ fontSize: '0.8rem' }}>
                 {c.prospect} prospect · {c.em_negociacao} negociação · {c.cliente} ativos
               </div>
-              <div className="config-instrucao" style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
+              <div className="kpi-detalhe" style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
                 {demandas.porModulo[m.id]} demanda(s) em aberto
               </div>
             </Link>
@@ -145,7 +146,7 @@ export default function PainelExecutivoPage() {
         <Link to="/claims" className="ls-card kpi-card card-clicavel-critico" style={{ textDecoration: 'none' }}>
           <strong>Casos Críticos</strong>
           <div className="kpi-valor">{saudeOperacional.totalCriticos}</div>
-          <div className="config-instrucao" style={{ fontSize: '0.75rem' }}>abertos há 15+ dias</div>
+          <div className="kpi-detalhe" style={{ fontSize: '0.75rem' }}>abertos há 15+ dias</div>
         </Link>
         <div className="ls-card kpi-card">
           <strong>Tempo Médio de Resolução</strong>
@@ -159,33 +160,44 @@ export default function PainelExecutivoPage() {
 
       <h3 className="secao-titulo">Saúde Financeira</h3>
       <div className="kpi-grid">
-        <Link to="/financeiro?aba=contasareceber" className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
-          <strong>Total a Receber</strong>
-          <div className="kpi-valor">{formatarMoeda(saudeFinanceira.totalAReceber)}</div>
-        </Link>
-        <Link to="/financeiro?aba=contasareceber" className="ls-card kpi-card card-clicavel-critico" style={{ textDecoration: 'none' }}>
-          <strong>Total em Atraso</strong>
-          <div className="kpi-valor">{formatarMoeda(saudeFinanceira.totalEmAtraso)}</div>
-          <div className="config-instrucao" style={{ fontSize: '0.75rem' }}>{saudeFinanceira.percentualEmAtraso.toFixed(1)}% do total a receber</div>
-        </Link>
-        <Link to="/financeiro?aba=contasareceber" className="ls-card kpi-card card-clicavel-critico" style={{ textDecoration: 'none' }}>
-          <strong>Faixa Crítica (90+ dias)</strong>
-          <div className="kpi-valor">{formatarMoeda(saudeFinanceira.totalFaixaCritica90)}</div>
-          <div className="config-instrucao" style={{ fontSize: '0.75rem' }}>{saudeFinanceira.quantidadeFaixaCritica90} lançamento(s)</div>
-        </Link>
-        <Link to="/financeiro?aba=repasses" className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
-          <strong>Repasses Pendentes</strong>
-          <div className="kpi-valor">{formatarMoeda(saudeFinanceira.totalRepassesPendentes)}</div>
-        </Link>
-        <Link to="/financeiro?aba=conciliacao" className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
-          <strong>Conciliado</strong>
-          <div className="kpi-valor">{formatarMoeda(saudeFinanceira.totalConciliado)}</div>
-          <div className="config-instrucao" style={{ fontSize: '0.75rem' }}>{saudeFinanceira.percentualConciliado.toFixed(1)}% conciliado</div>
-        </Link>
-        <Link to="/financeiro?aba=pendencias" className="ls-card kpi-card" style={{ textDecoration: 'none' }}>
-          <strong>Volume Aguardando Ação</strong>
-          <div className="kpi-valor">{formatarMoeda(saudeFinanceira.volumeAguardandoAcao)}</div>
-        </Link>
+        <KpiCard
+          to="/financeiro?aba=contasareceber"
+          label="Total a Receber"
+          valor={formatarMoeda(saudeFinanceira.totalAReceber)}
+        />
+        <KpiCard
+          to="/financeiro?aba=contasareceber"
+          label="Total em Atraso"
+          valor={formatarMoeda(saudeFinanceira.totalEmAtraso)}
+          trendTexto={`${saudeFinanceira.percentualEmAtraso.toFixed(1)}% do total a receber`}
+          trendTipo="negativo"
+          destacado
+        />
+        <KpiCard
+          to="/financeiro?aba=contasareceber"
+          label="Faixa Crítica (90+ dias)"
+          valor={formatarMoeda(saudeFinanceira.totalFaixaCritica90)}
+          trendTexto={`${saudeFinanceira.quantidadeFaixaCritica90} lançamento(s)`}
+          trendTipo="negativo"
+          destacado
+        />
+        <KpiCard
+          to="/financeiro?aba=repasses"
+          label="Repasses Pendentes"
+          valor={formatarMoeda(saudeFinanceira.totalRepassesPendentes)}
+        />
+        <KpiCard
+          to="/financeiro?aba=conciliacao"
+          label="Conciliado"
+          valor={formatarMoeda(saudeFinanceira.totalConciliado)}
+          trendTexto={`${saudeFinanceira.percentualConciliado.toFixed(1)}% conciliado`}
+          trendTipo="positivo"
+        />
+        <KpiCard
+          to="/financeiro?aba=pendencias"
+          label="Volume Aguardando Ação"
+          valor={formatarMoeda(saudeFinanceira.volumeAguardandoAcao)}
+        />
       </div>
 
       <h3 className="secao-titulo">Financeiro (Comissões)</h3>
