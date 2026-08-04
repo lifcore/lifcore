@@ -143,7 +143,15 @@
    mesmo em telas mais altas que o conteúdo (onde só min-height:100vh
    na casca poderia não ser suficiente). Aplicado direto no body, sem
    depender do atributo data-theme, já que é o "chão" de tudo. */
-body {
+/* Avisa o navegador que esta página já é escura de propósito — evita
+   que recursos de "escurecer sites automaticamente" (comum no Chrome
+   Android) reescrevam cores de título com heurística própria, o que
+   costuma gerar tons rosa/roxo inesperados em h1-h4. */
+html {
+  color-scheme: dark;
+}
+
+html body {
   background: #12161f;
 }
 
