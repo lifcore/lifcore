@@ -83,7 +83,6 @@ export default function PipelineLifplanPage() {
   return (
     <div className="pipeline-page" data-theme="lcds">
       <div className="pipeline-header">
-        <h2>Lifplan — Planejamento Patrimonial</h2>
         <div className="pipeline-header-acoes">
           {ehMaster && (
             <SeletorCarteira
