@@ -26,7 +26,6 @@ const ITENS_GLOBAIS = [
   { path: '/', Icone: Home, titulo: 'Início (Pipeline)' },
   { path: '/painel', Icone: LayoutDashboard, titulo: 'Painel Executivo', somenteMasterAdmin: true },
   { path: '/perfil', Icone: User, titulo: 'Meu Perfil' },
-  { path: '/mensagens', Icone: MessageSquare, titulo: 'Mensagens Padrão' },
   { path: '/financeiro', Icone: Wallet, titulo: 'Financeiro', somenteMasterAdmin: true },
   { path: '/claims', Icone: FolderKanban, titulo: 'Claims Center' },
   { path: '/growth', Icone: TrendingUp, titulo: 'Growth Center' },

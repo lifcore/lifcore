@@ -1,11 +1,24 @@
 import { operacional } from '../supabaseSchemas'
 
-export async function listarTemplates(modulo = 'lifcare') {
-  const { data, error } = await operacional
+/**
+ * Lista os templates de um módulo. Sem `corretorId`, mostra só os
+ * padrões da empresa (corretor_id nulo) — comportamento seguro pra
+ * qualquer chamada antiga que ainda não foi atualizada. Com
+ * `corretorId`, mostra padrões da empresa + os pessoais daquele
+ * corretor (nunca os de outro corretor).
+ */
+export async function listarTemplates(modulo = 'lifcare', corretorId = null) {
+  let query = operacional
     .from('templates_mensagens')
     .select('*')
     .eq('modulo', modulo)
     .order('criado_em', { ascending: true })
+
+  query = corretorId
+    ? query.or(`corretor_id.is.null,corretor_id.eq.${corretorId}`)
+    : query.is('corretor_id', null)
+
+  const { data, error } = await query
   if (error) throw new Error(`Erro ao listar templates: ${error.message}`)
   return data ?? []
 }
@@ -29,7 +42,12 @@ export async function listarTodosTemplates({ categoria, modulo, status, busca } 
   return linhas.filter((t) => t.titulo?.toLowerCase().includes(termo) || t.corpo?.toLowerCase().includes(termo))
 }
 
-export async function criarTemplate({ organizacaoId, modulo, titulo, corpo, usuarioId, categoria }) {
+/**
+ * Cria um template. Sem `corretorId`, vira um padrão da empresa
+ * (visível a todos — a tela deve garantir que só Master use esse
+ * caminho). Com `corretorId`, vira pessoal daquele corretor.
+ */
+export async function criarTemplate({ organizacaoId, modulo, titulo, corpo, usuarioId, categoria, corretorId = null }) {
   const { error } = await operacional.from('templates_mensagens').insert({
     organizacao_id: organizacaoId,
     modulo,
@@ -37,6 +55,7 @@ export async function criarTemplate({ organizacaoId, modulo, titulo, corpo, usua
     corpo,
     criado_por: usuarioId,
     categoria: categoria || null,
+    corretor_id: corretorId,
   })
   if (error) throw new Error(`Erro ao criar template: ${error.message}`)
 }

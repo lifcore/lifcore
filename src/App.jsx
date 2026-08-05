@@ -16,7 +16,6 @@ import ClaimsCenterPage from './features/claims/ClaimsCenterPage'
 import GrowthCenterPage from './features/growth/GrowthCenterPage'
 import KnowledgeCenterPage from './features/knowledge/KnowledgeCenterPage'
 import PerfilPage from './features/perfil/PerfilPage'
-import MensagensPage from './features/mensagens/MensagensPage'
 import ApolicesPage from './features/administracao/ApolicesPage'
 import GovernancaFuncionalidadesPage from './features/shared/GovernancaFuncionalidadesPage'
 import PipelineLifleetPage from './features/lifleet/PipelineLifleetPage'
@@ -68,7 +67,6 @@ function AppShell() {
             <Route path="/growth" element={<GrowthCenterPage />} />
             <Route path="/knowledge" element={<KnowledgeCenterPage />} />
             <Route path="/perfil" element={<PerfilPage />} />
-            <Route path="/mensagens" element={<MensagensPage />} />
             <Route path="/apolices" element={<ApolicesPage />} />
             <Route path="/governanca" element={<GovernancaFuncionalidadesPage />} />
           </Routes>

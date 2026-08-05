@@ -4,6 +4,8 @@ import { useAuth } from '../auth/AuthContext'
 import { supabase } from '../../lib/supabaseClient'
 import { operacional } from '../../lib/supabaseSchemas'
 import { buscarPreferenciasIa, salvarPreferenciasIa, PREFERENCIAS_IA_PADRAO } from '../../lib/especialista/preferenciasIaService'
+import InfoTooltip from '../../components/InfoTooltip'
+import { listarTemplates, criarTemplate, atualizarTemplate, excluirTemplate } from '../../lib/crm/templatesService'
 
 export default function PerfilPage() {
   const { perfil } = useAuth()
@@ -80,9 +82,11 @@ export default function PerfilPage() {
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
         <button className={`cliente-aba ${abaAtiva === 'perfil' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('perfil')}>Perfil</button>
         <button className={`cliente-aba ${abaAtiva === 'ia' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('ia')}>🤖 Experiência Inteligente</button>
+        <button className={`cliente-aba ${abaAtiva === 'mensagens' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('mensagens')}>💬 Mensagens Padrão</button>
       </div>
 
       {abaAtiva === 'ia' && <ExperienciaInteligenteTab usuarioId={perfil?.id} />}
+      {abaAtiva === 'mensagens' && <MensagensPadraoTab perfil={perfil} />}
 
       {abaAtiva === 'perfil' && (
       <>
@@ -413,6 +417,186 @@ function ExperienciaInteligenteTab({ usuarioId }) {
       <button className="ls-btn ls-btn-primary" onClick={handleSalvar} disabled={salvando} style={{ marginTop: '1.25rem' }}>
         {salvando ? 'Salvando...' : 'Salvar preferências'}
       </button>
+    </div>
+  )
+}
+
+const MODULOS_MENSAGEM = [
+  { id: 'lifcare', label: 'Lifcare (Saúde/Odonto)' },
+  { id: 'lifleet', label: 'Lifleet (Auto/Frota)' },
+  { id: 'lifplan', label: 'Lifplan (Consórcio/Previdência)' },
+  { id: 'lifsure', label: 'Lifsure (Seguros Gerais)' },
+  { id: 'lishield', label: 'LiShield (Seguros Técnicos)' },
+]
+
+/**
+ * Mensagens Padrão, agora dentro de Meu Perfil (antes era item solto
+ * na Sidebar). Duas camadas, mesma tabela `templates_mensagens`:
+ * - Templates da Empresa (corretor_id nulo) — visíveis a todos, só
+ *   Master pode criar/editar/excluir.
+ * - Meus Templates (corretor_id = este corretor) — cada corretor cria
+ *   e gerencia os próprios, sem afetar os demais.
+ */
+function MensagensPadraoTab({ perfil }) {
+  const ehMaster = perfil?.papel === 'master' || perfil?.papel === 'administrador'
+  const [moduloAtivo, setModuloAtivo] = useState('lifcare')
+  const [templates, setTemplates] = useState([])
+  const [editando, setEditando] = useState(null)
+  const [titulo, setTitulo] = useState('')
+  const [corpo, setCorpo] = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  useEffect(() => {
+    carregar()
+  }, [moduloAtivo])
+
+  async function carregar() {
+    const lista = await listarTemplates(moduloAtivo, perfil?.id)
+    setTemplates(lista)
+  }
+
+  function iniciarNovoPessoal() {
+    setEditando({ _pessoal: true })
+    setTitulo('')
+    setCorpo('')
+  }
+
+  function iniciarNovoPadrao() {
+    setEditando({ _padrao: true })
+    setTitulo('')
+    setCorpo('')
+  }
+
+  function iniciarEdicao(t) {
+    setEditando(t)
+    setTitulo(t.titulo)
+    setCorpo(t.corpo)
+  }
+
+  async function handleSalvar() {
+    if (!titulo.trim() || !corpo.trim()) return
+    setSalvando(true)
+    try {
+      if (editando?.id) {
+        await atualizarTemplate(editando.id, { titulo, corpo })
+      } else {
+        const { data: org } = await operacional.from('organizacoes').select('id').limit(1).single()
+        await criarTemplate({
+          organizacaoId: org.id,
+          modulo: moduloAtivo,
+          titulo,
+          corpo,
+          usuarioId: perfil?.id,
+          corretorId: editando?._padrao ? null : perfil?.id,
+        })
+      }
+      setEditando(null)
+      carregar()
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  async function handleExcluir(id) {
+    if (!window.confirm('Excluir esta mensagem?')) return
+    await excluirTemplate(id)
+    carregar()
+  }
+
+  const templatesEmpresa = templates.filter((t) => !t.corretor_id)
+  const templatesPessoais = templates.filter((t) => t.corretor_id === perfil?.id)
+
+  return (
+    <div>
+      <p className="config-instrucao">
+        Cadastre mensagens prontas para enviar via WhatsApp direto do sistema. Templates da Empresa valem
+        pra todo mundo (só Master edita); seus Templates Pessoais só aparecem pra você.
+      </p>
+      <InfoTooltip
+        titulo="Placeholders disponíveis"
+        texto={
+          <>
+            Use <strong>{'{{nome}}'}</strong> para o nome do contato, <strong>{'{{empresa}}'}</strong> para o nome da empresa/cliente, <strong>{'{{vigencia}}'}</strong> para a data de vigência, e — no Lifleet — <strong>{'{{veiculo}}'}</strong> para o(s) veículo(s) da apólice mais recente do cliente.
+          </>
+        }
+      />
+
+      <div className="mensagens-modulos" style={{ marginTop: '0.75rem' }}>
+        {MODULOS_MENSAGEM.map((m) => (
+          <button
+            key={m.id}
+            className={`cliente-aba ${moduloAtivo === m.id ? 'cliente-aba-ativa' : ''}`}
+            onClick={() => setModuloAtivo(m.id)}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {editando && (
+        <div className="ls-card config-card" style={{ marginTop: '1rem' }}>
+          <strong>{editando.id ? 'Editando mensagem' : editando._padrao ? 'Nova mensagem da Empresa' : 'Nova mensagem Pessoal'}</strong>
+          <label>Título (só para identificação interna)</label>
+          <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ex: Aviso de Renovação Próxima" />
+
+          <label>Texto da mensagem</label>
+          <textarea
+            value={corpo}
+            onChange={(e) => setCorpo(e.target.value)}
+            rows={5}
+            style={{ width: '100%', padding: '0.5rem 0.65rem', border: '1px solid var(--ls-border)', borderRadius: 'var(--ls-radius-sm)', fontFamily: 'inherit' }}
+          />
+
+          <div className="ls-modal-acoes">
+            <button className="ls-btn ls-btn-ghost" onClick={() => setEditando(null)}>Cancelar</button>
+            <button className="ls-btn ls-btn-primary" onClick={handleSalvar} disabled={salvando}>
+              {salvando ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <h4 style={{ marginTop: '1.25rem' }}>📋 Templates da Empresa {!ehMaster && <span className="ls-badge">somente leitura</span>}</h4>
+      {ehMaster && !editando && (
+        <button className="ls-btn ls-btn-ghost" onClick={iniciarNovoPadrao} style={{ marginBottom: '0.75rem' }}>
+          + Nova Mensagem da Empresa
+        </button>
+      )}
+      <div className="cotacoes-historico">
+        {templatesEmpresa.length === 0 && <p className="cliente-vazio">Nenhuma mensagem padrão da empresa neste módulo ainda.</p>}
+        {templatesEmpresa.map((t) => (
+          <div key={t.id} className="ls-card cotacao-item">
+            <strong>{t.titulo}</strong>
+            <p style={{ fontSize: '0.85rem', color: 'var(--ls-text-muted)', marginTop: '0.3rem' }}>{t.corpo}</p>
+            {ehMaster && (
+              <div className="cliente-tabela-acoes" style={{ marginTop: '0.5rem' }}>
+                <button className="cliente-tabela-btn" onClick={() => iniciarEdicao(t)}>Editar</button>
+                <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(t.id)}>Excluir</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <h4 style={{ marginTop: '1.5rem' }}>👤 Meus Templates Pessoais</h4>
+      {!editando && (
+        <button className="ls-btn ls-btn-accent" onClick={iniciarNovoPessoal} style={{ marginBottom: '0.75rem' }}>
+          + Nova Mensagem Pessoal
+        </button>
+      )}
+      <div className="cotacoes-historico">
+        {templatesPessoais.length === 0 && <p className="cliente-vazio">Você ainda não tem mensagens pessoais neste módulo.</p>}
+        {templatesPessoais.map((t) => (
+          <div key={t.id} className="ls-card cotacao-item">
+            <strong>{t.titulo}</strong>
+            <p style={{ fontSize: '0.85rem', color: 'var(--ls-text-muted)', marginTop: '0.3rem' }}>{t.corpo}</p>
+            <div className="cliente-tabela-acoes" style={{ marginTop: '0.5rem' }}>
+              <button className="cliente-tabela-btn" onClick={() => iniciarEdicao(t)}>Editar</button>
+              <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(t.id)}>Excluir</button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
