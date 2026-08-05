@@ -41,7 +41,7 @@
 .ws-header-stat-valor {
   font-size: 1.1rem;
   font-weight: 800;
-  color: #ffffff;
+  color: #f7f4ef;
   font-variant-numeric: tabular-nums;
 }
 
@@ -59,7 +59,7 @@
   flex-wrap: wrap;
   gap: 0.4rem;
   padding: 0.75rem 1rem;
-  background: #111827;
+  background: #0e2426;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   margin-bottom: 0.75rem;
@@ -81,7 +81,7 @@
 .ws-kpibar-valor {
   font-size: 1.05rem;
   font-weight: 800;
-  color: #ffffff;
+  color: #f7f4ef;
   font-variant-numeric: tabular-nums;
 }
 
@@ -102,11 +102,11 @@
   gap: 0.4rem;
   padding: 0.6rem 0.9rem;
   border-radius: 10px;
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  background: rgba(224, 166, 61, 0.08);
+  border: 1px solid rgba(224, 166, 61, 0.2);
   margin-bottom: 0.75rem;
   font-size: 0.82rem;
-  color: #f59e0b;
+  color: #e0a63d;
 }
 
 .ws-alerts-vazio {

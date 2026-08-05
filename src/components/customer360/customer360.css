@@ -5,7 +5,7 @@
   flex-wrap: wrap;
   gap: 1.5rem;
   padding: 0.85rem 1.1rem;
-  background: #111827;
+  background: #0e2426;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   margin-bottom: 0.75rem;
@@ -28,14 +28,14 @@
 .c360-summary-valor {
   font-size: 1.25rem;
   font-weight: 800;
-  color: #ffffff;
+  color: #f7f4ef;
   font-variant-numeric: tabular-nums;
 }
 
 .c360-summary-valor-texto {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #ffffff;
+  color: #f7f4ef;
 }
 
 .c360-health {
@@ -55,9 +55,9 @@
 }
 
 .c360-health-atencao {
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.25);
-  color: #f59e0b;
+  background: rgba(224, 166, 61, 0.1);
+  border: 1px solid rgba(224, 166, 61, 0.25);
+  color: #e0a63d;
 }
 
 .c360-health-icone {
@@ -97,7 +97,7 @@
   width: 26px;
   height: 26px;
   border-radius: 999px;
-  background: #111827;
+  background: #0e2426;
   border: 1px solid rgba(255, 255, 255, 0.12);
   display: flex;
   align-items: center;
@@ -117,7 +117,7 @@
 .c360-timeline-titulo {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #ffffff;
+  color: #f7f4ef;
   margin-top: 0.1rem;
 }
 

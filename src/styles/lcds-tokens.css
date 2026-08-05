@@ -8,7 +8,7 @@
    resto do sistema continua 100% no tema claro original.
 
    Refinamento aplicado (feedback do Raphael): fundo um degrau menos
-   pesado que o hex original do Gemini (#0B0F17 → #12161F), e uma
+   pesado que o hex original do Gemini (#031012 → #05191b), e uma
    segunda camada de superfície para os "cards de entidade" (cliente,
    comissão, etc.) — pra eles se destacarem do fundo ao redor, em vez
    de formar um bloco único.
@@ -18,20 +18,20 @@
 
 [data-theme="lcds"] {
   /* Superfícies — 3 níveis de profundidade, não 2 */
-  --lcds-bg: #12161f;              /* fundo da página (mais leve que o #0B0F17 original) */
-  --lcds-chrome: #070a0f;          /* header/sidebar — mais escuro que o fundo, dá continuidade */
+  --lcds-bg: #05191b;              /* fundo da página (mais leve que o #031012 original) */
+  --lcds-chrome: #030e10;          /* header/sidebar — mais escuro que o fundo, dá continuidade */
   --lcds-surface-container: transparent; /* colunas/agrupadores — sem cor própria, só organiza */
-  --lcds-surface-card: #1b2130;    /* cards de entidade (cliente, lançamento, comissão) — destaque real */
-  --lcds-surface-card-hover: #212838;
+  --lcds-surface-card: #0e2426;    /* cards de entidade (cliente, lançamento, comissão) — destaque real */
+  --lcds-surface-card-hover: #142a2c;
 
   /* Bordas */
   --lcds-border: rgba(255, 255, 255, 0.06);
   --lcds-border-strong: rgba(255, 255, 255, 0.12);
-  --lcds-border-gold: rgba(245, 158, 11, 0.28);
+  --lcds-border-gold: rgba(224, 166, 61, 0.28);
 
   /* Cor semântica (Diretriz LCDS-001, seção 4) */
-  --lcds-gold: #f59e0b;
-  --lcds-gold-soft: rgba(245, 158, 11, 0.12);
+  --lcds-gold: #e0a63d;
+  --lcds-gold-soft: rgba(224, 166, 61, 0.12);
   --lcds-success: #10b981;
   --lcds-success-soft: rgba(16, 185, 129, 0.12);
   --lcds-danger: #ef4444;
@@ -39,7 +39,7 @@
   --lcds-info: #38bdf8;
 
   /* Texto */
-  --lcds-text-primary: #ffffff;
+  --lcds-text-primary: #f7f4ef;
   --lcds-text-secondary: #94a3b8;
   --lcds-text-muted: #64748b;
 
@@ -60,13 +60,13 @@
      automaticamente esses casos, sem precisar caçar um por um. */
   --ls-border: rgba(255, 255, 255, 0.12);
   --ls-text-muted: #94a3b8;
-  --ls-accent-soft: rgba(245, 158, 11, 0.12);
-  --ls-primary: #ffffff;
-  --ls-accent: #f59e0b;
+  --ls-accent-soft: rgba(224, 166, 61, 0.12);
+  --ls-primary: #f7f4ef;
+  --ls-accent: #e0a63d;
   --ls-danger: #ef4444;
-  --ls-bg: #1b2130;
-  --ls-surface: #1b2130;
-  --ls-text: #ffffff;
+  --ls-bg: #0e2426;
+  --ls-surface: #0e2426;
+  --ls-text: #f7f4ef;
 
   background: var(--lcds-bg);
   color: var(--lcds-text-primary);
@@ -100,14 +100,14 @@
 }
 
 [data-theme="lcds"] .pipeline-card {
-  background: #111827;
+  background: #0e2426;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   box-shadow: none;
 }
 
 [data-theme="lcds"] .pipeline-alerta-item {
-  background: #111827;
+  background: #0e2426;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
 }
@@ -161,9 +161,9 @@
 
 [data-theme="lcds"] .pipeline-badge-data-critico {
   color: #fbbf24;
-  background: rgba(245, 158, 11, 0.12);
-  border-color: rgba(245, 158, 11, 0.25);
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15);
+  background: rgba(224, 166, 61, 0.12);
+  border-color: rgba(224, 166, 61, 0.25);
+  box-shadow: 0 2px 8px rgba(224, 166, 61, 0.15);
 }
 
 [data-theme="lcds"] .pipeline-badge-data-no_prazo {
@@ -174,7 +174,7 @@
 
 /* Hover mais perceptível nos cards (Sugestão 3 — micro-feedback) */
 [data-theme="lcds"] .pipeline-card:hover {
-  border-color: rgba(245, 158, 11, 0.4);
+  border-color: rgba(224, 166, 61, 0.4);
   transform: translateY(-2px);
   transition: border-color 150ms ease, transform 150ms ease;
 }
@@ -193,8 +193,8 @@
   height: 22px;
   border-radius: 999px;
   border: none;
-  background: #f59e0b;
-  color: #0b0f17;
+  background: #e0a63d;
+  color: #031012;
   font-size: 1rem;
   font-weight: 700;
   line-height: 1;
@@ -203,7 +203,7 @@
 }
 
 .pipeline-coluna-add-btn:hover {
-  background: #d97706;
+  background: #c28f34;
 }
 
 .pipeline-coluna-add-btn:active {
@@ -259,7 +259,7 @@ html {
 }
 
 html body {
-  background: #12161f;
+  background: #05191b;
 }
 
 .lcds-app-shell {
@@ -455,7 +455,7 @@ html body {
    ============================================================ */
 [data-theme="lcds"] .lcds-btn-primaria {
   background: var(--lcds-gold);
-  color: #0b0f17;
+  color: #031012;
   font-weight: 700;
   border: none;
   border-radius: var(--lcds-radius-sm);
@@ -465,7 +465,7 @@ html body {
 }
 
 [data-theme="lcds"] .lcds-btn-primaria:hover {
-  background: #d97706;
+  background: #c28f34;
 }
 
 [data-theme="lcds"] .lcds-btn-primaria:active {
@@ -544,13 +544,13 @@ html body {
 [data-theme="lcds"] .ls-btn-primary,
 [data-theme="lcds"] .ls-btn-accent {
   background: var(--lcds-gold);
-  color: #0b0f17;
+  color: #031012;
   transition: transform 100ms var(--lcds-ease), background var(--lcds-dur) var(--lcds-ease);
 }
 
 [data-theme="lcds"] .ls-btn-primary:hover,
 [data-theme="lcds"] .ls-btn-accent:hover {
-  background: #d97706;
+  background: #c28f34;
 }
 
 [data-theme="lcds"] .ls-btn-ghost {
@@ -622,7 +622,7 @@ html body {
 
 [data-theme="lcds"] .especialista-bolha-corretor {
   background: var(--lcds-gold);
-  color: #0b0f17;
+  color: #031012;
 }
 
 [data-theme="lcds"] .especialista-bolha-corretor .especialista-bolha-autor {
@@ -632,17 +632,17 @@ html body {
 
 [data-theme="lcds"] .especialista-flutuante-btn {
   background: var(--lcds-gold);
-  color: #0b0f17;
-  box-shadow: 0 10px 25px -5px rgba(245, 158, 11, 0.35), 0 0 0 1px rgba(245, 158, 11, 0.15);
+  color: #031012;
+  box-shadow: 0 10px 25px -5px rgba(224, 166, 61, 0.35), 0 0 0 1px rgba(224, 166, 61, 0.15);
 }
 
 [data-theme="lcds"] .especialista-flutuante-btn:hover {
-  background: #d97706;
+  background: #c28f34;
   transform: translateY(-2px);
 }
 
 [data-theme="lcds"] .especialista-flutuante-icone {
-  color: #0b0f17;
+  color: #031012;
 }
 
 [data-theme="lcds"] .especialista-painel-overlay {

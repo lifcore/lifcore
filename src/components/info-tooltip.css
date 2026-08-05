@@ -13,7 +13,7 @@
   height: 20px;
   border-radius: 999px;
   border: 1px solid var(--lcds-border, rgba(255, 255, 255, 0.12));
-  background: var(--lcds-surface-card, #1b2130);
+  background: var(--lcds-surface-card, #0e2426);
   color: var(--lcds-text-secondary, #94a3b8);
   font-size: 11px;
   font-style: italic;
@@ -26,9 +26,9 @@
 
 .info-tooltip-gatilho:hover,
 .info-tooltip-gatilho[aria-expanded="true"] {
-  border-color: var(--lcds-gold, #f59e0b);
-  color: var(--lcds-gold, #f59e0b);
-  background: var(--lcds-gold-soft, rgba(245, 158, 11, 0.12));
+  border-color: var(--lcds-gold, #e0a63d);
+  color: var(--lcds-gold, #e0a63d);
+  background: var(--lcds-gold-soft, rgba(224, 166, 61, 0.12));
 }
 
 .info-tooltip-painel {
@@ -38,7 +38,7 @@
   z-index: 70;
   width: 320px;
   max-width: min(320px, calc(100vw - 2rem));
-  background: var(--lcds-surface-card, #1b2130);
+  background: var(--lcds-surface-card, #0e2426);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   padding: 12px 16px;

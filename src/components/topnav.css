@@ -4,7 +4,7 @@
   justify-content: space-between;
   padding: 0 1.25rem;
   height: 48px;
-  background: #1c212b;
+  background: #0a2022;
   color: white;
   gap: 1.5rem;
 }
@@ -54,8 +54,8 @@
 }
 
 .topnav-modulo-ativo {
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  background: rgba(224, 166, 61, 0.15);
+  color: #e0a63d;
   font-weight: 600;
 }
 
@@ -116,8 +116,8 @@
 
 .topnav-acoes-slot .ls-dropdown-gatilho:hover,
 .topnav-acoes-slot .ls-dropdown-gatilho.ls-dropdown-aberto {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+  border-color: #e0a63d;
+  box-shadow: 0 0 0 3px rgba(224, 166, 61, 0.15);
 }
 
 .topnav-acoes-slot .ls-dropdown-seta {
@@ -125,7 +125,7 @@
 }
 
 .topnav-acoes-slot .ls-dropdown-painel {
-  background: #1c212b;
+  background: #0a2022;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
   color: white;
@@ -140,8 +140,8 @@
 }
 
 .topnav-acoes-slot .ls-dropdown-item.ls-dropdown-item-ativo {
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  background: rgba(224, 166, 61, 0.15);
+  color: #e0a63d;
 }
 
 .topnav-acoes-slot .ls-dropdown-separador {

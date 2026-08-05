@@ -13,7 +13,7 @@
   top: 48px; /* só o TopNav OS agora — Inline Toolbar removida (feedback Gemini/Raphael) */
   bottom: 0;
   width: 64px;
-  background: #1c212b;
+  background: #0a2022;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -78,12 +78,12 @@ body[data-sidebar-modo='expandido'] .app-main {
 .side-icon-item:hover {
   background: rgba(255, 255, 255, 0.1);
   opacity: 1;
-  color: #ffffff;
+  color: #f7f4ef;
 }
 
 .side-icon-item-ativo {
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  background: rgba(224, 166, 61, 0.15);
+  color: #e0a63d;
   opacity: 1;
 }
 
@@ -125,7 +125,7 @@ body[data-sidebar-modo='expandido'] .app-main {
 
 .side-icon-modo-btn:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  color: #f7f4ef;
 }
 
 /* Empurra o conteúdo para não ficar embaixo da sidebar — mantido como
