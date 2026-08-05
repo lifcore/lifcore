@@ -10,6 +10,8 @@ import {
   atualizarDemanda,
   adicionarAtualizacaoManual,
   excluirCotacao,
+  fecharCotacaoComOpcao,
+  aprovarPropostaCotacao,
 } from '../../lib/crm/clientesService'
 import { listarApolicesLifsureDoCliente, excluirApoliceLifsure } from '../../lib/crm/lifsureService'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
@@ -135,7 +137,7 @@ export default function ClienteDetailLifsurePage() {
         )}
 
         {abaAtiva === 'Cotações' && (
-          <CotacoesLifsureTab clienteId={cliente.id} cotacoes={cotacoes} onAtualizado={carregar} />
+          <CotacoesLifsureTab clienteId={cliente.id} cotacoes={cotacoes} onAtualizado={carregar} perfil={perfil} />
         )}
 
         {abaAtiva === 'Apólices' && (
@@ -163,14 +165,51 @@ export default function ClienteDetailLifsurePage() {
   )
 }
 
-function CotacoesLifsureTab({ clienteId, cotacoes, onAtualizado }) {
+const ROTULO_STATUS_COTACAO = {
+  em_analise: { texto: 'Em análise', cor: '#94a3b8' },
+  proposta_emitida: { texto: 'Proposta emitida', cor: '#f59e0b' },
+  aprovada: { texto: 'Aprovada', cor: '#10b981' },
+  recusada: { texto: 'Recusada', cor: '#64748b' },
+}
+
+function CotacoesLifsureTab({ clienteId, cotacoes, onAtualizado, perfil }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [cotacaoEditando, setCotacaoEditando] = useState(null)
+  const [processando, setProcessando] = useState(null)
+  const [erroWorkflow, setErroWorkflow] = useState(null)
 
   async function handleExcluir(cotacaoId) {
     if (!window.confirm('Excluir esta cotação?')) return
     await excluirCotacao(cotacaoId)
     onAtualizado()
+  }
+
+  async function handleFechar(cotacaoId) {
+    if (!window.confirm('Fechar com esta cotação como Proposta?')) return
+    setProcessando(cotacaoId)
+    setErroWorkflow(null)
+    try {
+      await fecharCotacaoComOpcao(cotacaoId, perfil?.id)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
+  }
+
+  async function handleAprovar(cotacaoId) {
+    if (!window.confirm('Aprovar esta proposta? Um rascunho de apólice será gerado automaticamente.')) return
+    setProcessando(cotacaoId)
+    setErroWorkflow(null)
+    try {
+      await aprovarPropostaCotacao(cotacaoId, perfil?.id)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
   }
 
   return (
@@ -197,23 +236,44 @@ function CotacoesLifsureTab({ clienteId, cotacoes, onAtualizado }) {
         />
       )}
 
+      {erroWorkflow && <p className="ls-modal-erro">{erroWorkflow}</p>}
+
       {cotacoes.length === 0 ? (
         <p className="cliente-vazio">Nenhuma cotação registrada ainda.</p>
       ) : (
         <div className="cotacoes-historico" style={{ marginTop: '1rem' }}>
-          {cotacoes.map((cot) => (
-            <div key={cot.id} className="ls-card cotacao-item">
-              <div className="cotacao-item-header">
-                <strong>{cot.operadora_nome_livre}</strong>
-                <span>R$ {Number(cot.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                <span>Válida até: {cot.validade ? formatarDataBR(cot.validade) : '—'}</span>
+          {cotacoes.map((cot) => {
+            const status = ROTULO_STATUS_COTACAO[cot.status ?? 'em_analise'] ?? ROTULO_STATUS_COTACAO.em_analise
+            const podeFechar = (cot.status ?? 'em_analise') === 'em_analise'
+            const podeAprovar = cot.status === 'proposta_emitida'
+            return (
+              <div key={cot.id} className="ls-card cotacao-item">
+                <div className="cotacao-item-header">
+                  <strong>{cot.operadora_nome_livre}</strong>
+                  <span>R$ {Number(cot.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  <span>Válida até: {cot.validade ? formatarDataBR(cot.validade) : '—'}</span>
+                  <span style={{ color: status.cor, fontWeight: 600 }}>{status.texto}</span>
+                </div>
+                {cot.apolice_id && (
+                  <div className="kpi-detalhe" style={{ margin: '0.25rem 0 0' }}>Rascunho de apólice gerado — complete em Apólices</div>
+                )}
+                <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
+                  {podeFechar && (
+                    <button className="cliente-tabela-btn" disabled={processando === cot.id} onClick={() => handleFechar(cot.id)}>
+                      {processando === cot.id ? '...' : 'Fechar com esta'}
+                    </button>
+                  )}
+                  {podeAprovar && (
+                    <button className="cliente-tabela-btn" disabled={processando === cot.id} onClick={() => handleAprovar(cot.id)}>
+                      {processando === cot.id ? '...' : 'Aprovar Proposta'}
+                    </button>
+                  )}
+                  <button className="cliente-tabela-btn" onClick={() => setCotacaoEditando(cot)}>Editar</button>
+                  <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(cot.id)}>Excluir</button>
+                </div>
               </div>
-              <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
-                <button className="cliente-tabela-btn" onClick={() => setCotacaoEditando(cot)}>Editar</button>
-                <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(cot.id)}>Excluir</button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
