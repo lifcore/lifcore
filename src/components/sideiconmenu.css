@@ -1,47 +1,147 @@
+/* ============================================================
+   Sprint Visual — Fase 1 (OA-001 REV B)
+   3 modos, cada um com comportamento próprio (aprovado pelo Chief):
+   - hover: 64px em repouso, expande pra 220px SOBREPONDO o conteúdo
+     (nunca empurra — o Kanban não pode "dançar" quando o mouse passa)
+   - expandido: 220px fixo, empurra o conteúdo (experiência desktop)
+   - travado: 64px fixo, nunca expande, empurra só os 64px
+   ============================================================ */
+
 .side-icon-menu {
   position: fixed;
   left: 0;
-  top: 64px; /* abaixo do topnav */
+  top: 64px; /* mesma altura do topnav atual — Fase 2 muda os dois juntos */
   bottom: 0;
-  width: 56px;
-  background: #1c212b; /* chumbo — separa visualmente da navy do topnav */
+  width: 64px;
+  background: #1c212b;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding-top: 1rem;
-  gap: 0.5rem;
+  justify-content: space-between;
+  padding: 1rem 0;
+  gap: 0.35rem;
   z-index: 50;
+  overflow: hidden;
+  transition: width 180ms ease, box-shadow 180ms ease;
+}
+
+.side-icon-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* Modo hover: expande por cima do conteúdo ao passar o mouse, sem empurrar nada */
+.side-icon-menu.modo-hover:hover {
+  width: 220px;
+  box-shadow: 6px 0 28px rgba(0, 0, 0, 0.45);
+  z-index: 60;
+}
+
+/* Modo expandido: sempre 220px */
+.side-icon-menu.modo-expandido {
+  width: 220px;
+}
+
+/* Modo travado: sempre 64px, nunca expande */
+.side-icon-menu.modo-travado {
+  width: 64px;
+}
+
+/* O conteúdo principal reage ao modo — nunca ao hover (hover é overlay, não empurra) */
+body[data-sidebar-modo='hover'] .app-main,
+body[data-sidebar-modo='travado'] .app-main {
+  margin-left: 64px;
+  transition: margin-left 180ms ease;
+}
+
+body[data-sidebar-modo='expandido'] .app-main {
+  margin-left: 220px;
+  transition: margin-left 180ms ease;
 }
 
 .side-icon-item {
-  width: 40px;
-  height: 40px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.85rem;
+  height: 40px;
+  padding: 0 20px;
+  margin: 0 8px;
   border-radius: 8px;
   text-decoration: none;
-  opacity: 0.65;
-  transition: background 0.15s ease, opacity 0.15s ease;
+  color: rgba(255, 255, 255, 0.65);
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: background 150ms ease, opacity 150ms ease, color 150ms ease;
 }
 
 .side-icon-item:hover {
   background: rgba(255, 255, 255, 0.1);
   opacity: 1;
+  color: #ffffff;
 }
 
 .side-icon-item-ativo {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
   opacity: 1;
 }
 
-.side-icon-emoji {
-  font-size: 1.15rem;
+.side-icon-svg {
+  flex-shrink: 0;
 }
 
-/* Empurra o conteúdo principal para não ficar embaixo do menu lateral */
+.side-icon-item-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  white-space: nowrap;
+}
+
+/* Rótulo só aparece quando a sidebar está de fato larga (220px) —
+   seja porque está em modo expandido, seja porque o hover abriu ela */
+.side-icon-menu.modo-expandido .side-icon-item-label,
+.side-icon-menu.modo-hover:hover .side-icon-item-label {
+  opacity: 1;
+}
+
+.side-icon-modo-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  height: 40px;
+  padding: 0 20px;
+  margin: 0 8px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.side-icon-modo-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+/* Empurra o conteúdo para não ficar embaixo da sidebar — mantido como
+   fallback caso o body[data-sidebar-modo] ainda não tenha sido definido
+   no primeiro render (evita flash sem margem) */
 .app-main {
-  margin-left: 56px;
+  margin-left: 64px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-icon-menu,
+  .app-main,
+  .side-icon-item,
+  .side-icon-item-label {
+    transition: none !important;
+  }
 }
 
 @media (max-width: 700px) {
@@ -50,18 +150,40 @@
     left: 0;
     right: 0;
     bottom: 0;
-    width: 100%;
+    width: 100% !important;
     height: 58px;
     flex-direction: row;
     justify-content: space-around;
     align-items: center;
-    padding-top: 0;
+    padding: 0;
     gap: 0;
-    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.25);
   }
 
-  .app-main {
-    margin-left: 0;
-    padding-bottom: 70px; /* espaço pra barra de navegação inferior não cobrir conteúdo */
+  .side-icon-lista {
+    flex-direction: row;
+    gap: 0;
+  }
+
+  .side-icon-item,
+  .side-icon-modo-btn {
+    height: 100%;
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+    margin: 0;
+  }
+
+  .side-icon-item-label {
+    display: none;
+  }
+
+  .side-icon-modo-btn {
+    display: none; /* no celular, o modo compacto em barra inferior já é o único que faz sentido */
+  }
+
+  body[data-sidebar-modo] .app-main {
+    margin-left: 0 !important;
+    padding-bottom: 70px;
   }
 }
