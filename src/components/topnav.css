@@ -150,9 +150,50 @@
 
 @media (max-width: 860px) {
   .topnav {
-    padding: 0 0.85rem;
+    height: auto;
+    min-height: 48px;
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
   }
+
   .topnav-usuario-nome {
     display: none;
+  }
+
+  /* As 5 abas de Workspace viram uma faixa com rolagem horizontal
+     própria — nunca mais "sumem" exigindo girar a tela */
+  .topnav-modulos {
+    flex: 1 1 auto;
+    order: 2;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .topnav-modulos::-webkit-scrollbar {
+    display: none;
+  }
+  .topnav-modulo {
+    flex-shrink: 0;
+  }
+
+  .topnav-usuario {
+    order: 3;
+  }
+
+  /* As ações do Pipeline (Meus clientes / busca / Ver ações futuras),
+     que chegam aqui via portal, ganham linha própria — nunca mais
+     tentam espremer no mesmo espaço das abas */
+  .topnav-acoes-slot {
+    order: 10;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+  }
+
+  .topnav-acoes-slot input:where(:not([type="checkbox"]):not([type="radio"])) {
+    width: 100%;
+    flex: 1 1 160px;
   }
 }
