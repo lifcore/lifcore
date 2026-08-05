@@ -73,7 +73,7 @@ export default function ClaimsCenterPage() {
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
         <button className={`cliente-aba ${abaAtiva === 'central' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('central')}>Central</button>
         <button className={`cliente-aba ${abaAtiva === 'gargalos' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('gargalos')}>Gargalos</button>
-        <button className={`cliente-aba ${abaAtiva === 'especialistas' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('especialistas')}>Por Especialista</button>
+        <button className={`cliente-aba ${abaAtiva === 'especialistas' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('especialistas')}>Por Módulo</button>
         <button className={`cliente-aba ${abaAtiva === 'buscar' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('buscar')}>Buscar</button>
       </div>
 
@@ -335,7 +335,7 @@ function PorEspecialistaTab() {
     <div>
       <div style={{ marginBottom: '0.5rem' }}>
         <InfoTooltip
-          titulo="Por Especialista"
+          titulo="Por Módulo"
           texto={'"Especialista" aqui é sinônimo de Módulo/Workspace — não existe uma entidade humana separada de especialista no sistema hoje (GIN=Lifcare, LifAuto=Lifleet, etc).'}
         />
       </div>
