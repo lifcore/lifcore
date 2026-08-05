@@ -30,6 +30,14 @@ export const WORKSPACES = {
       stages: ['em_analise', 'proposta_emitida', 'analise_operadora', 'assinatura', 'aprovada'],
       documentoFinal: 'contrato',
     },
+    features: {
+      customer360: true,
+      commercialLifecycle: true,
+      comparisonQuote: false,
+      claims: true,
+      finance: false,
+      connect: false,
+    },
   },
   auto: {
     id: 'auto',
@@ -45,6 +53,14 @@ export const WORKSPACES = {
       enabled: true,
       stages: ['em_analise', 'proposta_emitida', 'aprovada'],
       documentoFinal: 'apolice',
+    },
+    features: {
+      customer360: false,
+      commercialLifecycle: true,
+      comparisonQuote: true,
+      claims: true,
+      finance: false,
+      connect: false,
     },
   },
   lifsure: {
@@ -62,6 +78,14 @@ export const WORKSPACES = {
       stages: ['em_analise', 'proposta_emitida', 'aprovada'],
       documentoFinal: 'apolice',
     },
+    features: {
+      customer360: false,
+      commercialLifecycle: true,
+      comparisonQuote: false,
+      claims: true,
+      finance: false,
+      connect: false,
+    },
   },
   lishield: {
     id: 'lishield',
@@ -77,6 +101,14 @@ export const WORKSPACES = {
       enabled: true,
       stages: ['em_analise', 'proposta_emitida', 'aprovada'],
       documentoFinal: 'apolice',
+    },
+    features: {
+      customer360: false,
+      commercialLifecycle: true,
+      comparisonQuote: false,
+      claims: true,
+      finance: false,
+      connect: false,
     },
   },
   lifplan: {
@@ -99,6 +131,14 @@ export const WORKSPACES = {
       enabled: false,
       stages: ['em_analise', 'proposta_emitida', 'analise_credito', 'assinatura', 'aprovada'],
       documentoFinal: null,
+    },
+    features: {
+      customer360: false,
+      commercialLifecycle: false,
+      comparisonQuote: false,
+      claims: true,
+      finance: false,
+      connect: false,
     },
   },
 

@@ -1,0 +1,133 @@
+/* Workspace Intelligence Engine — Sprint 010 (WIE-002) */
+
+.ws-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.ws-header-titulo h2 {
+  margin: 0;
+}
+
+.ws-header-subtitulo {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.ws-header-stats {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.ws-header-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.ws-header-stat-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.ws-header-stat-valor {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-header-ai-slot {
+  font-size: 0.75rem;
+  color: #64748b;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.35rem 0.7rem;
+}
+
+.ws-kpibar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.75rem 1rem;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  margin-bottom: 0.75rem;
+}
+
+.ws-kpibar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ws-kpibar-bloco {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+}
+
+.ws-kpibar-valor {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-kpibar-label {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.ws-kpibar-seta {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.ws-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  margin-bottom: 0.75rem;
+  font-size: 0.82rem;
+  color: #f59e0b;
+}
+
+.ws-alerts-vazio {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.ws-alert-item {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.ws-alert-mais {
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.ws-quick-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}

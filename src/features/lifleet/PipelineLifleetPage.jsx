@@ -14,6 +14,11 @@ import NovoClienteLifleetModal from './NovoClienteLifleetModal'
 import { useAuth } from '../auth/AuthContext'
 import SeletorCarteira from '../../components/SeletorCarteira'
 import { useTopNavSlot } from '../../components/TopNavSlotContext'
+import { WORKSPACES } from '../../workspaces'
+import { obterMetricasWorkspace } from '../../lib/crm/workspaceMetricsService'
+import WorkspaceHeader from '../../components/workspace/WorkspaceHeader'
+import WorkspaceKpiBar from '../../components/workspace/WorkspaceKpiBar'
+import WorkspaceAlertPanel from '../../components/workspace/WorkspaceAlertPanel'
 
 const COLUNAS = [
   { status: 'prospect', titulo: 'Novo Prospect' },
@@ -42,6 +47,7 @@ export default function PipelineLifleetPage() {
   const [corretorVisualizado, setCorretorVisualizado] = useState(perfil?.id ?? null)
   const navigate = useNavigate()
   const topnavSlot = useTopNavSlot()
+  const [metricas, setMetricas] = useState(null)
 
   useEffect(() => {
     if (ehMaster) listarCorretores().then(setCorretores).catch(() => {})
@@ -49,6 +55,7 @@ export default function PipelineLifleetPage() {
 
   useEffect(() => {
     carregar()
+    obterMetricasWorkspace('auto', { corretorId: corretorVisualizado }).then(setMetricas)
   }, [mostrarFuturas, busca, corretorVisualizado])
 
   async function carregar() {
@@ -85,6 +92,13 @@ export default function PipelineLifleetPage() {
 
   return (
     <div className="pipeline-page" data-theme="lcds">
+      {metricas && (
+        <>
+          <WorkspaceHeader workspace={WORKSPACES.auto} metricas={metricas} />
+          <WorkspaceKpiBar workspace={WORKSPACES.auto} metricas={metricas} />
+          <WorkspaceAlertPanel itens={metricas.itensPendencia} />
+        </>
+      )}
       {topnavSlot && createPortal(
         <>
 {ehMaster && (
