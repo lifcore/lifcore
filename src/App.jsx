@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { useState } from 'react'
 import { AuthProvider, useAuth } from './features/auth/AuthContext'
 import LoginPage from './features/auth/LoginPage'
 import TopNav from './components/TopNav'
+import { TopNavSlotProvider } from './components/TopNavSlotContext'
 import SideIconMenu from './components/SideIconMenu'
 import EspecialistaSwitcher from './components/EspecialistaSwitcher'
 import PipelinePage from './features/crm/PipelinePage'
@@ -29,6 +31,7 @@ import './styles/lcds-tokens.css'
 
 function AppShell() {
   const { user, carregando } = useAuth()
+  const [topnavSlot, setTopnavSlot] = useState(null)
 
   if (carregando) {
     return <div className="loading-screen">Carregando...</div>
@@ -40,8 +43,9 @@ function AppShell() {
 
   return (
     <BrowserRouter>
-      <TopNav />
+      <TopNav onSlotRef={setTopnavSlot} />
       <SideIconMenu />
+      <TopNavSlotProvider value={topnavSlot}>
       <div data-theme="lcds" className="lcds-app-shell">
         <main className="app-main">
           <Routes>
@@ -69,6 +73,7 @@ function AppShell() {
         </main>
         <EspecialistaSwitcherCondicional />
       </div>
+      </TopNavSlotProvider>
     </BrowserRouter>
   )
 }

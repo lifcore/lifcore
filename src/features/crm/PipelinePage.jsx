@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import '../../styles/lcds-tokens.css'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -12,6 +13,7 @@ import { formatarDataBR, dataLocalISO } from '../../lib/utils/formatarData'
 import { calcularNivelPrazo } from '../../lib/utils/prazoBadge'
 import { useAuth } from '../auth/AuthContext'
 import SeletorCarteira from '../../components/SeletorCarteira'
+import { useTopNavSlot } from '../../components/TopNavSlotContext'
 
 const COLUNAS = [
   { status: 'prospect', titulo: 'Novo Prospect' },
@@ -39,6 +41,7 @@ export default function PipelinePage() {
   const [corretores, setCorretores] = useState([])
   const [corretorVisualizado, setCorretorVisualizado] = useState(perfil?.id ?? null)
   const navigate = useNavigate()
+  const topnavSlot = useTopNavSlot()
 
   useEffect(() => {
     if (ehMaster) listarCorretores().then(setCorretores).catch(() => {})
@@ -87,9 +90,9 @@ export default function PipelinePage() {
 
   return (
     <div className="pipeline-page" data-theme="lcds">
-      <div className="pipeline-header">
-        <div className="pipeline-header-acoes">
-          {ehMaster && (
+      {topnavSlot && createPortal(
+        <>
+{ehMaster && (
             <SeletorCarteira
               valorSelecionado={corretorVisualizado ?? perfil.id}
               aoSelecionar={setCorretorVisualizado}
@@ -111,8 +114,9 @@ export default function PipelinePage() {
           <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarFuturas((v) => !v)}>
             {mostrarFuturas ? '↩ Só ações de hoje' : '→ Ver ações futuras'}
           </button>
-        </div>
-      </div>
+                </>,
+        topnavSlot
+      )}
 
       {carregando ? (
         <p className="pipeline-carregando">Carregando pipeline...</p>

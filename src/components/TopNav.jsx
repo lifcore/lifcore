@@ -16,7 +16,7 @@ const MODULOS = [
   { id: 'lifplan', label: 'Lifplan', path: '/lifplan', ativo: true },
 ]
 
-export default function TopNav() {
+export default function TopNav({ onSlotRef }) {
   const { perfil, logout } = useAuth()
 
   return (
@@ -38,6 +38,8 @@ export default function TopNav() {
           </NavLink>
         ))}
       </nav>
+
+      <div className="topnav-acoes-slot" ref={onSlotRef} />
 
       <div className="topnav-usuario">
         <span className="ls-badge topnav-usuario-papel">{perfil?.papel}</span>
