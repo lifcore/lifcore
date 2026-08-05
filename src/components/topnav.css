@@ -33,7 +33,11 @@
 }
 
 .topnav-workspace {
-  flex: 1;
+  flex: 0 0 auto;
+}
+
+.topnav-usuario {
+  margin-left: auto;
 }
 
 .topnav .ls-dropdown-gatilho {
