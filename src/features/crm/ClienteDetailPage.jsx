@@ -11,6 +11,7 @@ import {
   adicionarAtualizacaoManual,
   excluirContrato,
   excluirCotacao,
+  avancarEtapaComercial,
   calcularPorte,
 } from '../../lib/crm/clientesService'
 import { gerarResumoCandidato, criarCandidatoConhecimento, aprovarCandidatoComoCasoReal, rejeitarCandidato } from '../../lib/crm/aprendizadoService'
@@ -162,7 +163,7 @@ export default function ClienteDetailPage() {
         )}
 
         {abaAtiva === 'Cotações' && (
-          <CotacoesSecao clienteId={cliente.id} cotacoes={cotacoes} onAtualizado={carregar} />
+          <CotacoesSecao clienteId={cliente.id} cotacoes={cotacoes} onAtualizado={carregar} perfil={perfil} />
         )}
 
         {abaAtiva === 'Demandas' && (
@@ -590,14 +591,39 @@ function ContratosTab({ contratos, clienteProspectId, onAtualizado }) {
   )
 }
 
-function CotacoesSecao({ clienteId, cotacoes, onAtualizado }) {
+const ROTULO_ETAPA_LIFCARE = {
+  em_analise: 'Em análise',
+  proposta_emitida: 'Proposta emitida',
+  analise_operadora: 'Em análise pela operadora',
+  assinatura: 'Aguardando assinatura',
+  aprovada: 'Contrato emitido',
+  recusada: 'Recusada',
+}
+
+function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [cotacaoEditando, setCotacaoEditando] = useState(null)
+  const [processando, setProcessando] = useState(null)
+  const [erroWorkflow, setErroWorkflow] = useState(null)
 
   async function handleExcluir(cotacaoId) {
     if (!window.confirm('Excluir esta cotação?')) return
     await excluirCotacao(cotacaoId)
     onAtualizado()
+  }
+
+  async function handleAvancar(cotacaoId, proximaEtapaLabel) {
+    if (!window.confirm(`Avançar esta cotação para "${proximaEtapaLabel}"?`)) return
+    setProcessando(cotacaoId)
+    setErroWorkflow(null)
+    try {
+      await avancarEtapaComercial(cotacaoId, perfil?.id)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
   }
 
   return (
@@ -624,33 +650,58 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado }) {
         />
       )}
 
+      {erroWorkflow && <p className="ls-modal-erro">{erroWorkflow}</p>}
+
       {cotacoes.length === 0 ? (
         <p className="cliente-vazio">Nenhuma cotação registrada ainda.</p>
       ) : (
         <div className="cotacoes-historico" style={{ marginTop: '1rem' }}>
-          {cotacoes.map((cot) => (
-            <div key={cot.id} className="ls-card cotacao-item">
-              <div className="cotacao-item-header">
-                <strong>{cot.operadora_nome_livre}</strong>
-                <span className="ls-badge ls-badge-prospect">{cot.porte}</span>
-                <span>{cot.numero_vidas} vidas</span>
-                <span>{formatarDataBR(cot.data_cotacao)}</span>
-              </div>
-              {cot.itens_cotacao?.length > 0 && (
-                <div className="cotacao-item-valores">
-                  {cot.itens_cotacao.map((item) => (
-                    <span key={item.id} className="cotacao-item-valor">
-                      {item.faixa_etaria}: R$ {Number(item.valor).toFixed(2)}
-                    </span>
-                  ))}
+          {cotacoes.map((cot) => {
+            const etapas = ['em_analise', 'proposta_emitida', 'analise_operadora', 'assinatura', 'aprovada']
+            const etapaAtual = cot.status ?? 'em_analise'
+            const indiceAtual = etapas.indexOf(etapaAtual)
+            const proximaEtapa = etapas[indiceAtual + 1]
+            const podeAvancar = etapaAtual !== 'recusada' && proximaEtapa
+
+            return (
+              <div key={cot.id} className="ls-card cotacao-item">
+                <div className="cotacao-item-header">
+                  <strong>{cot.operadora_nome_livre}</strong>
+                  <span className="ls-badge ls-badge-prospect">{cot.porte}</span>
+                  <span>{cot.numero_vidas} vidas</span>
+                  <span>{formatarDataBR(cot.data_cotacao)}</span>
+                  <span style={{ fontWeight: 600, color: etapaAtual === 'recusada' ? '#64748b' : '#f59e0b' }}>
+                    {ROTULO_ETAPA_LIFCARE[etapaAtual] ?? etapaAtual}
+                  </span>
                 </div>
-              )}
-              <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
-                <button className="cliente-tabela-btn" onClick={() => setCotacaoEditando(cot)}>Editar</button>
-                <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(cot.id)}>Excluir</button>
+                {cot.itens_cotacao?.length > 0 && (
+                  <div className="cotacao-item-valores">
+                    {cot.itens_cotacao.map((item) => (
+                      <span key={item.id} className="cotacao-item-valor">
+                        {item.faixa_etaria}: R$ {Number(item.valor).toFixed(2)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {cot.contrato_id && (
+                  <div className="kpi-detalhe" style={{ margin: '0.25rem 0 0' }}>Contrato gerado — complete em Contratos</div>
+                )}
+                <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
+                  {podeAvancar && (
+                    <button
+                      className="cliente-tabela-btn"
+                      disabled={processando === cot.id}
+                      onClick={() => handleAvancar(cot.id, ROTULO_ETAPA_LIFCARE[proximaEtapa] ?? proximaEtapa)}
+                    >
+                      {processando === cot.id ? '...' : `Avançar para: ${ROTULO_ETAPA_LIFCARE[proximaEtapa] ?? proximaEtapa}`}
+                    </button>
+                  )}
+                  <button className="cliente-tabela-btn" onClick={() => setCotacaoEditando(cot)}>Editar</button>
+                  <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(cot.id)}>Excluir</button>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

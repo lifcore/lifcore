@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 import { dataLocalISO } from '../utils/formatarData'
 import { registrarEventoComercial } from './eventosComerciaisService'
 import { criarApolice } from './apolicesService'
+import { avancarEtapaCiclo, recusarSiblingsDoGrupo } from './commercialLifecycleService'
 
 /** Retorna a data de hoje no formato YYYY-MM-DD, usando o horário LOCAL (não UTC) */
 function dataLocalHoje(diasAFrente = 0) {
@@ -506,113 +507,102 @@ export async function normalizarOperadoraCotacao(cotacaoId, operadoraId) {
 /**
  * Sprint Ciclo de Fechamento Comercial — Cotação → Proposta → Apólice.
  *
- * "Fecha" o comparativo com a opção escolhida: essa cotação vira
- * Proposta Emitida, e todas as outras da mesma rodada de comparação
- * (mesmo grupo_comparacao_id) são marcadas como Recusada automaticamente
- * (apontamento 4 do Chief) — o histórico de todas é preservado, nunca
- * excluído, só o status muda.
- *
- * Cada transição gera um evento no Commercial Event History (domínio
- * próprio, eventosComerciaisService — nunca a tabela `eventos` de Claims).
+ * Sprint 009 (CLU-001): esta função virou um WRAPPER FINO sobre o
+ * Commercial Lifecycle Engine (commercialLifecycleService.js) —
+ * diretriz do Chief ("Wrapper de Compatibilidade"): mesmo nome, mesma
+ * assinatura, mesmo comportamento externo, pra não quebrar Lifleet/
+ * Lifsure/LiShield, que já chamam essa função há duas Sprints. Por
+ * dentro, quem decide a lista de etapas agora é o Workspace Registry.
  */
 export async function fecharCotacaoComOpcao(cotacaoId, usuarioId) {
-  const { data: cotacao, error } = await operacional
-    .from('cotacoes')
-    .select('id, grupo_comparacao_id, operadora_nome_livre')
-    .eq('id', cotacaoId)
-    .single()
-  if (error) throw new Error(`Erro ao buscar cotação: ${error.message}`)
-
-  await atualizarCotacao(cotacaoId, { status: 'proposta_emitida' })
-  await registrarEventoComercial({
-    entidadeTipo: 'cotacao',
-    entidadeId: cotacaoId,
-    tipoEvento: 'proposta_emitida',
-    descricao: `Proposta emitida — ${cotacao.operadora_nome_livre ?? 'seguradora selecionada'}`,
-    usuarioId,
-  })
-
-  if (cotacao.grupo_comparacao_id) {
-    const { data: outras } = await operacional
-      .from('cotacoes')
-      .select('id')
-      .eq('grupo_comparacao_id', cotacao.grupo_comparacao_id)
-      .neq('id', cotacaoId)
-
-    for (const outra of outras ?? []) {
-      await atualizarCotacao(outra.id, { status: 'recusada' })
-      await registrarEventoComercial({
-        entidadeTipo: 'cotacao',
-        entidadeId: outra.id,
-        tipoEvento: 'recusada',
-        descricao: 'Recusada automaticamente — outra opção da mesma rodada de comparação foi escolhida',
-        usuarioId,
-      })
-    }
-  }
+  await avancarEtapaCiclo(cotacaoId, usuarioId)
+  await recusarSiblingsDoGrupo(cotacaoId, usuarioId)
 }
 
 /**
- * Aprova a Proposta e gera o rascunho de Apólice — nunca automático,
- * sempre com o corretor completando os dados que faltam (veículo,
- * número da apólice oficial, etc.) antes de confirmar de vez.
- *
- * Rastreabilidade completa (apontamento 5 do Chief): a apólice gerada
- * fica referenciada em `cotacoes.apolice_id`.
+ * Sprint 009 (CLU-001): também virou wrapper fino. Continua assumindo
+ * que a etapa final gera uma Apólice — válido pra Lifleet/Lifsure/
+ * LiShield (os 3 módulos que já usam essa função hoje). Rastreabilidade
+ * completa mantida: a apólice gerada fica referenciada em
+ * `cotacoes.apolice_id`.
  */
 export async function aprovarPropostaCotacao(cotacaoId, usuarioId) {
-  const { data: cotacao, error } = await operacional
+  const { data: cotacaoAntes, error } = await operacional.from('cotacoes').select('status').eq('id', cotacaoId).single()
+  if (error) throw new Error(`Erro ao buscar cotação: ${error.message}`)
+  if (cotacaoAntes.status !== 'proposta_emitida') {
+    throw new Error('Só é possível aprovar uma cotação que já esteja como Proposta Emitida.')
+  }
+
+  const { documentoId } = await avancarEtapaCiclo(cotacaoId, usuarioId, {
+    gerarDocumentoFinal: async (cotacao) => {
+      const { data: cliente } = await operacional
+        .from('clientes_prospects')
+        .select('razao_social')
+        .eq('id', cotacao.cliente_prospect_id)
+        .single()
+      const { data: org } = await operacional.from('organizacoes').select('id').limit(1).single()
+
+      const apolice = await criarApolice({
+        corretorId: usuarioId,
+        organizacaoId: org?.id,
+        dados: {
+          cliente_prospect_id: cotacao.cliente_prospect_id,
+          nome_cliente: cliente?.razao_social ?? null,
+          operadora_id: cotacao.operadora_id ?? null,
+          operadora_nome_livre: cotacao.operadora_nome_livre ?? null,
+          premio: cotacao.valor_total ?? null,
+          produto: cotacao.contexto_veiculo ? 'Auto' : null,
+          origem_venda: 'venda_nova',
+        },
+      })
+
+      await atualizarCotacao(cotacaoId, { apolice_id: apolice.id })
+      return apolice.id
+    },
+  })
+
+  return { apoliceId: documentoId }
+}
+
+/**
+ * Sprint 009 (CLU-001) — genérico de verdade: avança a cotação UMA
+ * etapa no ciclo comercial do módulo dela, seja qual for a lista
+ * declarada no Workspace Registry. Usado por módulos com mais de 3
+ * etapas (ex: LifCare: em_analise → proposta_emitida →
+ * analise_operadora → assinatura → aprovada). Gera Contrato
+ * automaticamente ao alcançar a etapa final, quando o Workspace
+ * declarar `documentoFinal: 'contrato'`.
+ */
+export async function avancarEtapaComercial(cotacaoId, usuarioId) {
+  const { data: cotacaoAntes, error } = await operacional
     .from('cotacoes')
-    .select('*')
+    .select('cliente_prospect_id')
     .eq('id', cotacaoId)
     .single()
   if (error) throw new Error(`Erro ao buscar cotação: ${error.message}`)
 
-  if (cotacao.status !== 'proposta_emitida') {
-    throw new Error('Só é possível aprovar uma cotação que já esteja como Proposta Emitida.')
-  }
-
-  await atualizarCotacao(cotacaoId, { status: 'aprovada' })
-  await registrarEventoComercial({
-    entidadeTipo: 'cotacao',
-    entidadeId: cotacaoId,
-    tipoEvento: 'aprovada',
-    descricao: 'Proposta aprovada — gerando rascunho de apólice',
-    usuarioId,
-  })
-
   const { data: cliente } = await operacional
     .from('clientes_prospects')
-    .select('razao_social')
-    .eq('id', cotacao.cliente_prospect_id)
+    .select('modulo, razao_social')
+    .eq('id', cotacaoAntes.cliente_prospect_id)
     .single()
 
-  const { data: org } = await operacional.from('organizacoes').select('id').limit(1).single()
-
-  const apolice = await criarApolice({
-    corretorId: usuarioId,
-    organizacaoId: org?.id,
-    dados: {
-      cliente_prospect_id: cotacao.cliente_prospect_id,
-      nome_cliente: cliente?.razao_social ?? null,
-      operadora_id: cotacao.operadora_id ?? null,
-      operadora_nome_livre: cotacao.operadora_nome_livre ?? null,
-      premio: cotacao.valor_total ?? null,
-      produto: cotacao.contexto_veiculo ? 'Auto' : null,
-      origem_venda: 'venda_nova',
+  return avancarEtapaCiclo(cotacaoId, usuarioId, {
+    gerarDocumentoFinal: async (cotacao) => {
+      if (cliente?.modulo === 'saude') {
+        const contrato = await criarContrato(cotacao.cliente_prospect_id, {
+          operadora_id: cotacao.operadora_id ?? null,
+          operadora_nome_livre: cotacao.operadora_nome_livre ?? null,
+          status: 'ativo',
+        })
+        await atualizarCotacao(cotacaoId, { contrato_id: contrato.id })
+        return contrato.id
+      }
+      // Outros módulos com ciclo de mais de 3 etapas entram aqui
+      // quando existirem — nenhum documento gerado às cegas.
+      return null
     },
   })
-
-  await atualizarCotacao(cotacaoId, { apolice_id: apolice.id })
-  await registrarEventoComercial({
-    entidadeTipo: 'cotacao',
-    entidadeId: cotacaoId,
-    tipoEvento: 'apolice_gerada',
-    descricao: 'Rascunho de apólice gerado — falta completar dados do veículo e confirmar',
-    usuarioId,
-  })
-
-  return apolice
 }
 
 /** Abre uma demanda manual (sem passar pelo Especialista) — usado no botão "Nova Demanda" da aba Demandas */

@@ -23,6 +23,13 @@ export const WORKSPACES = {
     especialistaPadrao: 'saude',
     kpisRapidos: [],
     breadcrumbPadrao: ['Workspaces', 'Lifcare'],
+    commercialLifecycle: {
+      enabled: true,
+      // Sprint 009 (CLU-001): "Implantação" fica fora desta Sprint —
+      // o ciclo aqui cobre só até o contrato existir, não o pós-venda.
+      stages: ['em_analise', 'proposta_emitida', 'analise_operadora', 'assinatura', 'aprovada'],
+      documentoFinal: 'contrato',
+    },
   },
   auto: {
     id: 'auto',
@@ -34,6 +41,11 @@ export const WORKSPACES = {
     especialistaPadrao: 'auto',
     kpisRapidos: [],
     breadcrumbPadrao: ['Workspaces', 'Lifleet'],
+    commercialLifecycle: {
+      enabled: true,
+      stages: ['em_analise', 'proposta_emitida', 'aprovada'],
+      documentoFinal: 'apolice',
+    },
   },
   lifsure: {
     id: 'lifsure',
@@ -45,6 +57,11 @@ export const WORKSPACES = {
     especialistaPadrao: 'lifsure',
     kpisRapidos: [],
     breadcrumbPadrao: ['Workspaces', 'Lifsure'],
+    commercialLifecycle: {
+      enabled: true,
+      stages: ['em_analise', 'proposta_emitida', 'aprovada'],
+      documentoFinal: 'apolice',
+    },
   },
   lishield: {
     id: 'lishield',
@@ -56,6 +73,11 @@ export const WORKSPACES = {
     especialistaPadrao: 'lishield',
     kpisRapidos: [],
     breadcrumbPadrao: ['Workspaces', 'LiShield'],
+    commercialLifecycle: {
+      enabled: true,
+      stages: ['em_analise', 'proposta_emitida', 'aprovada'],
+      documentoFinal: 'apolice',
+    },
   },
   lifplan: {
     id: 'lifplan',
@@ -67,6 +89,17 @@ export const WORKSPACES = {
     especialistaPadrao: 'lifplan',
     kpisRapidos: [],
     breadcrumbPadrao: ['Workspaces', 'Lifplan'],
+    commercialLifecycle: {
+      // Sprint 009 (CLU-001): etapas registradas por completude
+      // conceitual, mas NÃO acionáveis ainda — "Análise de Crédito",
+      // "Assinatura" e "Emissão" não têm tabela/campo próprio no
+      // banco hoje. Ativar isso sem essa base seria antecipar schema
+      // (proibido pela própria Sprint). `enabled: false` sinaliza pro
+      // motor genérico que este Workspace ainda não deve ser acionado.
+      enabled: false,
+      stages: ['em_analise', 'proposta_emitida', 'analise_credito', 'assinatura', 'aprovada'],
+      documentoFinal: null,
+    },
   },
 
   // Control Centers e Governança também são Workspaces — só não têm
