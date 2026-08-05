@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './features/auth/AuthContext'
 import LoginPage from './features/auth/LoginPage'
 import TopNav from './components/TopNav'
+import InlineToolbar from './components/InlineToolbar'
 import SideIconMenu from './components/SideIconMenu'
 import EspecialistaSwitcher from './components/EspecialistaSwitcher'
 import PipelinePage from './features/crm/PipelinePage'
@@ -41,8 +42,9 @@ function AppShell() {
   return (
     <BrowserRouter>
       <TopNav />
+      <InlineToolbar />
       <SideIconMenu />
-      <div data-theme="lcds">
+      <div data-theme="lcds" className="lcds-app-shell">
         <main className="app-main">
           <Routes>
             <Route path="/" element={<PipelinePage />} />
