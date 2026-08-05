@@ -1,0 +1,28 @@
+.inline-toolbar {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  background: #14181f;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.inline-toolbar-titulo {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.65);
+  letter-spacing: 0.02em;
+}
+
+.inline-toolbar-acoes {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 700px) {
+  .inline-toolbar {
+    padding: 0 0.85rem;
+  }
+}

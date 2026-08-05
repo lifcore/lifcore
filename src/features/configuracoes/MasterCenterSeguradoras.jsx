@@ -624,4 +624,4 @@ function LinhaGestor({ modulo, operadoraId, gestor, onAtualizado }) {
       </td>
     </tr>
   )
-}
+} 
