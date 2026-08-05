@@ -1,0 +1,157 @@
+/* Customer 360 Engine — Sprint 008 */
+
+.c360-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 0.85rem 1.1rem;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  margin-bottom: 0.75rem;
+}
+
+.c360-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.c360-summary-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.c360-summary-valor {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.c360-summary-valor-texto {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.c360-health {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.c360-health-ok {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #10b981;
+}
+
+.c360-health-atencao {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #f59e0b;
+}
+
+.c360-health-icone {
+  line-height: 1.4;
+}
+
+.c360-health-lista {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.c360-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0.5rem 0;
+}
+
+.c360-timeline-item {
+  display: flex;
+  gap: 0.75rem;
+  padding-bottom: 1.25rem;
+  position: relative;
+}
+
+.c360-timeline-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 26px;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.c360-timeline-marcador {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.c360-timeline-data {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.c360-timeline-titulo {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-top: 0.1rem;
+}
+
+.c360-timeline-descricao {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-top: 0.15rem;
+}
+
+.c360-relacionamento {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.c360-relacionamento-linha {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.85rem;
+  color: #e2e8f0;
+}
+
+.c360-relacionamento-linha:last-child {
+  border-bottom: none;
+}
+
+.c360-relacionamento-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  flex-shrink: 0;
+}

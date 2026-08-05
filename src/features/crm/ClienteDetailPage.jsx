@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import '../../styles/lcds-tokens.css'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   buscarClienteProspectCompleto,
@@ -24,8 +23,12 @@ import { listarCorretores } from '../../lib/crm/apolicesService'
 import { useAuth } from '../auth/AuthContext'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
+import CustomerSummaryWidget from '../../components/customer360/CustomerSummaryWidget'
+import OperationalHealthWidget from '../../components/customer360/OperationalHealthWidget'
+import CustomerTimelineWidget from '../../components/customer360/CustomerTimelineWidget'
+import RelationshipPanelWidget from '../../components/customer360/RelationshipPanelWidget'
 
-const ABAS = ['Dados Cadastrais', 'Contratos', 'Cotações', 'Demandas']
+const ABAS = ['Visão 360°', 'Dados Cadastrais', 'Contratos', 'Cotações', 'Demandas']
 
 export default function ClienteDetailPage() {
   const { id } = useParams()
@@ -33,12 +36,14 @@ export default function ClienteDetailPage() {
   const { perfil } = useAuth()
   const ehMaster = perfil?.papel === 'master'
   const [dados, setDados] = useState(null)
-  const [abaAtiva, setAbaAtiva] = useState('Demandas')
+  const [abaAtiva, setAbaAtiva] = useState('Visão 360°')
   const [mostrarWhatsApp, setMostrarWhatsApp] = useState(false)
   const [mostrarTransferir, setMostrarTransferir] = useState(false)
+  const [corretores, setCorretoresPagina] = useState([])
 
   useEffect(() => {
     carregar()
+    listarCorretores().then(setCorretoresPagina)
   }, [id])
 
   async function carregar() {
@@ -63,7 +68,7 @@ export default function ClienteDetailPage() {
   const contatoSecundario = contatos.find((c) => c.tipo === 'secundario') ?? {}
 
   return (
-    <div className="cliente-detail-page" data-theme="lcds">
+    <div className="cliente-detail-page">
       <button className="cliente-voltar" onClick={() => navigate('/')}>&larr; Voltar ao pipeline</button>
 
       <div className="cliente-detail-header">
@@ -107,6 +112,9 @@ export default function ClienteDetailPage() {
         />
       )}
 
+      <CustomerSummaryWidget cliente={cliente} contratos={contratos} cotacoes={cotacoes} />
+      <OperationalHealthWidget cliente={cliente} cotacoes={cotacoes} demandas={demandas} />
+
       <div className="cliente-abas">
         {ABAS.map((aba) => (
           <button
@@ -120,6 +128,25 @@ export default function ClienteDetailPage() {
       </div>
 
       <div className="cliente-aba-conteudo">
+        {abaAtiva === 'Visão 360°' && (
+          <div>
+            <h4 style={{ marginTop: 0 }}>Linha do Tempo</h4>
+            <CustomerTimelineWidget
+              clienteCriadoEm={cliente.criado_em}
+              cotacaoIds={cotacoes.map((c) => c.id)}
+              casoIds={demandas.map((d) => d.id)}
+            />
+            <h4>Relacionamento</h4>
+            <RelationshipPanelWidget
+              cliente={cliente}
+              corretorNome={corretores.find((c) => c.id === cliente.corretor_id)?.nome_completo}
+              contratos={contratos}
+              cotacoes={cotacoes}
+              demandas={demandas}
+            />
+          </div>
+        )}
+
         {abaAtiva === 'Dados Cadastrais' && (
           <DadosCadastraisTab
             cliente={cliente}
