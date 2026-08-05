@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   Home, LayoutDashboard, User, MessageSquare, Wallet,
-  FolderKanban, TrendingUp, BookOpen, ShieldCheck, Settings,
+  FolderKanban, TrendingUp, BookOpen, ShieldCheck, Settings, LayoutGrid,
   PanelLeft, Pin, PanelLeftClose,
 } from 'lucide-react'
 import { useAuth } from '../features/auth/AuthContext'
@@ -32,6 +32,7 @@ const ITENS_GLOBAIS = [
   { path: '/growth', Icone: TrendingUp, titulo: 'Growth Center' },
   { path: '/knowledge', Icone: BookOpen, titulo: 'Knowledge Center', somenteMasterAdmin: true },
   { path: '/auditoria', Icone: ShieldCheck, titulo: 'Auditoria', somenteMasterAdmin: true },
+  { path: '/governanca', Icone: LayoutGrid, titulo: 'Governança de Funcionalidades', somenteMasterAdmin: true },
   { path: '/configuracoes', Icone: Settings, titulo: 'Configurações', somenteMasterAdmin: true },
 ]
 

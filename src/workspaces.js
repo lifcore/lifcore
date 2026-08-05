@@ -31,6 +31,7 @@ export const WORKSPACES = {
       documentoFinal: 'contrato',
     },
     features: {
+      workspaceHeader: true,
       customer360: true,
       commercialLifecycle: true,
       comparisonQuote: false,
@@ -55,6 +56,7 @@ export const WORKSPACES = {
       documentoFinal: 'apolice',
     },
     features: {
+      workspaceHeader: true,
       customer360: false,
       commercialLifecycle: true,
       comparisonQuote: true,
@@ -79,6 +81,7 @@ export const WORKSPACES = {
       documentoFinal: 'apolice',
     },
     features: {
+      workspaceHeader: true,
       customer360: false,
       commercialLifecycle: true,
       comparisonQuote: false,
@@ -103,6 +106,7 @@ export const WORKSPACES = {
       documentoFinal: 'apolice',
     },
     features: {
+      workspaceHeader: true,
       customer360: false,
       commercialLifecycle: true,
       comparisonQuote: false,
@@ -133,6 +137,7 @@ export const WORKSPACES = {
       documentoFinal: null,
     },
     features: {
+      workspaceHeader: true,
       customer360: false,
       commercialLifecycle: false,
       comparisonQuote: false,

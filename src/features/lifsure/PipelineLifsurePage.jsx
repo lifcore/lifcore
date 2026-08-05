@@ -12,6 +12,11 @@ import { formatarDataBR, dataLocalISO } from '../../lib/utils/formatarData'
 import { calcularNivelPrazo } from '../../lib/utils/prazoBadge'
 import NovoClienteLifsureModal from './NovoClienteLifsureModal'
 import { useAuth } from '../auth/AuthContext'
+import { WORKSPACES } from '../../workspaces'
+import { obterMetricasWorkspace } from '../../lib/crm/workspaceMetricsService'
+import WorkspaceHeader from '../../components/workspace/WorkspaceHeader'
+import WorkspaceKpiBar from '../../components/workspace/WorkspaceKpiBar'
+import WorkspaceAlertPanel from '../../components/workspace/WorkspaceAlertPanel'
 import SeletorCarteira from '../../components/SeletorCarteira'
 import { useTopNavSlot } from '../../components/TopNavSlotContext'
 
@@ -42,6 +47,7 @@ export default function PipelineLifsurePage() {
   const [corretorVisualizado, setCorretorVisualizado] = useState(perfil?.id ?? null)
   const navigate = useNavigate()
   const topnavSlot = useTopNavSlot()
+  const [metricas, setMetricas] = useState(null)
 
   useEffect(() => {
     if (ehMaster) listarCorretores().then(setCorretores).catch(() => {})
@@ -49,6 +55,7 @@ export default function PipelineLifsurePage() {
 
   useEffect(() => {
     carregar()
+    obterMetricasWorkspace('lifsure', { corretorId: corretorVisualizado }).then(setMetricas)
   }, [mostrarFuturas, busca, corretorVisualizado])
 
   async function carregar() {
@@ -85,6 +92,13 @@ export default function PipelineLifsurePage() {
 
   return (
     <div className="pipeline-page" data-theme="lcds">
+      {metricas && (
+        <>
+          <WorkspaceHeader workspace={WORKSPACES.lifsure} metricas={metricas} />
+          <WorkspaceKpiBar workspace={WORKSPACES.lifsure} metricas={metricas} />
+          <WorkspaceAlertPanel itens={metricas.itensPendencia} />
+        </>
+      )}
       {topnavSlot && createPortal(
         <>
 {ehMaster && (

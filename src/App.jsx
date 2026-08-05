@@ -18,6 +18,7 @@ import KnowledgeCenterPage from './features/knowledge/KnowledgeCenterPage'
 import PerfilPage from './features/perfil/PerfilPage'
 import MensagensPage from './features/mensagens/MensagensPage'
 import ApolicesPage from './features/administracao/ApolicesPage'
+import GovernancaFuncionalidadesPage from './features/shared/GovernancaFuncionalidadesPage'
 import PipelineLifleetPage from './features/lifleet/PipelineLifleetPage'
 import ClienteDetailLifleetPage from './features/lifleet/ClienteDetailLifleetPage'
 import PipelineLifsurePage from './features/lifsure/PipelineLifsurePage'
@@ -69,6 +70,7 @@ function AppShell() {
             <Route path="/perfil" element={<PerfilPage />} />
             <Route path="/mensagens" element={<MensagensPage />} />
             <Route path="/apolices" element={<ApolicesPage />} />
+            <Route path="/governanca" element={<GovernancaFuncionalidadesPage />} />
           </Routes>
         </main>
         <EspecialistaSwitcherCondicional />
