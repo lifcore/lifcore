@@ -10,7 +10,7 @@
 .side-icon-menu {
   position: fixed;
   left: 0;
-  top: 64px; /* mesma altura do topnav atual — Fase 2 muda os dois juntos */
+  top: 48px; /* só o TopNav OS agora — Inline Toolbar removida (feedback Gemini/Raphael) */
   bottom: 0;
   width: 64px;
   background: #1c212b;
