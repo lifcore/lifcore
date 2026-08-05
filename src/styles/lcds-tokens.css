@@ -100,14 +100,16 @@
 }
 
 [data-theme="lcds"] .pipeline-card {
-  background: var(--lcds-surface-card);
-  border: 1px solid var(--lcds-border);
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
   box-shadow: none;
 }
 
 [data-theme="lcds"] .pipeline-alerta-item {
-  background: var(--lcds-surface-card);
-  border: 1px solid var(--lcds-border);
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
 }
 
 [data-theme="lcds"] .pipeline-coluna-contador {
@@ -172,8 +174,40 @@
 
 /* Hover mais perceptível nos cards (Sugestão 3 — micro-feedback) */
 [data-theme="lcds"] .pipeline-card:hover {
-  border-color: rgba(255, 255, 255, 0.2);
-  transition: border-color 150ms ease;
+  border-color: rgba(245, 158, 11, 0.4);
+  transform: translateY(-2px);
+  transition: border-color 150ms ease, transform 150ms ease;
+}
+
+.pipeline-coluna-titulo-acoes {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pipeline-coluna-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: none;
+  background: #f59e0b;
+  color: #0b0f17;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 100ms ease, background 150ms ease;
+}
+
+.pipeline-coluna-add-btn:hover {
+  background: #d97706;
+}
+
+.pipeline-coluna-add-btn:active {
+  transform: scale(0.93);
 }
 
 /* Scrollbar elegante nas colunas do Kanban (Chrome/Edge/Safari) */

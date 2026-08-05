@@ -32,53 +32,31 @@
   text-transform: uppercase;
 }
 
-.topnav-workspace {
-  flex: 0 0 auto;
+.topnav-modulos {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
 }
 
-.topnav-usuario {
-  margin-left: auto;
-}
-
-.topnav .ls-dropdown-gatilho {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: white;
-  font-size: 0.85rem;
-  padding: 0.35rem 0.8rem;
-}
-
-.topnav .ls-dropdown-gatilho:hover,
-.topnav .ls-dropdown-gatilho.ls-dropdown-aberto {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
-}
-
-.topnav .ls-dropdown-seta {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.topnav .ls-dropdown-painel {
-  background: #1c212b;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
-}
-
-.topnav .ls-dropdown-item {
+.topnav-modulo {
+  padding: 0.4rem 0.85rem;
+  border-radius: 8px;
   color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-.topnav .ls-dropdown-item:hover {
+.topnav-modulo:hover {
   background: rgba(255, 255, 255, 0.08);
+  color: white;
 }
 
-.topnav .ls-dropdown-item.ls-dropdown-item-ativo {
+.topnav-modulo-ativo {
   background: rgba(245, 158, 11, 0.15);
   color: #f59e0b;
-}
-
-.topnav .ls-dropdown-separador {
-  border-top-color: rgba(255, 255, 255, 0.12);
+  font-weight: 600;
 }
 
 .topnav-usuario {

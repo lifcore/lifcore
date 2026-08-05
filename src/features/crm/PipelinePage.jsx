@@ -88,7 +88,6 @@ export default function PipelinePage() {
   return (
     <div className="pipeline-page" data-theme="lcds">
       <div className="pipeline-header">
-        <h2>Lifcare — Saúde&amp;Odonto</h2>
         <div className="pipeline-header-acoes">
           {ehMaster && (
             <SeletorCarteira
@@ -112,9 +111,6 @@ export default function PipelinePage() {
           <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarFuturas((v) => !v)}>
             {mostrarFuturas ? '↩ Só ações de hoje' : '→ Ver ações futuras'}
           </button>
-          <button className="ls-btn ls-btn-accent" onClick={() => setModalAberto(true)}>
-            + Novo Prospect
-          </button>
         </div>
       </div>
 
@@ -130,8 +126,13 @@ export default function PipelinePage() {
               onDrop={(e) => handleDrop(e, coluna.status)}
             >
               <div className="pipeline-coluna-titulo">
-                {coluna.titulo}
-                <span className="pipeline-coluna-contador">{itensDaColuna(coluna.status).length}</span>
+                <span>{coluna.titulo}</span>
+                <span className="pipeline-coluna-titulo-acoes">
+                  <span className="pipeline-coluna-contador">{itensDaColuna(coluna.status).length}</span>
+                  {coluna.status === 'prospect' && (
+                    <button className="pipeline-coluna-add-btn" onClick={() => setModalAberto(true)} title="Novo Prospect">+</button>
+                  )}
+                </span>
               </div>
 
               <div className="pipeline-coluna-cards">
