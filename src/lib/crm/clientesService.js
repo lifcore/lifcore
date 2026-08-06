@@ -191,6 +191,34 @@ export async function atualizarClienteProspect(id, dados) {
   if (error) throw new Error(`Erro ao atualizar cliente: ${error.message}`)
 }
 
+/**
+ * Transferência individual de titularidade — diferente de
+ * `transferirCarteira` (perfisService.js), que move TODOS os clientes
+ * de um corretor de uma vez (uso administrativo, saída de corretor).
+ * Esta função transfere UM cliente específico. Preserva o estágio do
+ * ciclo comercial (só troca o responsável, nunca o status/etapa) e
+ * sempre deixa rastro em `eventos_comerciais` — sem isso, a mudança de
+ * dono do cliente vira exatamente o tipo de conhecimento que o LifCore
+ * existe para não deixar se perder.
+ */
+export async function transferirClienteIndividual({
+  clienteId,
+  corretorDestinoId,
+  usuarioId,
+  nomeCorretorOrigem,
+  nomeCorretorDestino,
+}) {
+  await atualizarClienteProspect(clienteId, { corretor_id: corretorDestinoId })
+
+  await registrarEventoComercial({
+    entidadeTipo: 'cliente',
+    entidadeId: clienteId,
+    tipoEvento: 'transferencia_titularidade',
+    descricao: `Transferido de ${nomeCorretorOrigem ?? 'sem responsável definido'} para ${nomeCorretorDestino}`,
+    usuarioId,
+  })
+}
+
 /** Lista todos os grupos econômicos cadastrados (para sugestão/autocomplete) */
 export async function listarGruposEconomicos() {
   const { data, error } = await operacional

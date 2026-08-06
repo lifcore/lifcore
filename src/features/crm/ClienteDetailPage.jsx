@@ -13,6 +13,7 @@ import {
   excluirCotacao,
   avancarEtapaComercial,
   calcularPorte,
+  transferirClienteIndividual,
 } from '../../lib/crm/clientesService'
 import { gerarResumoCandidato, criarCandidatoConhecimento, aprovarCandidatoComoCasoReal, rejeitarCandidato } from '../../lib/crm/aprendizadoService'
 import { buscarHistoricoChat } from '../../lib/especialista/especialistaSaude'
@@ -67,6 +68,8 @@ export default function ClienteDetailPage() {
   const { cliente, contatos, contratos, cotacoes, demandas, grupoInfo } = dados
   const contatoPrimario = contatos.find((c) => c.tipo === 'primario') ?? {}
   const contatoSecundario = contatos.find((c) => c.tipo === 'secundario') ?? {}
+  // Master transfere qualquer cliente; o corretor só transfere os que são dele hoje.
+  const podeTransferir = ehMaster || (perfil?.id && perfil.id === cliente.corretor_id)
 
   return (
     <div className="cliente-detail-page">
@@ -85,7 +88,7 @@ export default function ClienteDetailPage() {
           )}
           <div className="cliente-acoes-perigo">
             <button className="ls-btn ls-btn-accent" onClick={() => setMostrarWhatsApp(true)}>💬 WhatsApp</button>
-            {ehMaster && (
+            {podeTransferir && (
               <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarTransferir(true)}>🔁 Transferir</button>
             )}
             <button className="ls-btn ls-btn-ghost" onClick={handleMarcarInativo}>Marcar Inativo</button>
@@ -105,6 +108,8 @@ export default function ClienteDetailPage() {
         <TransferirClienteModal
           clienteId={cliente.id}
           corretorAtualId={cliente.corretor_id}
+          nomeCorretorAtual={corretores.find((c) => c.id === cliente.corretor_id)?.nome_completo}
+          usuarioId={perfil?.id}
           onFechar={() => setMostrarTransferir(false)}
           onTransferido={() => {
             setMostrarTransferir(false)
@@ -133,6 +138,7 @@ export default function ClienteDetailPage() {
           <div>
             <h4 style={{ marginTop: 0 }}>Linha do Tempo</h4>
             <CustomerTimelineWidget
+              clienteId={cliente.id}
               clienteCriadoEm={cliente.criado_em}
               cotacaoIds={cotacoes.map((c) => c.id)}
               casoIds={demandas.map((d) => d.id)}
@@ -1130,7 +1136,7 @@ function WhatsAppModal({ contatoPrimario, nomeEmpresa, vigencia, onFechar }) {
   )
 }
 
-function TransferirClienteModal({ clienteId, corretorAtualId, onFechar, onTransferido }) {
+function TransferirClienteModal({ clienteId, corretorAtualId, nomeCorretorAtual, usuarioId, onFechar, onTransferido }) {
   const [corretores, setCorretores] = useState([])
   const [corretorDestinoId, setCorretorDestinoId] = useState('')
   const [transferindo, setTransferindo] = useState(false)
@@ -1148,7 +1154,14 @@ function TransferirClienteModal({ clienteId, corretorAtualId, onFechar, onTransf
     setTransferindo(true)
     setErro(null)
     try {
-      await atualizarClienteProspect(clienteId, { corretor_id: corretorDestinoId })
+      const corretorDestino = corretores.find((c) => c.id === corretorDestinoId)
+      await transferirClienteIndividual({
+        clienteId,
+        corretorDestinoId,
+        usuarioId,
+        nomeCorretorOrigem: nomeCorretorAtual,
+        nomeCorretorDestino: corretorDestino?.nome_completo ?? 'corretor selecionado',
+      })
       onTransferido()
     } catch (err) {
       setErro(err.message)

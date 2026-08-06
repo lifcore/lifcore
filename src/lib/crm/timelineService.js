@@ -18,13 +18,16 @@ import { operacional } from '../supabaseSchemas'
  *   Contratos, não Apólices. Não há dado real pra mostrar aqui ainda.
  *   Ver RFC-001 (Condição Comercial) para o que muda isso no futuro.
  */
-export async function obterTimelineCliente({ clienteCriadoEm, cotacaoIds = [], casoIds = [] }) {
-  const [eventosComerciais, eventosClaims] = await Promise.all([
+export async function obterTimelineCliente({ clienteId, clienteCriadoEm, cotacaoIds = [], casoIds = [] }) {
+  const [eventosComerciais, eventosClaims, eventosCliente] = await Promise.all([
     cotacaoIds.length
       ? operacional.from('eventos_comerciais').select('*').eq('entidade_tipo', 'cotacao').in('entidade_id', cotacaoIds)
       : Promise.resolve({ data: [] }),
     casoIds.length
       ? operacional.from('eventos').select('*').in('caso_id', casoIds)
+      : Promise.resolve({ data: [] }),
+    clienteId
+      ? operacional.from('eventos_comerciais').select('*').eq('entidade_tipo', 'cliente').eq('entidade_id', clienteId)
       : Promise.resolve({ data: [] }),
   ])
 
@@ -42,6 +45,10 @@ export async function obterTimelineCliente({ clienteCriadoEm, cotacaoIds = [], c
     linha.push({ data: e.criado_em, titulo: e.tipo ?? 'Atualização de caso', descricao: e.descricao, origem: 'claims' })
   }
 
+  for (const e of eventosCliente.data ?? []) {
+    linha.push({ data: e.criado_em, titulo: rotularEventoComercial(e.tipo_evento), descricao: e.descricao, origem: 'cliente' })
+  }
+
   linha.sort((a, b) => new Date(a.data) - new Date(b.data))
   return linha
 }
@@ -52,6 +59,7 @@ function rotularEventoComercial(tipoEvento) {
     recusada: 'Cotação recusada',
     aprovada: 'Proposta aprovada',
     apolice_gerada: 'Apólice gerada',
+    transferencia_titularidade: 'Cliente transferido',
   }
   return rotulos[tipoEvento] ?? tipoEvento
 }
