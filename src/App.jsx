@@ -26,6 +26,7 @@ import PipelineLifplanPage from './features/lifplan/PipelineLifplanPage'
 import ClienteDetailLifplanPage from './features/lifplan/ClienteDetailLifplanPage'
 import PipelineLishieldPage from './features/lishield/PipelineLishieldPage'
 import ClienteDetailLishieldPage from './features/lishield/ClienteDetailLishieldPage'
+import ConnectInboxPage from './features/connect/ConnectInboxPage'
 import './components/sideiconmenu.css'
 import './styles/lcds-tokens.css'
 
@@ -69,6 +70,7 @@ function AppShell() {
             <Route path="/perfil" element={<PerfilPage />} />
             <Route path="/apolices" element={<ApolicesPage />} />
             <Route path="/governanca" element={<GovernancaFuncionalidadesPage />} />
+            <Route path="/connect" element={<ConnectInboxPage />} />
           </Routes>
         </main>
         <EspecialistaSwitcherCondicional />

@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import {
   Home, LayoutDashboard, User, MessageSquare, Wallet,
   FolderKanban, TrendingUp, BookOpen, ShieldCheck, Settings, LayoutGrid,
-  PanelLeft, Pin, PanelLeftClose,
+  PanelLeft, Pin, PanelLeftClose, Inbox,
 } from 'lucide-react'
 import { useAuth } from '../features/auth/AuthContext'
 import { useWorkspace } from '../features/shared/workspaceContextService'
@@ -29,6 +29,7 @@ const ITENS_GLOBAIS = [
   { path: '/financeiro', Icone: Wallet, titulo: 'Financeiro', somenteMasterAdmin: true },
   { path: '/claims', Icone: FolderKanban, titulo: 'Claims Center' },
   { path: '/growth', Icone: TrendingUp, titulo: 'Growth Center' },
+  { path: '/connect', Icone: Inbox, titulo: 'Connect Center', somenteMasterAdmin: true },
   { path: '/knowledge', Icone: BookOpen, titulo: 'Knowledge Center', somenteMasterAdmin: true },
   { path: '/auditoria', Icone: ShieldCheck, titulo: 'Auditoria', somenteMasterAdmin: true },
   { path: '/governanca', Icone: LayoutGrid, titulo: 'Governança de Funcionalidades', somenteMasterAdmin: true },

@@ -1,0 +1,80 @@
+/* ============================================================
+   Connect Inbox (CONNECT-004B) — estilos exclusivos desta tela.
+   Tudo que já existe em lcds-tokens.css (ls-card, cliente-tabela,
+   lcds-badge-*, ls-mono, kpi-grid) é reaproveitado direto no JSX,
+   sem redefinir aqui.
+   ============================================================ */
+
+[data-theme="lcds"] .connect-nota-rodape {
+  margin-top: 1rem;
+  font-size: 12px;
+  color: var(--lcds-text-muted);
+}
+
+[data-theme="lcds"] .connect-payload-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 14, 16, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+
+[data-theme="lcds"] .connect-payload-modal {
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border-strong);
+  border-radius: var(--lcds-radius);
+  max-width: 640px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+[data-theme="lcds"] .connect-payload-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  gap: 1rem;
+}
+
+[data-theme="lcds"] .connect-payload-status {
+  margin-left: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+[data-theme="lcds"] .connect-payload-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 13px;
+}
+
+[data-theme="lcds"] .connect-payload-meta dt {
+  color: var(--lcds-text-muted);
+}
+
+[data-theme="lcds"] .connect-payload-meta dd {
+  color: var(--lcds-text-primary);
+  margin: 0;
+}
+
+[data-theme="lcds"] .connect-payload-json {
+  background: var(--lcds-chrome);
+  border: 1px solid var(--lcds-border);
+  border-radius: var(--lcds-radius-sm);
+  padding: 1rem;
+  font-family: var(--lcds-font-mono);
+  font-size: 12px;
+  color: var(--lcds-text-secondary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+}
