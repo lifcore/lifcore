@@ -16,6 +16,7 @@ import {
 import { listarApolicesLishieldDoCliente, excluirApoliceLishield } from '../../lib/crm/lishieldService'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
+import { normalizarPosicoes } from '../../lib/crm/posicaoComercialService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 import { DadosCadastraisTab } from '../crm/ClienteDetailPage'
 import CotacaoLishieldForm from './CotacaoLishieldForm'
@@ -23,8 +24,12 @@ import ApoliceLishieldForm from './ApoliceLishieldForm'
 import EspecialistaLishield from '../especialista/EspecialistaLishield'
 import { useAuth } from '../auth/AuthContext'
 import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
+import CustomerSummaryWidget from '../../components/customer360/CustomerSummaryWidget'
+import OperationalHealthWidget from '../../components/customer360/OperationalHealthWidget'
+import CustomerTimelineWidget from '../../components/customer360/CustomerTimelineWidget'
+import RelationshipPanelWidget from '../../components/customer360/RelationshipPanelWidget'
 
-const ABAS = ['Dados Cadastrais', 'Cotações', 'Apólices', 'Demandas']
+const ABAS = ['Visão 360°', 'Dados Cadastrais', 'Cotações', 'Apólices', 'Demandas']
 
 export default function ClienteDetailLishieldPage() {
   const { id } = useParams()
@@ -33,12 +38,14 @@ export default function ClienteDetailLishieldPage() {
   const ehMaster = perfil?.papel === 'master'
   const [dados, setDados] = useState(null)
   const [apolices, setApolices] = useState([])
+  const [corretores, setCorretoresPagina] = useState([])
   const [abaAtiva, setAbaAtiva] = useState('Demandas')
   const [mostrarWhatsApp, setMostrarWhatsApp] = useState(false)
   const [mostrarTransferir, setMostrarTransferir] = useState(false)
 
   useEffect(() => {
     carregar()
+    listarCorretores().then(setCorretoresPagina)
   }, [id])
 
   async function carregar() {
@@ -63,6 +70,7 @@ export default function ClienteDetailLishieldPage() {
   if (!dados) return <p className="cliente-carregando">Carregando...</p>
 
   const { cliente, contatos, cotacoes, demandas, grupoInfo } = dados
+  const posicoes = normalizarPosicoes(apolices, 'apolices', 'lishield')
   const contatoPrimario = contatos.find((c) => c.tipo === 'primario') ?? {}
   const contatoSecundario = contatos.find((c) => c.tipo === 'secundario') ?? {}
 
@@ -111,6 +119,9 @@ export default function ClienteDetailLishieldPage() {
         />
       )}
 
+      <CustomerSummaryWidget cliente={cliente} posicoes={posicoes} cotacoes={cotacoes} />
+      <OperationalHealthWidget cliente={cliente} cotacoes={cotacoes} demandas={demandas} />
+
       <div className="cliente-abas">
         {ABAS.map((aba) => (
           <button
@@ -124,6 +135,26 @@ export default function ClienteDetailLishieldPage() {
       </div>
 
       <div className="cliente-aba-conteudo">
+        {abaAtiva === 'Visão 360°' && (
+          <div>
+            <h4 style={{ marginTop: 0 }}>Linha do Tempo</h4>
+            <CustomerTimelineWidget
+              clienteId={cliente.id}
+              clienteCriadoEm={cliente.criado_em}
+              cotacaoIds={cotacoes.map((c) => c.id)}
+              casoIds={demandas.map((d) => d.id)}
+            />
+            <h4>Relacionamento</h4>
+            <RelationshipPanelWidget
+              cliente={cliente}
+              corretorNome={corretores.find((c) => c.id === cliente.corretor_id)?.nome_completo}
+              posicoes={posicoes}
+              cotacoes={cotacoes}
+              demandas={demandas}
+            />
+          </div>
+        )}
+
         {abaAtiva === 'Dados Cadastrais' && (
           <DadosCadastraisTab
             cliente={cliente}

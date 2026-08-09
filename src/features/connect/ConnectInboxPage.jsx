@@ -8,6 +8,7 @@ import {
   listarEventosConnect,
   listarFilaOperacional,
   obterKpisConnect,
+  obterPainelSaude,
 } from '../../lib/connect/connectService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 
@@ -69,10 +70,17 @@ export default function ConnectInboxPage() {
         >
           Log de Eventos
         </button>
+        <button
+          className={`cliente-aba ${abaAtiva === 'saude' ? 'cliente-aba-ativa' : ''}`}
+          onClick={() => setAbaAtiva('saude')}
+        >
+          Health Dashboard
+        </button>
       </div>
 
       {abaAtiva === 'fila' && <FilaOperacionalTab />}
       {abaAtiva === 'eventos' && <LogEventosTab />}
+      {abaAtiva === 'saude' && <HealthDashboardTab />}
     </div>
   )
 }
@@ -272,6 +280,105 @@ function LogEventosTab() {
       {selecionado && (
         <PayloadViewer evento={selecionado} onFechar={() => setSelecionado(null)} />
       )}
+    </div>
+  )
+}
+
+const SAUDE_LABEL = {
+  ok: { label: 'OK', classe: 'lcds-badge-sucesso' },
+  indisponivel: { label: 'Indisponível', classe: 'lcds-badge-critico' },
+  nao_verificado: { label: 'Não verificado', classe: 'ls-badge' },
+}
+
+const CIRCUITO_LABEL = {
+  closed: { label: 'Fechado', classe: 'lcds-badge-sucesso' },
+  half_open: { label: 'Meio-aberto (testando)', classe: 'lcds-badge-alerta' },
+  open: { label: 'Aberto (bloqueado)', classe: 'lcds-badge-critico' },
+}
+
+const VALIDACAO_LABEL = {
+  validado: { label: 'Validado', classe: 'lcds-badge-sucesso' },
+  revisao_necessaria: { label: '⚠️ Revisão Necessária', classe: 'lcds-badge-critico' },
+  nunca_validado: { label: 'Nunca validado', classe: 'ls-badge' },
+}
+
+function HealthDashboardTab() {
+  const [drivers, setDrivers] = useState([])
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState(null)
+
+  useEffect(() => {
+    carregar()
+  }, [])
+
+  async function carregar() {
+    setCarregando(true)
+    setErro(null)
+    try {
+      const dados = await obterPainelSaude()
+      setDrivers(dados)
+    } catch (e) {
+      setErro('Não foi possível carregar o painel de saúde dos Drivers.')
+    }
+    setCarregando(false)
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: '1rem' }}>
+        <button className="ls-btn ls-btn-ghost" onClick={carregar}>Atualizar</button>
+      </div>
+
+      {carregando ? (
+        <p className="cliente-carregando">Carregando painel de saúde...</p>
+      ) : erro ? (
+        <p className="cliente-vazio">{erro}</p>
+      ) : drivers.length === 0 ? (
+        <p className="cliente-vazio">Nenhum Driver registrado.</p>
+      ) : (
+        <table className="cliente-tabela">
+          <thead>
+            <tr>
+              <th>Driver</th>
+              <th>Provider / Capability</th>
+              <th>Ambiente</th>
+              <th>Saúde</th>
+              <th>Circuito</th>
+              <th>Contrato</th>
+              <th>Chamadas</th>
+              <th>Sucesso / Erro</th>
+              <th>Tempo médio</th>
+              <th>Último erro</th>
+            </tr>
+          </thead>
+          <tbody>
+            {drivers.map((d) => {
+              const saude = SAUDE_LABEL[d.saude] ?? { label: d.saude, classe: 'ls-badge' }
+              const circuito = CIRCUITO_LABEL[d.estadoCircuito] ?? { label: d.estadoCircuito, classe: 'ls-badge' }
+              const validacao = VALIDACAO_LABEL[d.validacaoContrato?.status] ?? { label: '—', classe: 'ls-badge' }
+              return (
+                <tr key={d.nome}>
+                  <td>{d.nome}</td>
+                  <td>{d.provider} / {d.capability}</td>
+                  <td>{d.ambiente}</td>
+                  <td><span className={saude.classe}>{saude.label}</span></td>
+                  <td><span className={circuito.classe}>{circuito.label}</span></td>
+                  <td><span className={validacao.classe}>{validacao.label}</span></td>
+                  <td>{d.metricas?.chamadas ?? 0}</td>
+                  <td>{d.metricas?.sucessos ?? 0} / {d.metricas?.erros ?? 0}</td>
+                  <td>{d.metricas?.tempoMedioMs != null ? `${d.metricas.tempoMedioMs}ms` : '—'}</td>
+                  <td>{d.metricas?.ultimoErroMensagem ?? '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+
+      <p className="connect-nota-rodape">
+        Métricas e estado do Circuit Breaker vivem em memória da Edge Function — resetam em cold start
+        e não são compartilhados entre instâncias simultâneas (limitação conhecida do ambiente serverless).
+      </p>
     </div>
   )
 }

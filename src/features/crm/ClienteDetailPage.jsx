@@ -22,6 +22,7 @@ import ContratoForm from './ContratoForm'
 import EspecialistaSaude from '../especialista/EspecialistaSaude'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
+import { normalizarPosicoes } from '../../lib/crm/posicaoComercialService'
 import { useAuth } from '../auth/AuthContext'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
@@ -66,6 +67,7 @@ export default function ClienteDetailPage() {
   if (!dados) return <p className="cliente-carregando">Carregando...</p>
 
   const { cliente, contatos, contratos, cotacoes, demandas, grupoInfo } = dados
+  const posicoes = normalizarPosicoes(contratos, 'contratos', 'saude')
   const contatoPrimario = contatos.find((c) => c.tipo === 'primario') ?? {}
   const contatoSecundario = contatos.find((c) => c.tipo === 'secundario') ?? {}
   // Master transfere qualquer cliente; o corretor só transfere os que são dele hoje.
@@ -118,7 +120,7 @@ export default function ClienteDetailPage() {
         />
       )}
 
-      <CustomerSummaryWidget cliente={cliente} contratos={contratos} cotacoes={cotacoes} />
+      <CustomerSummaryWidget cliente={cliente} posicoes={posicoes} cotacoes={cotacoes} />
       <OperationalHealthWidget cliente={cliente} cotacoes={cotacoes} demandas={demandas} />
 
       <div className="cliente-abas">
@@ -147,7 +149,7 @@ export default function ClienteDetailPage() {
             <RelationshipPanelWidget
               cliente={cliente}
               corretorNome={corretores.find((c) => c.id === cliente.corretor_id)?.nome_completo}
-              contratos={contratos}
+              posicoes={posicoes}
               cotacoes={cotacoes}
               demandas={demandas}
             />

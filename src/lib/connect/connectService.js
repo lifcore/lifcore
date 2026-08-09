@@ -89,3 +89,16 @@ export async function obterKpisConnect({ dataInicio, dataFim } = {}) {
     semResponsavel: semResponsavel.count ?? 0,
   }
 }
+
+/**
+ * Painel de saúde dos Drivers (CONNECT-004F, Health Dashboard).
+ * Diferente das outras funções deste arquivo, não é uma query direta
+ * no Supabase — chama a Edge Function `connect-health`, que expõe
+ * `obterPainelOperacional()` (Registry + Métricas + Circuit Breaker +
+ * Contract Validation, tudo em memória do lado do Gateway).
+ */
+export async function obterPainelSaude() {
+  const { data, error } = await supabase.functions.invoke('connect-health', { method: 'GET' })
+  if (error) throw error
+  return data?.drivers ?? []
+}

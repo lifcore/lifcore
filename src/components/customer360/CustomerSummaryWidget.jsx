@@ -2,24 +2,24 @@ import './customer360.css'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 
 /**
- * Customer Summary Widget (Sprint 008, Bloco B). Widget independente
- * e reutilizável — não busca dado próprio, recebe o que a ficha do
- * cliente já carregou (zero query nova).
+ * Customer Summary Widget (Sprint 008, Bloco B — adaptado na Sprint
+ * "Fechamento Customer 360" pra consumir a Posição Comercial
+ * normalizada em vez de `contratos` cru, permitindo reuso idêntico
+ * em Lifleet/Lifsure/LiShield). Widget independente e reutilizável —
+ * não busca dado próprio, recebe o que a ficha do cliente já carregou
+ * (zero query nova).
  *
  * "Último contato" usa `cliente.atualizado_em` como aproximação —
  * é a última vez que o cadastro mudou, não necessariamente um contato
  * humano real. Rotulado com honestidade, não fingindo precisão que
  * não existe.
  */
-export default function CustomerSummaryWidget({ cliente, contratos = [], cotacoes = [] }) {
-  const produtosAtivos = contratos.filter((c) => c.status === 'ativo').length
+export default function CustomerSummaryWidget({ cliente, posicoes = [], cotacoes = [] }) {
+  const produtosAtivos = posicoes.filter((p) => p.ativo).length
 
-  const receitaEstimada = contratos
-    .filter((c) => c.status === 'ativo')
-    .reduce((soma, c) => {
-      const totalContrato = (c.itens_contrato ?? []).reduce((s, i) => s + (i.quantidade_vidas ?? 0) * Number(i.valor ?? 0), 0)
-      return soma + totalContrato
-    }, 0)
+  const receitaEstimada = posicoes
+    .filter((p) => p.ativo)
+    .reduce((soma, p) => soma + (p.valor ?? 0), 0)
 
   const pendencias = cotacoes.filter((c) => ['em_analise', 'proposta_emitida'].includes(c.status ?? 'em_analise')).length
 
