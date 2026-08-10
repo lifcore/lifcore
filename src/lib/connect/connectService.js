@@ -102,3 +102,22 @@ export async function obterPainelSaude() {
   if (error) throw error
   return data?.drivers ?? []
 }
+
+/**
+ * Atribui um corretor responsável a um lead da fila operacional.
+ * Grava direto em `clientes_prospects.corretor_id` — a `vw_connect_inbox`
+ * já filtra por `corretor_id is null`, então assim que isso é
+ * preenchido, o registro some da fila sozinho na próxima leitura, sem
+ * precisar de nenhuma lógica extra aqui.
+ *
+ * Só se aplica a `tipo_origem = 'lead'` — candidatos de recrutamento
+ * (`tipo_origem = 'curriculo'`) não têm `corretor_id`, são People, não
+ * CRM comercial. Quem chama essa função já deve ter filtrado por isso.
+ */
+export async function atribuirResponsavel(clienteProspectId, corretorId) {
+  const { error } = await db()
+    .from('clientes_prospects')
+    .update({ corretor_id: corretorId })
+    .eq('id', clienteProspectId)
+  if (error) throw error
+}

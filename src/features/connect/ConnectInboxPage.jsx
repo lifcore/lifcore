@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import '../../styles/centers.css'
 import '../../styles/lcds-tokens.css'
 import './connect-inbox.css'
@@ -10,9 +10,11 @@ import {
   listarFilaOperacional,
   obterKpisConnect,
   obterPainelSaude,
+  atribuirResponsavel,
 } from '../../lib/connect/connectService'
 import { listarTodasConexoes, criarConexaoOperadora, obterOrganizacaoPadrao } from '../../lib/crm/conexoesService'
 import { listarProviders } from '../../lib/connect/providerRegistryService'
+import { listarCorretores } from '../../lib/crm/apolicesService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 
 const STATUS_LOG = {
@@ -96,15 +98,32 @@ export default function ConnectInboxPage() {
   )
 }
 
+/**
+ * Rota de detalhe do cliente por módulo — mesmo padrão já usado no
+ * App.jsx. Só cobre `tipo_origem = 'lead'`: candidatos de recrutamento
+ * (`tipo_origem = 'curriculo'`) não têm ficha de cliente, são People,
+ * não CRM comercial — não navega pra lugar nenhum, propositalmente.
+ */
+const ROTA_CLIENTE_POR_MODULO = {
+  saude: (id) => `/clientes/${id}`,
+  auto: (id) => `/lifleet/clientes/${id}`,
+  lifsure: (id) => `/lifsure/clientes/${id}`,
+  lishield: (id) => `/lishield/clientes/${id}`,
+  lifplan: (id) => `/lifplan/clientes/${id}`,
+}
+
 function FilaOperacionalTab() {
   const [itens, setItens] = useState([])
+  const [corretores, setCorretores] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
   const [origem, setOrigem] = useState('')
   const [produto, setProduto] = useState('')
+  const [atribuindoId, setAtribuindoId] = useState(null)
 
   useEffect(() => {
     carregar()
+    listarCorretores().then(setCorretores)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [origem, produto])
 
@@ -122,6 +141,20 @@ function FilaOperacionalTab() {
   function aoSubmeterBusca(e) {
     e.preventDefault()
     carregar()
+  }
+
+  async function handleAtribuir(item, corretorId) {
+    if (!corretorId) return
+    setAtribuindoId(item.id)
+    try {
+      await atribuirResponsavel(item.id, corretorId)
+      // A vw_connect_inbox já filtra por corretor_id is null — assim
+      // que atribui, o registro some da fila sozinho no próximo carregar().
+      await carregar()
+    } catch (err) {
+      console.error('[FilaOperacionalTab] Erro ao atribuir responsável:', err)
+    }
+    setAtribuindoId(null)
   }
 
   const origensDisponiveis = [...new Set(itens.map((i) => i.origem_lead).filter(Boolean))]
@@ -178,27 +211,52 @@ function FilaOperacionalTab() {
               <th>Produto/Área de Interesse</th>
               <th>Origem</th>
               <th>Recebido em</th>
+              <th>Atribuir Responsável</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {itens.map((item) => (
-              <tr key={`${item.tipo_origem}-${item.id}`}>
-                <td>{item.nome}</td>
-                <td><span className="ls-badge">{ORIGEM_TIPO[item.tipo_origem] ?? item.tipo_origem}</span></td>
-                <td>{item.modulo ?? '—'}</td>
-                <td>{item.produto_interesse ?? '—'}</td>
-                <td>{item.origem_lead ?? '—'}</td>
-                <td>{formatarDataBR(item.criado_em)}</td>
-              </tr>
-            ))}
+            {itens.map((item) => {
+              const rotaCliente = item.tipo_origem === 'lead' && item.modulo ? ROTA_CLIENTE_POR_MODULO[item.modulo] : null
+              return (
+                <tr key={`${item.tipo_origem}-${item.id}`}>
+                  <td>{item.nome}</td>
+                  <td><span className="ls-badge">{ORIGEM_TIPO[item.tipo_origem] ?? item.tipo_origem}</span></td>
+                  <td>{item.modulo ?? '—'}</td>
+                  <td>{item.produto_interesse ?? '—'}</td>
+                  <td>{item.origem_lead ?? '—'}</td>
+                  <td>{formatarDataBR(item.criado_em)}</td>
+                  <td>
+                    {item.tipo_origem === 'lead' ? (
+                      <select
+                        defaultValue=""
+                        disabled={atribuindoId === item.id}
+                        onChange={(e) => handleAtribuir(item, e.target.value)}
+                      >
+                        <option value="" disabled>
+                          {atribuindoId === item.id ? 'Atribuindo...' : 'Selecionar corretor'}
+                        </option>
+                        {corretores.map((c) => (
+                          <option key={c.id} value={c.id}>{c.nome_completo}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span title="Candidatos de recrutamento não têm corretor responsável — é fluxo de People, não CRM comercial.">—</span>
+                    )}
+                  </td>
+                  <td>
+                    {rotaCliente ? (
+                      <Link to={rotaCliente(item.id)} className="cliente-tabela-btn">Ver Cliente</Link>
+                    ) : (
+                      <span title="Sem ficha de cliente pra este tipo de entrada">—</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}
-
-      <p className="connect-nota-rodape">
-        Atribuição de responsável e navegação para o registro completo ainda não estão nesta tela —
-        pendência registrada para uma próxima sprint (rota final por tipo de origem ainda não definida).
-      </p>
     </div>
   )
 }
