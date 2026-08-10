@@ -12,6 +12,29 @@ export async function listarConexoesOperadoras(modulo) {
 }
 
 /**
+ * Lista TODAS as conexões (qualquer módulo, incluindo as
+ * organizacionais com `modulo = NULL` — BMR-002), pra tela única de
+ * Conexões do Connect Center (CONNECT-004C). Não faz JOIN com
+ * `providers` aqui — essa tabela vive no schema `institucional`,
+ * `conexoes_operadoras` vive no `operacional`; cruzar entre schemas
+ * diferentes num único `.select()` do Supabase não é garantido, então
+ * quem chama isso combina com `providerRegistryService.listarProviders()`
+ * no lado do componente, não aqui.
+ */
+export async function listarTodasConexoes({ direcao } = {}) {
+  let query = operacional
+    .from('conexoes_operadoras')
+    .select('*')
+    .order('criado_em', { ascending: false })
+
+  if (direcao) query = query.eq('direcao', direcao)
+
+  const { data, error } = await query
+  if (error) throw new Error(`Erro ao listar conexões: ${error.message}`)
+  return data ?? []
+}
+
+/**
  * Cria uma nova conexão com operadora.
  *
  * `providerId` é OBRIGATÓRIO desde o BMR-003 — mesmo a coluna

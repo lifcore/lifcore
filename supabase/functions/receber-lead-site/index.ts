@@ -15,12 +15,23 @@
 // - Auditoria com Correlation ID (Princípio 003): toda entrada grava
 //   em operacional.connect_log, do recebimento até o resultado final.
 //
+// CONNECT-004C (decisão do Chief, 08/08) — Lead Input Standard:
+// Site/LP continua com endpoint próprio de primeira parte (esta
+// function), sem passar pelo Inbound Gateway (não há payload de
+// terceiro pra adaptar/verificar aqui). Mas todo processamento após
+// o recebimento agora opera sobre o mesmo contrato `LeadInputStandard`
+// usado pelos futuros Adapters de Lead Ads nativo (Meta/Google/etc,
+// em _shared/connect/inbound/contract/leadInputStandard.ts) — assim,
+// quando esses Adapters forem ativados, a lógica de negócio já está
+// no formato certo, sem duplicar nada.
+//
 // Segurança (mantida desta revisão pra trás):
 // - CORS dinâmico por origem, lido da Configuration Registry.
 // - Honeypot: campo oculto que só bot preenche.
 // - Guarda simples contra duplicidade (mesmo e-mail em 24h).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import type { LeadInputStandard, UtmParams } from '../_shared/connect/inbound/contract/leadInputStandard.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
@@ -51,8 +62,8 @@ function mapearProdutoParaModulo(produto: string | undefined): string {
  * nenhum dos dois tamanhos, não classifica nada — nunca inventa
  * tipo_pessoa a partir de um documento que não reconhece.
  */
-function classificarDocumento(documento: string | undefined): { tipoPessoa: string | null; cpf: string | null; cnpj: string | null } {
-  const digitos = (documento ?? '').replace(/\D/g, '')
+function classificarDocumento(documento: unknown): { tipoPessoa: string | null; cpf: string | null; cnpj: string | null } {
+  const digitos = (typeof documento === 'string' ? documento : '').replace(/\D/g, '')
   if (digitos.length === 11) return { tipoPessoa: 'fisica', cpf: digitos, cnpj: null }
   if (digitos.length === 14) return { tipoPessoa: 'juridica', cpf: null, cnpj: digitos }
   return { tipoPessoa: null, cpf: null, cnpj: null }
@@ -64,6 +75,68 @@ function validarEmail(email: string): boolean {
 
 function validarTelefone(telefone: string): boolean {
   return (telefone ?? '').replace(/\D/g, '').length >= 10
+}
+
+/**
+ * O `LeadModal`/`tracking.ts` do site produzem UTM no formato de URL
+ * (`utm_source`, `utm_medium`, ...) — o Lead Input Standard usa
+ * `source`/`medium`/... (sem prefixo, mesmo formato que os futuros
+ * Adapters de Meta/Google vão popular). Sem essa conversão, o UTM se
+ * perderia silenciosamente na refatoração — achado ao migrar, não
+ * fazia parte do formato antigo.
+ */
+function normalizarUtm(bruto: unknown): UtmParams | undefined {
+  if (!bruto || typeof bruto !== 'object') return undefined
+  const u = bruto as Record<string, unknown>
+  const resultado: UtmParams = {
+    source: typeof u.utm_source === 'string' ? u.utm_source : undefined,
+    medium: typeof u.utm_medium === 'string' ? u.utm_medium : undefined,
+    campaign: typeof u.utm_campaign === 'string' ? u.utm_campaign : undefined,
+    content: typeof u.utm_content === 'string' ? u.utm_content : undefined,
+    term: typeof u.utm_term === 'string' ? u.utm_term : undefined,
+  }
+  const temAlgum = Object.values(resultado).some((v) => v !== undefined)
+  return temAlgum ? resultado : undefined
+}
+
+/**
+ * Constrói o Lead Input Standard a partir do payload cru do site.
+ * Mapeamento de campos (decisão de Claude, sinalizada — não estava
+ * explícita na diretriz do Chief):
+ *
+ * - `origem` = 'site' (constante). No contrato, `origem` identifica o
+ *   canal/provider (ex: 'meta_ads', 'google_ads') — pro site, o
+ *   "provider" somos nós mesmos, sempre o mesmo valor.
+ * - `fonte` = o que o payload do site já chamava de `origem`
+ *   ('lp-saude-odonto', 'header', 'home-hero', etc) — é o ponto
+ *   específico de captação dentro do site, mesmo papel que 'lead_ads'
+ *   tem pros Adapters de Meta.
+ * - `externalEventId` sempre null — lead de primeira parte não tem
+ *   identificador de evento de plataforma externa nenhuma.
+ * - Campos específicos do domínio de negócio da LifitSeg (produto,
+ *   empresa, número de colaboradores, documento) não têm campo comum
+ *   no contrato — vão em `dadosExternos`, exatamente como o contrato
+ *   prevê pra dado que não é universal a todo provedor.
+ */
+function construirLeadInputStandardDoSite(payload: Record<string, unknown>): LeadInputStandard {
+  const origemPagina = typeof payload.origem === 'string' ? payload.origem : 'site'
+
+  return {
+    origem: 'site',
+    fonte: origemPagina,
+    externalEventId: null,
+    nome: typeof payload.nome === 'string' ? payload.nome : undefined,
+    email: typeof payload.email === 'string' ? payload.email : undefined,
+    telefone: typeof payload.telefone === 'string' ? payload.telefone : undefined,
+    utm: normalizarUtm(payload.utm),
+    dadosExternos: {
+      empresa: typeof payload.empresa === 'string' ? payload.empresa : undefined,
+      produto: typeof payload.produto === 'string' ? payload.produto : undefined,
+      numeroColaboradores: typeof payload.numeroColaboradores === 'number' ? payload.numeroColaboradores : undefined,
+      observacoes: typeof payload.observacoes === 'string' ? payload.observacoes : undefined,
+      documento: typeof payload.documento === 'string' ? payload.documento : undefined,
+    },
+  }
 }
 
 // Cache em memória do isolate — evita bater na Configuration Registry
@@ -162,37 +235,38 @@ Deno.serve(async (req) => {
     return respostaJson({ message: 'Corpo da requisição inválido.' }, 400, headers)
   }
 
-  // Honeypot — nunca vira log, nunca vira registro.
+  // Honeypot — nunca vira log, nunca vira registro. Roda sobre o
+  // payload cru, antes de qualquer conceito de "lead" existir ainda.
   if (typeof payload.website === 'string' && payload.website.trim() !== '') {
     return respostaJson({ success: true, message: 'Lead capturado com sucesso.', leadId: null }, 200, headers)
   }
 
-  const { nome, email, telefone, empresa, produto, origem, utm, numeroColaboradores, observacoes, documento } = payload as {
-    nome?: string
-    email?: string
-    telefone?: string
-    empresa?: string
-    produto?: string
-    origem?: string
-    utm?: Record<string, unknown>
-    numeroColaboradores?: number
-    observacoes?: string
-    documento?: string
-  }
+  // A partir daqui, todo processamento opera sobre o Lead Input
+  // Standard — não mais sobre o payload cru diretamente.
+  const lead = construirLeadInputStandardDoSite(payload)
 
-  if (!nome || !email || !telefone) {
+  if (!lead.nome || !lead.email || !lead.telefone) {
     return respostaJson({ message: 'Campos obrigatórios ausentes: Nome, E-mail e Telefone são fundamentais.' }, 400, headers)
   }
-  if (!validarEmail(email)) {
+  if (!validarEmail(lead.email)) {
     return respostaJson({ message: 'E-mail em formato inválido.' }, 400, headers)
   }
-  if (!validarTelefone(telefone)) {
+  if (!validarTelefone(lead.telefone)) {
     return respostaJson({ message: 'Telefone em formato inválido.' }, 400, headers)
   }
 
   // Abre o log ANTES de qualquer escrita de negócio — Princípio 003:
   // toda entrada é rastreável desde o momento em que chega.
-  const log = await abrirLogEntrada('website-lead-modal', 'lead', origem ?? null, payload)
+  // `origem` do connect_log grava `lead.fonte` (o ponto específico de
+  // captação, ex: 'lp-saude-odonto') — preserva a mesma granularidade
+  // que o campo já tinha antes da refatoração.
+  const log = await abrirLogEntrada('website-lead-modal', 'lead', lead.fonte, payload)
+
+  const produto = lead.dadosExternos.produto as string | undefined
+  const empresa = lead.dadosExternos.empresa as string | undefined
+  const numeroColaboradores = lead.dadosExternos.numeroColaboradores as number | undefined
+  const observacoes = lead.dadosExternos.observacoes as string | undefined
+  const documento = lead.dadosExternos.documento
 
   const modulo = mapearProdutoParaModulo(produto)
   const { tipoPessoa, cpf, cnpj } = classificarDocumento(documento)
@@ -208,7 +282,7 @@ Deno.serve(async (req) => {
     .schema('operacional')
     .from('contatos')
     .select('cliente_prospect_id, criado_em')
-    .eq('email', email)
+    .eq('email', lead.email)
     .gte('criado_em', desde)
     .limit(1)
     .maybeSingle()
@@ -227,12 +301,12 @@ Deno.serve(async (req) => {
     .from('clientes_prospects')
     .insert({
       organizacao_id: config.organizacaoPadraoId,
-      razao_social: empresa || nome,
+      razao_social: empresa || lead.nome,
       status: 'prospect',
       modulo,
       corretor_id: null, // sem responsável ainda — fica no Connect Inbox (vw_connect_inbox)
-      origem_lead: origem || null,
-      utm_lead: utm || null,
+      origem_lead: lead.fonte || null,
+      utm_lead: lead.utm ?? null, // agora no formato normalizado (source/medium/campaign), não mais utm_source/utm_medium cru
       produto_interesse: produto || null, // CONNECT-003 Cap.01 — campo estruturado, não mais só texto livre
       numero_colaboradores: numeroColaboradores ?? null,
       tipo_pessoa: tipoPessoa,
@@ -255,9 +329,9 @@ Deno.serve(async (req) => {
     .insert({
       cliente_prospect_id: cliente.id,
       tipo: 'primario',
-      nome,
-      telefone,
-      email,
+      nome: lead.nome,
+      telefone: lead.telefone,
+      email: lead.email,
     })
 
   if (erroContato) {

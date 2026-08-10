@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import '../../styles/centers.css'
 import '../../styles/lcds-tokens.css'
 import './connect-inbox.css'
@@ -10,7 +11,10 @@ import {
   obterKpisConnect,
   obterPainelSaude,
 } from '../../lib/connect/connectService'
+import { listarTodasConexoes, criarConexaoOperadora } from '../../lib/crm/conexoesService'
+import { listarProviders } from '../../lib/connect/providerRegistryService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
+import { useAuth } from '../auth/AuthContext'
 
 const STATUS_LOG = {
   recebido: { label: 'Aguardando', classe: 'lcds-badge-alerta' },
@@ -24,7 +28,9 @@ const ORIGEM_TIPO = {
 }
 
 export default function ConnectInboxPage() {
-  const [abaAtiva, setAbaAtiva] = useState('fila')
+  const [searchParams] = useSearchParams()
+  const abaValida = ['fila', 'eventos', 'saude', 'conexoes'].includes(searchParams.get('aba'))
+  const [abaAtiva, setAbaAtiva] = useState(abaValida ? searchParams.get('aba') : 'fila')
   const [kpis, setKpis] = useState(null)
 
   useEffect(() => {
@@ -76,12 +82,18 @@ export default function ConnectInboxPage() {
         >
           Health Dashboard
         </button>
+        <button
+          className={`cliente-aba ${abaAtiva === 'conexoes' ? 'cliente-aba-ativa' : ''}`}
+          onClick={() => setAbaAtiva('conexoes')}
+        >
+          Conexões
+        </button>
       </div>
 
       {abaAtiva === 'fila' && <FilaOperacionalTab />}
       {abaAtiva === 'eventos' && <LogEventosTab />}
       {abaAtiva === 'saude' && <HealthDashboardTab />}
-    </div>
+      {abaAtiva === 'conexoes' && <ConexoesTab />}    </div>
   )
 }
 
@@ -379,6 +391,251 @@ function HealthDashboardTab() {
         Métricas e estado do Circuit Breaker vivem em memória da Edge Function — resetam em cold start
         e não são compartilhados entre instâncias simultâneas (limitação conhecida do ambiente serverless).
       </p>
+    </div>
+  )
+}
+
+const DIRECAO_LABEL = {
+  entrada: { label: 'Entrada', classe: 'ls-badge' },
+  saida: { label: 'Saída', classe: 'ls-badge' },
+  bidirecional: { label: 'Bidirecional', classe: 'ls-badge' },
+}
+
+const ESTADO_ATIVACAO_LABEL = {
+  preparado: { label: 'Preparado', classe: 'ls-badge' },
+  aguardando_credenciais: { label: 'Aguardando Credenciais', classe: 'lcds-badge-alerta' },
+  configurado: { label: 'Configurado', classe: 'lcds-badge-alerta' },
+  testando: { label: 'Testando', classe: 'lcds-badge-alerta' },
+  conectado: { label: 'Conectado', classe: 'lcds-badge-sucesso' },
+}
+
+const MODULOS_CONEXAO = [
+  { valor: '', label: '(Organizacional — sem módulo)' },
+  { valor: 'saude', label: 'Lifcare' },
+  { valor: 'auto', label: 'Lifleet' },
+  { valor: 'lifsure', label: 'Lifsure' },
+  { valor: 'lishield', label: 'LiShield' },
+  { valor: 'lifplan', label: 'Lifplan' },
+]
+
+/**
+ * Aba Conexões (CONNECT-004C) — área única do Connect Center pra
+ * gestão de Conexões, substituindo a tela que vivia em Configurações.
+ * Provider vem do Provider Registry (institucional.providers) — como
+ * as duas tabelas moram em schemas diferentes, o cruzamento entre
+ * conexão e nome do Provider acontece aqui, no componente, não numa
+ * query só (ver nota em conexoesService.listarTodasConexoes).
+ */
+function ConexoesTab() {
+  const { perfil } = useAuth()
+  const [conexoes, setConexoes] = useState([])
+  const [providers, setProviders] = useState([])
+  const [carregando, setCarregando] = useState(true)
+  const [filtroDirecao, setFiltroDirecao] = useState('')
+  const [mostrarFormulario, setMostrarFormulario] = useState(false)
+
+  useEffect(() => {
+    carregar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroDirecao])
+
+  async function carregar() {
+    setCarregando(true)
+    const [listaConexoes, listaProviders] = await Promise.all([
+      listarTodasConexoes({ direcao: filtroDirecao || undefined }),
+      listarProviders(),
+    ])
+    setConexoes(listaConexoes)
+    setProviders(listaProviders)
+    setCarregando(false)
+  }
+
+  const providersPorId = Object.fromEntries(providers.map((p) => [p.id, p]))
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div className="cotacao-form-linha" style={{ marginBottom: 0 }}>
+          <div>
+            <label>Direção</label>
+            <select value={filtroDirecao} onChange={(e) => setFiltroDirecao(e.target.value)}>
+              <option value="">Todas</option>
+              <option value="entrada">Entrada</option>
+              <option value="saida">Saída</option>
+              <option value="bidirecional">Bidirecional</option>
+            </select>
+          </div>
+        </div>
+        <button className="ls-btn ls-btn-primary" onClick={() => setMostrarFormulario(true)}>
+          + Nova Conexão
+        </button>
+      </div>
+
+      {carregando ? (
+        <p className="cliente-carregando">Carregando conexões...</p>
+      ) : conexoes.length === 0 ? (
+        <p className="cliente-vazio">Nenhuma conexão com esse filtro.</p>
+      ) : (
+        <table className="cliente-tabela">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>Módulo</th>
+              <th>Direção</th>
+              <th>Mecanismo</th>
+              <th>Estado</th>
+              <th>Ambiente</th>
+            </tr>
+          </thead>
+          <tbody>
+            {conexoes.map((c) => {
+              const provider = c.provider_id ? providersPorId[c.provider_id] : null
+              const direcao = DIRECAO_LABEL[c.direcao] ?? { label: c.direcao ?? '—', classe: 'ls-badge' }
+              const estado = ESTADO_ATIVACAO_LABEL[c.estado_ativacao] ?? { label: c.estado_ativacao ?? '—', classe: 'ls-badge' }
+              return (
+                <tr key={c.id}>
+                  <td>
+                    {provider ? provider.nome : (
+                      <span title="Registro anterior ao BMR-003, sem Provider correspondente no Registry">
+                        {c.nome_operadora} <span className="ls-badge">legado</span>
+                      </span>
+                    )}
+                  </td>
+                  <td>{c.modulo ?? <span title="Conexão organizacional, não vinculada a um módulo (BMR-002)">Organizacional</span>}</td>
+                  <td><span className={direcao.classe}>{direcao.label}</span></td>
+                  <td>{c.tipo_conexao ?? '—'}</td>
+                  <td><span className={estado.classe}>{estado.label}</span></td>
+                  <td>{c.ambiente ?? '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+
+      {mostrarFormulario && (
+        <NovaConexaoModal
+          providers={providers}
+          organizacaoId={perfil?.organizacao_id}
+          onFechar={() => setMostrarFormulario(false)}
+          onCriada={() => {
+            setMostrarFormulario(false)
+            carregar()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function NovaConexaoModal({ providers, organizacaoId, onFechar, onCriada }) {
+  const [providerId, setProviderId] = useState('')
+  const [modulo, setModulo] = useState('')
+  const [direcao, setDirecao] = useState('')
+  const [tipoConexao, setTipoConexao] = useState('manual')
+  const [ambiente, setAmbiente] = useState('homologacao')
+  const [nomeOperadora, setNomeOperadora] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setErro('')
+
+    if (!organizacaoId) {
+      setErro('Não foi possível identificar sua organização (perfil.organizacao_id ausente) — não é possível criar a conexão. Avise o time técnico.')
+      return
+    }
+    if (!providerId) {
+      setErro('Selecione um Provider — toda conexão nova precisa referenciar um Provider real do Registry.')
+      return
+    }
+    if (!direcao) {
+      setErro('Selecione a direção (entrada, saída ou bidirecional) — campo obrigatório desde o BMR-002.')
+      return
+    }
+
+    setSalvando(true)
+    try {
+      await criarConexaoOperadora({
+        organizacaoId,
+        providerId,
+        modulo: modulo || null,
+        direcao,
+        tipoConexao,
+        ambiente,
+        nomeOperadora: nomeOperadora || providers.find((p) => p.id === providerId)?.nome,
+      })
+      onCriada()
+    } catch (err) {
+      setErro(err.message)
+    }
+    setSalvando(false)
+  }
+
+  return (
+    <div className="connect-payload-overlay" onClick={onFechar}>
+      <div className="connect-payload-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="connect-payload-header">
+          <strong>Nova Conexão</strong>
+          <button className="ls-btn ls-btn-ghost" onClick={onFechar}>Fechar</button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label>Provider *</label>
+            <select value={providerId} onChange={(e) => setProviderId(e.target.value)} required>
+              <option value="">Selecione...</option>
+              {providers.map((p) => (
+                <option key={p.id} value={p.id}>{p.nome}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label>Módulo</label>
+            <select value={modulo} onChange={(e) => setModulo(e.target.value)}>
+              {MODULOS_CONEXAO.map((m) => (
+                <option key={m.valor} value={m.valor}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label>Direção *</label>
+            <select value={direcao} onChange={(e) => setDirecao(e.target.value)} required>
+              <option value="">Selecione...</option>
+              <option value="entrada">Entrada</option>
+              <option value="saida">Saída</option>
+              <option value="bidirecional">Bidirecional</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Mecanismo</label>
+            <select value={tipoConexao} onChange={(e) => setTipoConexao(e.target.value)}>
+              <option value="manual">Manual</option>
+              <option value="tabela">Tabela</option>
+              <option value="api">API</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Ambiente</label>
+            <select value={ambiente} onChange={(e) => setAmbiente(e.target.value)}>
+              <option value="desenvolvimento">Desenvolvimento</option>
+              <option value="homologacao">Homologação</option>
+              <option value="producao">Produção</option>
+            </select>
+          </div>
+
+          {erro && <p className="ls-modal-erro">{erro}</p>}
+
+          <button type="submit" className="ls-btn ls-btn-primary" disabled={salvando} style={{ width: '100%' }}>
+            {salvando ? 'Salvando...' : 'Criar Conexão'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }
