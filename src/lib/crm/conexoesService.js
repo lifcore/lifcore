@@ -11,19 +11,38 @@ export async function listarConexoesOperadoras(modulo) {
   return data ?? []
 }
 
-/** Cria uma nova conexão com operadora */
-export async function criarConexaoOperadora({ organizacaoId, modulo, nomeOperadora, tipoConexao, observacoes, codigoSucursal, ambiente, configuracoesExtras }) {
+/**
+ * Cria uma nova conexão com operadora.
+ *
+ * `providerId` é OBRIGATÓRIO desde o BMR-003 — mesmo a coluna
+ * `provider_id` sendo nullable no banco (só pra preservar o registro
+ * de teste antigo, que não tem Provider correspondente no Registry),
+ * a aplicação nunca deve criar uma conexão nova sem vínculo real. É
+ * validação de camada de aplicação, não de banco — decisão explícita
+ * do Chief, pra não travar a evolução do schema por causa de uma
+ * regra que pertence ao código.
+ */
+export async function criarConexaoOperadora({ organizacaoId, modulo, providerId, nomeOperadora, tipoConexao, direcao, observacoes, codigoSucursal, ambiente, configuracoesExtras }) {
+  if (!providerId) {
+    throw new Error('providerId é obrigatório — toda conexão nova precisa referenciar um Provider real do Provider Registry (BMR-003).')
+  }
+
   const { data, error } = await operacional
     .from('conexoes_operadoras')
     .insert({
       organizacao_id: organizacaoId,
-      modulo,
+      modulo: modulo || null, // BMR-002: NULL = conexão organizacional, não vinculada a módulo específico
+      provider_id: providerId,
       nome_operadora: nomeOperadora,
       tipo_conexao: tipoConexao,
+      direcao: direcao || null,
       observacoes: observacoes || null,
       codigo_sucursal: codigoSucursal || null,
       ambiente: ambiente || 'homologacao',
       configuracoes_extras: configuracoesExtras || null,
+      // estado_ativacao não é passado aqui de propósito — o banco já
+      // grava 'preparado' sozinho (DEFAULT do BMR-003). Forçar o
+      // valor aqui duplicaria uma regra que já vive no schema.
     })
     .select()
     .single()

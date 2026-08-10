@@ -43,6 +43,21 @@ function mapearProdutoParaModulo(produto: string | undefined): string {
   return 'saude'
 }
 
+/**
+ * Classifica um documento (CPF ou CNPJ) só pela quantidade de dígitos
+ * — 11 = CPF, 14 = CNPJ. Convenção de `tipo_pessoa` ('fisica'/
+ * 'juridica') alinhada com o que já existe em `lifleetService.js`
+ * (validarQuantidadeVeiculos). Se o campo vier vazio ou não bater com
+ * nenhum dos dois tamanhos, não classifica nada — nunca inventa
+ * tipo_pessoa a partir de um documento que não reconhece.
+ */
+function classificarDocumento(documento: string | undefined): { tipoPessoa: string | null; cpf: string | null; cnpj: string | null } {
+  const digitos = (documento ?? '').replace(/\D/g, '')
+  if (digitos.length === 11) return { tipoPessoa: 'fisica', cpf: digitos, cnpj: null }
+  if (digitos.length === 14) return { tipoPessoa: 'juridica', cpf: null, cnpj: digitos }
+  return { tipoPessoa: null, cpf: null, cnpj: null }
+}
+
 function validarEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
@@ -152,7 +167,7 @@ Deno.serve(async (req) => {
     return respostaJson({ success: true, message: 'Lead capturado com sucesso.', leadId: null }, 200, headers)
   }
 
-  const { nome, email, telefone, empresa, produto, origem, utm, numeroColaboradores, observacoes } = payload as {
+  const { nome, email, telefone, empresa, produto, origem, utm, numeroColaboradores, observacoes, documento } = payload as {
     nome?: string
     email?: string
     telefone?: string
@@ -162,6 +177,7 @@ Deno.serve(async (req) => {
     utm?: Record<string, unknown>
     numeroColaboradores?: number
     observacoes?: string
+    documento?: string
   }
 
   if (!nome || !email || !telefone) {
@@ -179,6 +195,7 @@ Deno.serve(async (req) => {
   const log = await abrirLogEntrada('website-lead-modal', 'lead', origem ?? null, payload)
 
   const modulo = mapearProdutoParaModulo(produto)
+  const { tipoPessoa, cpf, cnpj } = classificarDocumento(documento)
 
   if (!config.organizacaoPadraoId) {
     await fecharLog(log?.id, 'erro', undefined, 'organizacao_padrao_id ausente na Configuration Registry')
@@ -218,6 +235,9 @@ Deno.serve(async (req) => {
       utm_lead: utm || null,
       produto_interesse: produto || null, // CONNECT-003 Cap.01 — campo estruturado, não mais só texto livre
       numero_colaboradores: numeroColaboradores ?? null,
+      tipo_pessoa: tipoPessoa,
+      cpf,
+      cnpj,
       proxima_acao_descricao: observacoes || null,
     })
     .select('id')
