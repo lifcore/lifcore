@@ -1,4 +1,4 @@
-import { operacional } from '../supabaseSchemas'
+import { operacional, institucional } from '../supabaseSchemas'
 
 /** Lista as conexões com operadoras de um módulo específico */
 export async function listarConexoesOperadoras(modulo) {
@@ -9,6 +9,24 @@ export async function listarConexoesOperadoras(modulo) {
     .order('nome_operadora', { ascending: true })
   if (error) throw new Error(`Erro ao listar conexões: ${error.message}`)
   return data ?? []
+}
+
+/**
+ * Busca a organização padrão da Configuration Registry — mesma fonte
+ * que a Edge Function `receber-lead-site` já usa no backend
+ * (institucional.configuracao_global, chave 'organizacao_padrao_id').
+ * Confirmado via schema real: `perfis` não tem coluna `organizacao_id`
+ * — não dá pra puxar do perfil do usuário logado, é dado pessoal do
+ * corretor, não da organização.
+ */
+export async function obterOrganizacaoPadrao() {
+  const { data, error } = await institucional
+    .from('configuracao_global')
+    .select('valor')
+    .eq('chave', 'organizacao_padrao_id')
+    .single()
+  if (error) throw new Error(`Erro ao buscar organização padrão: ${error.message}`)
+  return data?.valor
 }
 
 /**

@@ -11,10 +11,9 @@ import {
   obterKpisConnect,
   obterPainelSaude,
 } from '../../lib/connect/connectService'
-import { listarTodasConexoes, criarConexaoOperadora } from '../../lib/crm/conexoesService'
+import { listarTodasConexoes, criarConexaoOperadora, obterOrganizacaoPadrao } from '../../lib/crm/conexoesService'
 import { listarProviders } from '../../lib/connect/providerRegistryService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
-import { useAuth } from '../auth/AuthContext'
 
 const STATUS_LOG = {
   recebido: { label: 'Aguardando', classe: 'lcds-badge-alerta' },
@@ -427,7 +426,6 @@ const MODULOS_CONEXAO = [
  * query só (ver nota em conexoesService.listarTodasConexoes).
  */
 function ConexoesTab() {
-  const { perfil } = useAuth()
   const [conexoes, setConexoes] = useState([])
   const [providers, setProviders] = useState([])
   const [carregando, setCarregando] = useState(true)
@@ -516,7 +514,6 @@ function ConexoesTab() {
       {mostrarFormulario && (
         <NovaConexaoModal
           providers={providers}
-          organizacaoId={perfil?.organizacao_id}
           onFechar={() => setMostrarFormulario(false)}
           onCriada={() => {
             setMostrarFormulario(false)
@@ -528,22 +525,29 @@ function ConexoesTab() {
   )
 }
 
-function NovaConexaoModal({ providers, organizacaoId, onFechar, onCriada }) {
+function NovaConexaoModal({ providers, onFechar, onCriada }) {
   const [providerId, setProviderId] = useState('')
   const [modulo, setModulo] = useState('')
   const [direcao, setDirecao] = useState('')
   const [tipoConexao, setTipoConexao] = useState('manual')
   const [ambiente, setAmbiente] = useState('homologacao')
   const [nomeOperadora, setNomeOperadora] = useState('')
+  const [organizacaoId, setOrganizacaoId] = useState(null)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+
+  useEffect(() => {
+    obterOrganizacaoPadrao()
+      .then(setOrganizacaoId)
+      .catch(() => setErro('Não foi possível carregar a organização padrão (Configuration Registry). Tente novamente ou avise o time técnico.'))
+  }, [])
 
   async function handleSubmit(e) {
     e.preventDefault()
     setErro('')
 
     if (!organizacaoId) {
-      setErro('Não foi possível identificar sua organização (perfil.organizacao_id ausente) — não é possível criar a conexão. Avise o time técnico.')
+      setErro('Organização padrão ainda não carregada — aguarde um instante e tente de novo.')
       return
     }
     if (!providerId) {
