@@ -3,9 +3,9 @@ import { supabase } from '../supabaseClient'
 import { dataLocalISO } from '../utils/formatarData'
 import { registrarEventoComercial } from './eventosComerciaisService'
 import { criarApolice } from './apolicesService'
-import { avancarEtapaCiclo, avancarParaEmissao, fecharCotacaoComDocumento } from './commercialLifecycleService'
+import { avancarEtapaCiclo, avancarParaEmissao, fecharCotacaoComDocumento, marcarCotacaoPerdida, marcarCotacaoExpirada } from './commercialLifecycleService'
 
-export { fecharCotacaoComDocumento }
+export { fecharCotacaoComDocumento, marcarCotacaoPerdida, marcarCotacaoExpirada }
 
 /** Retorna a data de hoje no formato YYYY-MM-DD, usando o horário LOCAL (não UTC) */
 function dataLocalHoje(diasAFrente = 0) {

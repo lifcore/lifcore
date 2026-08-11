@@ -12,6 +12,8 @@ import {
   excluirCotacao,
   fecharCotacaoComOpcao,
   fecharCotacaoComDocumento,
+  marcarCotacaoPerdida,
+  marcarCotacaoExpirada,
 } from '../../lib/crm/clientesService'
 import { listarContratosLifplanDoCliente, excluirContratoLifplan } from '../../lib/crm/lifplanService'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
@@ -263,6 +265,35 @@ function PropostasLifplanTab({ clienteId, cotacoes, onAtualizado, perfil }) {
     }
   }
 
+  async function handleDesistir(propostaId) {
+    const motivo = window.prompt('Motivo da desistência (opcional):')
+    if (motivo === null) return
+    setProcessando(propostaId)
+    setErroWorkflow(null)
+    try {
+      await marcarCotacaoPerdida(propostaId, perfil?.id, motivo)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
+  }
+
+  async function handleExpirar(propostaId) {
+    if (!window.confirm('Marcar esta proposta como expirada? A validade já passou.')) return
+    setProcessando(propostaId)
+    setErroWorkflow(null)
+    try {
+      await marcarCotacaoExpirada(propostaId, perfil?.id)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
+  }
+
   return (
     <div>
       {!mostrarForm && !propostaEditando && !propostaFormalizando && (
@@ -311,6 +342,9 @@ function PropostasLifplanTab({ clienteId, cotacoes, onAtualizado, perfil }) {
             const status = ROTULO_STATUS_PROPOSTA[cot.status ?? 'em_negociacao'] ?? ROTULO_STATUS_PROPOSTA.em_negociacao
             const podeFechar = (cot.status ?? 'em_negociacao') === 'em_negociacao'
             const podeFormalizar = cot.status === 'emissao'
+            const podeDesistirOuExpirar = ['em_negociacao', 'emissao'].includes(cot.status ?? 'em_negociacao')
+            const hoje = new Date().toISOString().slice(0, 10)
+            const venceu = cot.validade && cot.validade < hoje
             return (
               <div key={cot.id} className="ls-card cotacao-item">
                 <div className="cotacao-item-header">
@@ -331,6 +365,16 @@ function PropostasLifplanTab({ clienteId, cotacoes, onAtualizado, perfil }) {
                   {podeFormalizar && (
                     <button className="cliente-tabela-btn" disabled={processando === cot.id} onClick={() => setPropostaFormalizando(cot)}>
                       {processando === cot.id ? '...' : 'Formalizar Contrato'}
+                    </button>
+                  )}
+                  {podeDesistirOuExpirar && venceu && (
+                    <button className="cliente-tabela-btn" disabled={processando === cot.id} onClick={() => handleExpirar(cot.id)}>
+                      {processando === cot.id ? '...' : 'Marcar Expirada'}
+                    </button>
+                  )}
+                  {podeDesistirOuExpirar && (
+                    <button className="cliente-tabela-btn cliente-tabela-btn-perigo" disabled={processando === cot.id} onClick={() => handleDesistir(cot.id)}>
+                      {processando === cot.id ? '...' : 'Cliente Desistiu'}
                     </button>
                   )}
                   <button className="cliente-tabela-btn" onClick={() => setPropostaEditando(cot)}>Editar</button>

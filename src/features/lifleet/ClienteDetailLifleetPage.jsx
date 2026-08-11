@@ -13,6 +13,8 @@ import {
   excluirCotacao,
   fecharCotacaoComOpcao,
   fecharCotacaoComDocumento,
+  marcarCotacaoPerdida,
+  marcarCotacaoExpirada,
 } from '../../lib/crm/clientesService'
 import { listarApolicesDoCliente, excluirApoliceAuto } from '../../lib/crm/lifleetService'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
@@ -250,6 +252,35 @@ function CotacoesAutoTab({ clienteId, tipoPessoa, cotacoes, onAtualizado, perfil
     }
   }
 
+  async function handleDesistir(cotacaoId) {
+    const motivo = window.prompt('Motivo da desistência (opcional):')
+    if (motivo === null) return
+    setProcessando(cotacaoId)
+    setErroWorkflow(null)
+    try {
+      await marcarCotacaoPerdida(cotacaoId, perfil?.id, motivo)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
+  }
+
+  async function handleExpirar(cotacaoId) {
+    if (!window.confirm('Marcar esta cotação como expirada? A validade já passou.')) return
+    setProcessando(cotacaoId)
+    setErroWorkflow(null)
+    try {
+      await marcarCotacaoExpirada(cotacaoId, perfil?.id)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
+  }
+
   // Agrupa as cotações por rodada de comparação (grupo_comparacao_id).
   // Cotações antigas/soltas (sem grupo) continuam aparecendo como cards
   // individuais, exatamente como já funcionava antes.
@@ -323,6 +354,8 @@ function CotacoesAutoTab({ clienteId, tipoPessoa, cotacoes, onAtualizado, perfil
               onExcluir={handleExcluir}
               onFechar={handleFechar}
               onFormalizar={setCotacaoFormalizando}
+              onDesistir={handleDesistir}
+              onExpirar={handleExpirar}
               processando={processando}
             />
           ))}
@@ -346,7 +379,7 @@ function CotacoesAutoTab({ clienteId, tipoPessoa, cotacoes, onAtualizado, perfil
   )
 }
 
-function GrupoComparativo({ itens, onEditar, onExcluir, onFechar, onFormalizar, processando }) {
+function GrupoComparativo({ itens, onEditar, onExcluir, onFechar, onFormalizar, onDesistir, onExpirar, processando }) {
   const menorValor = Math.min(...itens.map((i) => Number(i.valor_total ?? Infinity)))
   const contexto = itens[0]?.contexto_veiculo
 
@@ -410,6 +443,9 @@ function GrupoComparativo({ itens, onEditar, onExcluir, onFechar, onFormalizar, 
             const status = ROTULO_STATUS[i.status ?? 'em_negociacao'] ?? ROTULO_STATUS.em_negociacao
             const podeFechar = (i.status ?? 'em_negociacao') === 'em_negociacao'
             const podeFormalizar = i.status === 'emissao'
+            const podeDesistirOuExpirar = ['em_negociacao', 'emissao'].includes(i.status ?? 'em_negociacao')
+            const hoje = new Date().toISOString().slice(0, 10)
+            const venceu = i.validade && i.validade < hoje
             return (
               <tr key={i.id} style={Number(i.valor_total) === menorValor ? { background: 'var(--ls-accent-soft)', fontWeight: 600 } : {}}>
                 <td>{i.operadora?.nome ?? i.operadora_nome_livre ?? '—'}{Number(i.valor_total) === menorValor && ' 🏆'}</td>
@@ -428,6 +464,16 @@ function GrupoComparativo({ itens, onEditar, onExcluir, onFechar, onFormalizar, 
                   {podeFormalizar && (
                     <button className="cliente-tabela-btn" disabled={processando === i.id} onClick={() => onFormalizar(i)}>
                       {processando === i.id ? '...' : 'Formalizar Apólice'}
+                    </button>
+                  )}
+                  {podeDesistirOuExpirar && venceu && (
+                    <button className="cliente-tabela-btn" disabled={processando === i.id} onClick={() => onExpirar(i.id)}>
+                      {processando === i.id ? '...' : 'Marcar Expirada'}
+                    </button>
+                  )}
+                  {podeDesistirOuExpirar && (
+                    <button className="cliente-tabela-btn cliente-tabela-btn-perigo" disabled={processando === i.id} onClick={() => onDesistir(i.id)}>
+                      {processando === i.id ? '...' : 'Cliente Desistiu'}
                     </button>
                   )}
                   <button className="cliente-tabela-btn" onClick={() => onEditar(i)}>Editar</button>

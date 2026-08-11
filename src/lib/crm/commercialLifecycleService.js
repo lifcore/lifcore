@@ -269,3 +269,52 @@ export async function fecharCotacaoComDocumento(cotacaoId, usuarioId, { apoliceI
 
   return { fechada: true, comissaoGerada: apoliceId ? MODULOS_COM_COMISSAO_CENTRALIZADA.includes(modulo) : false }
 }
+
+/**
+ * Cenário 6 (Desistência) — ação explícita do corretor, nunca
+ * automática. Só permitida a partir de em_negociacao ou emissao (não
+ * faz sentido desistir de algo já fechado/perdido/expirado).
+ */
+export async function marcarCotacaoPerdida(cotacaoId, usuarioId, motivo) {
+  const { data: cotacao, error } = await operacional.from('cotacoes').select('status').eq('id', cotacaoId).single()
+  if (error) throw new Error(`Erro ao buscar cotação: ${error.message}`)
+  if (!['em_negociacao', 'emissao'].includes(cotacao.status)) {
+    throw new Error('Só é possível marcar como perdida uma cotação que esteja em negociação ou emissão.')
+  }
+
+  await operacional.from('cotacoes').update({ status: 'perdida' }).eq('id', cotacaoId)
+  await registrarEventoComercial({
+    entidadeTipo: 'cotacao',
+    entidadeId: cotacaoId,
+    tipoEvento: 'perdida',
+    descricao: motivo?.trim() ? `Cliente desistiu — ${motivo.trim()}` : 'Cliente desistiu',
+    usuarioId,
+  })
+}
+
+/**
+ * Cenário 7 (Expiração) — também ação explícita do corretor por
+ * enquanto (não automática — não há confirmação de agendamento no
+ * Supabase pra rodar isso sozinho em background). Só permitida quando
+ * a validade já passou, pra evitar expirar cotação por engano.
+ */
+export async function marcarCotacaoExpirada(cotacaoId, usuarioId) {
+  const { data: cotacao, error } = await operacional.from('cotacoes').select('status, validade').eq('id', cotacaoId).single()
+  if (error) throw new Error(`Erro ao buscar cotação: ${error.message}`)
+  if (!['em_negociacao', 'emissao'].includes(cotacao.status)) {
+    throw new Error('Só é possível marcar como expirada uma cotação que esteja em negociação ou emissão.')
+  }
+  const hoje = new Date().toISOString().slice(0, 10)
+  if (!cotacao.validade || cotacao.validade >= hoje) {
+    throw new Error('Só é possível marcar como expirada uma cotação cuja validade já passou.')
+  }
+
+  await operacional.from('cotacoes').update({ status: 'expirada' }).eq('id', cotacaoId)
+  await registrarEventoComercial({
+    entidadeTipo: 'cotacao',
+    entidadeId: cotacaoId,
+    tipoEvento: 'expirada',
+    descricao: 'Prazo de validade vencido sem decisão do cliente',
+    usuarioId,
+  })
+}
