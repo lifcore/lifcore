@@ -48,12 +48,23 @@ export const CATEGORIAS_LISHIELD = [
   },
 ]
 
-/** Cria uma apólice do LiShield já vinculada ao cliente */
+/**
+ * BUG CORRIGIDO (11/08, mesmo achado já corrigido no Lifleet):
+ * `apolices.nome_cliente` é NOT NULL no banco, mas nunca era
+ * preenchido aqui — buscamos o nome do cliente antes de criar.
+ */
 export async function criarApoliceLishield({ corretorId, organizacaoId, clienteProspectId, dados }) {
+  const { data: cliente, error: erroCliente } = await operacional
+    .from('clientes_prospects')
+    .select('razao_social')
+    .eq('id', clienteProspectId)
+    .single()
+  if (erroCliente) throw new Error(`Erro ao buscar dados do cliente: ${erroCliente.message}`)
+
   const apolice = await criarApolice({
     corretorId,
     organizacaoId,
-    dados: { ...dados, cliente_prospect_id: clienteProspectId },
+    dados: { ...dados, cliente_prospect_id: clienteProspectId, nome_cliente: cliente.razao_social },
   })
 
   await atualizarStatusClienteProspect(clienteProspectId, 'cliente')
