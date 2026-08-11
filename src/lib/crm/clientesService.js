@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient'
 import { dataLocalISO } from '../utils/formatarData'
 import { registrarEventoComercial } from './eventosComerciaisService'
 import { criarApolice } from './apolicesService'
-import { avancarEtapaCiclo, recusarSiblingsDoGrupo } from './commercialLifecycleService'
+import { avancarEtapaCiclo, avancarParaEmissao } from './commercialLifecycleService'
 
 /** Retorna a data de hoje no formato YYYY-MM-DD, usando o horário LOCAL (não UTC) */
 function dataLocalHoje(diasAFrente = 0) {
@@ -535,24 +535,29 @@ export async function normalizarOperadoraCotacao(cotacaoId, operadoraId) {
 /**
  * Sprint Ciclo de Fechamento Comercial — Cotação → Proposta → Apólice.
  *
- * Sprint 009 (CLU-001): esta função virou um WRAPPER FINO sobre o
- * Commercial Lifecycle Engine (commercialLifecycleService.js) —
- * diretriz do Chief ("Wrapper de Compatibilidade"): mesmo nome, mesma
- * assinatura, mesmo comportamento externo, pra não quebrar Lifleet/
- * Lifsure/LiShield, que já chamam essa função há duas Sprints. Por
- * dentro, quem decide a lista de etapas agora é o Workspace Registry.
+ * ATUALIZADO (BMR-004/CLU-002, Fase 2 — 11/08): virou wrapper fino
+ * sobre `avancarParaEmissao` (o novo motor do ciclo universal), no
+ * lugar do `avancarEtapaCiclo` genérico por índice. Mesmo nome, mesma
+ * assinatura, mesmo comportamento externo — Lifleet/Lifsure/LiShield/
+ * Lifplan continuam chamando essa função sem precisar mudar nada.
+ * Corrige de quebra o bug do status 'recusada' inválido (ver
+ * commercialLifecycleService.js).
  */
 export async function fecharCotacaoComOpcao(cotacaoId, usuarioId) {
-  await avancarEtapaCiclo(cotacaoId, usuarioId)
-  await recusarSiblingsDoGrupo(cotacaoId, usuarioId)
+  await avancarParaEmissao(cotacaoId, usuarioId)
 }
 
 /**
- * Sprint 009 (CLU-001): também virou wrapper fino. Continua assumindo
- * que a etapa final gera uma Apólice — válido pra Lifleet/Lifsure/
- * LiShield (os 3 módulos que já usam essa função hoje). Rastreabilidade
- * completa mantida: a apólice gerada fica referenciada em
- * `cotacoes.apolice_id`.
+ * ⚠️ PENDENTE DE MIGRAÇÃO (BMR-004/CLU-002, Fase 2 — 11/08): esta
+ * função ainda autogera uma Apólice com dado mínimo (`premio`,
+ * `operadora`) ao "aprovar" — exatamente o comportamento que o Chief
+ * travou como proibido ("emissão nunca autogera documento"). Mantida
+ * funcionando por enquanto (ainda em uso por Lifleet/Lifsure/LiShield)
+ * para não quebrar os botões existentes, mas precisa ser SUBSTITUÍDA
+ * pelo fluxo novo: navegar pro formulário real de Apólice, corretor
+ * preenche, o Salvar chama `fecharCotacaoComDocumento`. Depende dos
+ * componentes de UI (PipelinePage.jsx e formulários de Apólice de cada
+ * módulo) — próximo incremento da Fase 2, ainda não iniciado.
  */
 export async function aprovarPropostaCotacao(cotacaoId, usuarioId) {
   const { data: cotacaoAntes, error } = await operacional.from('cotacoes').select('status').eq('id', cotacaoId).single()
@@ -593,13 +598,16 @@ export async function aprovarPropostaCotacao(cotacaoId, usuarioId) {
 }
 
 /**
- * Sprint 009 (CLU-001) — genérico de verdade: avança a cotação UMA
- * etapa no ciclo comercial do módulo dela, seja qual for a lista
- * declarada no Workspace Registry. Usado por módulos com mais de 3
- * etapas (ex: LifCare: em_analise → proposta_emitida →
- * analise_operadora → assinatura → aprovada). Gera Contrato
- * automaticamente ao alcançar a etapa final, quando o Workspace
- * declarar `documentoFinal: 'contrato'`.
+ * ⚠️ PENDENTE DE MIGRAÇÃO (BMR-004/CLU-002, Fase 2 — 11/08): esta é a
+ * função separada do Lifcare que o Chief determinou ser absorvida pelo
+ * motor único, sem exceção. Hoje ainda autogera um Contrato com dado
+ * mínimo (`status: 'ativo'` direto, sem gatilho de comissão) — mesmo
+ * problema de `aprovarPropostaCotacao`, mesma trava do Chief. Mantida
+ * funcionando por enquanto (Lifcare depende dela) até o formulário real
+ * de Contrato ser conectado a `fecharCotacaoComDocumento`. Também usa
+ * `avancarEtapaCiclo` (motor antigo por índice), que segue funcionando
+ * para módulos que ainda não migraram, mas não é mais chamado por
+ * nenhuma função nova.
  */
 export async function avancarEtapaComercial(cotacaoId, usuarioId) {
   const { data: cotacaoAntes, error } = await operacional
