@@ -136,21 +136,30 @@ export async function recusarSiblingsDoGrupo(cotacaoId, usuarioId) {
 
 /**
  * Módulos cuja comissão sugerida já pode ser disparada centralizada por
- * este motor, sem risco de duplicidade — Lifsure/LiShield/Lifplan não
- * têm hoje NENHUM mecanismo de comissão próprio (confirmado por
- * inspeção de lifsureService.js/lishieldService.js/lifplanService.js,
- * 11/08), então centralizar aqui é puro ganho, não duplica nada.
+ * este motor, sem risco de duplicidade.
  *
- * Lifleet ('auto') fica de fora por enquanto: já existe um mecanismo
- * próprio dentro de lifleetService.criarApoliceAuto (dispara quando
- * origemVenda === 'venda_nova'). Disparar também por aqui arriscaria
- * gerar comissão em duplicidade — dado financeiro real — sem antes
- * confirmar, no formulário de fato, que o fechamento de cotação nunca
- * passa por ali com origemVenda='venda_nova' ao mesmo tempo. Pendência
- * registrada para o próximo incremento (unificar de vez, quando os
- * formulários de Apólice forem revisados).
+ * Lifsure/LiShield/Lifplan não têm hoje NENHUM mecanismo de comissão
+ * próprio (confirmado por inspeção de lifsureService.js/
+ * lishieldService.js/lifplanService.js, 11/08) — centralizar aqui é
+ * puro ganho.
+ *
+ * Lifleet ('auto') também incluído (atualizado 11/08, após inspecionar
+ * ApoliceAutoForm.jsx): o mecanismo que existe dentro de
+ * `lifleetService.criarApoliceAuto` só dispara quando `origemVenda ===
+ * 'venda_nova'` é passado explicitamente — e o único formulário real
+ * que chama essa função (ApoliceAutoForm.jsx) NUNCA passa esse
+ * parâmetro. Ou seja, esse caminho está morto na prática hoje (toda
+ * apólice lançada por ali cai em 'migracao', sem gerar comissão). Sem
+ * risco de duplicidade — pode centralizar.
+ *
+ * `modulo` aqui usa os valores de `clientes_prospects.modulo`
+ * ('saude'/'auto'/'lifsure'/'lishield'/'lifplan'), mas os registros
+ * existentes em `comissoes.modulo` usam 'lifleet' (não 'auto') —
+ * convenção herdada do único lançamento que já existia. Mapeamos
+ * abaixo pra manter consistência com o que já está no banco.
  */
-const MODULOS_COM_COMISSAO_CENTRALIZADA = ['lifsure', 'lishield', 'lifplan']
+const MODULOS_COM_COMISSAO_CENTRALIZADA = ['auto', 'lifsure', 'lishield', 'lifplan']
+const MODULO_PARA_COMISSAO = { auto: 'lifleet', lifsure: 'lifsure', lishield: 'lishield', lifplan: 'lifplan' }
 
 /**
  * Avança a cotação de "em_negociacao" para "emissao" — o corretor
@@ -239,7 +248,7 @@ export async function fecharCotacaoComDocumento(cotacaoId, usuarioId, { apoliceI
         operadoraId: cotacao.operadora_id ?? null,
         apoliceId,
         corretorId: apolice.corretor_id,
-        modulo,
+        modulo: MODULO_PARA_COMISSAO[modulo] ?? modulo,
         valorPremio: apolice.premio,
       })
     }
