@@ -250,9 +250,12 @@ function PropostasLifplanTab({ clienteId, cotacoes, onAtualizado, perfil }) {
     setProcessando(propostaFormalizando.id)
     setErroWorkflow(null)
     try {
-      await fecharCotacaoComDocumento(propostaFormalizando.id, perfil?.id, { apoliceId: contrato.id })
+      const resultado = await fecharCotacaoComDocumento(propostaFormalizando.id, perfil?.id, { apoliceId: contrato.id })
       setPropostaFormalizando(null)
       onAtualizado()
+      if (resultado?.erroComissao) {
+        setErroWorkflow(`Proposta fechada e contrato gerado normalmente — mas a sugestão de comissão não pôde ser criada (${resultado.erroComissao}). Avise o Claude pra corrigir isso; a comissão pode ser lançada manualmente no Financeiro por enquanto.`)
+      }
     } catch (err) {
       setErroWorkflow(err.message)
     } finally {

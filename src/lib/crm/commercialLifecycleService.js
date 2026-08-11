@@ -243,16 +243,26 @@ export async function fecharCotacaoComDocumento(cotacaoId, usuarioId, { apoliceI
       .single()
 
     if (!erroApolice && apolice) {
-      await criarComissaoSugerida({
-        organizacaoId: apolice.organizacao_id,
-        operadoraId: cotacao.operadora_id ?? null,
-        apoliceId,
-        corretorId: apolice.corretor_id,
-        modulo: MODULO_PARA_COMISSAO[modulo] ?? modulo,
-        valorPremio: apolice.premio,
-      })
+      // CORREÇÃO (11/08): gerar a sugestão de comissão é um efeito
+      // colateral, não o fechamento em si — a cotação e a apólice já
+      // estão salvas de verdade nesse ponto. Uma falha aqui (schema
+      // divergente, constraint, etc.) NUNCA pode fazer parecer que o
+      // fechamento inteiro falhou; só registra o problema separado,
+      // sem interromper o retorno de sucesso.
+      try {
+        await criarComissaoSugerida({
+          organizacaoId: apolice.organizacao_id,
+          operadoraId: cotacao.operadora_id ?? null,
+          apoliceId,
+          corretorId: apolice.corretor_id,
+          modulo: MODULO_PARA_COMISSAO[modulo] ?? modulo,
+          valorPremio: apolice.premio,
+        })
+      } catch (erroComissao) {
+        return { fechada: true, comissaoGerada: false, erroComissao: erroComissao.message }
+      }
     }
   }
 
-  return { fechada: true }
+  return { fechada: true, comissaoGerada: apoliceId ? MODULOS_COM_COMISSAO_CENTRALIZADA.includes(modulo) : false }
 }
