@@ -10,7 +10,20 @@
  * Nesta Sprint: só REGISTRO. KPIs rápidos e Copilot padrão existem como
  * campo, mas vazios/não conectados — nenhum cálculo novo, nenhuma
  * mudança nos motores de IA (diretrizes dos Blocos E e F).
+ *
+ * ATUALIZAÇÃO (BMR-004/CLU-002, Fase 1 — 11/08): `stages` deixou de ser
+ * uma lista própria por módulo e passou a espelhar diretamente os 5
+ * valores universais de `operacional.cotacoes.status` (mesmo enum em
+ * todos os módulos, sem exceção). Lifplan sai de `enabled: false` para
+ * `true` — o bloqueio original era falta de coluna própria pras etapas
+ * antigas (analise_credito/assinatura); como as etapas agora são o
+ * próprio `cotacoes.status` (que já existe pra todos os módulos),
+ * o bloqueio deixou de existir. `documentoFinal` do Lifplan passa de
+ * `null` para `'apolice'` (mesma tabela `apolices` que Lifleet/Lifsure/
+ * LiShield, confirmado na unificação do Customer 360).
  */
+
+const CICLO_COMERCIAL_UNIVERSAL = ['em_negociacao', 'emissao', 'fechada', 'perdida', 'expirada']
 
 export const WORKSPACES = {
   lifcare: {
@@ -25,9 +38,7 @@ export const WORKSPACES = {
     breadcrumbPadrao: ['Workspaces', 'Lifcare'],
     commercialLifecycle: {
       enabled: true,
-      // Sprint 009 (CLU-001): "Implantação" fica fora desta Sprint —
-      // o ciclo aqui cobre só até o contrato existir, não o pós-venda.
-      stages: ['em_analise', 'proposta_emitida', 'analise_operadora', 'assinatura', 'aprovada'],
+      stages: CICLO_COMERCIAL_UNIVERSAL,
       documentoFinal: 'contrato',
     },
     features: {
@@ -52,7 +63,7 @@ export const WORKSPACES = {
     breadcrumbPadrao: ['Workspaces', 'Lifleet'],
     commercialLifecycle: {
       enabled: true,
-      stages: ['em_analise', 'proposta_emitida', 'aprovada'],
+      stages: CICLO_COMERCIAL_UNIVERSAL,
       documentoFinal: 'apolice',
     },
     features: {
@@ -77,7 +88,7 @@ export const WORKSPACES = {
     breadcrumbPadrao: ['Workspaces', 'Lifsure'],
     commercialLifecycle: {
       enabled: true,
-      stages: ['em_analise', 'proposta_emitida', 'aprovada'],
+      stages: CICLO_COMERCIAL_UNIVERSAL,
       documentoFinal: 'apolice',
     },
     features: {
@@ -102,7 +113,7 @@ export const WORKSPACES = {
     breadcrumbPadrao: ['Workspaces', 'LiShield'],
     commercialLifecycle: {
       enabled: true,
-      stages: ['em_analise', 'proposta_emitida', 'aprovada'],
+      stages: CICLO_COMERCIAL_UNIVERSAL,
       documentoFinal: 'apolice',
     },
     features: {
@@ -126,20 +137,20 @@ export const WORKSPACES = {
     kpisRapidos: [],
     breadcrumbPadrao: ['Workspaces', 'Lifplan'],
     commercialLifecycle: {
-      // Sprint 009 (CLU-001): etapas registradas por completude
-      // conceitual, mas NÃO acionáveis ainda — "Análise de Crédito",
-      // "Assinatura" e "Emissão" não têm tabela/campo próprio no
-      // banco hoje. Ativar isso sem essa base seria antecipar schema
-      // (proibido pela própria Sprint). `enabled: false` sinaliza pro
-      // motor genérico que este Workspace ainda não deve ser acionado.
-      enabled: false,
-      stages: ['em_analise', 'proposta_emitida', 'analise_credito', 'assinatura', 'aprovada'],
-      documentoFinal: null,
+      // BMR-004/CLU-002 (11/08): habilitado. O bloqueio original (Sprint
+      // 009/CLU-001) era falta de coluna própria pras etapas antigas
+      // (analise_credito/assinatura, sem tabela/campo no banco). Como
+      // as etapas agora são o próprio `cotacoes.status` — que já existe
+      // pra todos os módulos — o bloqueio não existe mais. Comunicação
+      // universal sem exceção nos 5 módulos, por decisão do Chief.
+      enabled: true,
+      stages: CICLO_COMERCIAL_UNIVERSAL,
+      documentoFinal: 'apolice',
     },
     features: {
       workspaceHeader: true,
       customer360: false,
-      commercialLifecycle: false,
+      commercialLifecycle: true,
       comparisonQuote: false,
       claims: true,
       finance: false,

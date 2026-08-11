@@ -132,7 +132,20 @@ function construirLeadInputStandardDoSite(payload: Record<string, unknown>): Lea
     dadosExternos: {
       empresa: typeof payload.empresa === 'string' ? payload.empresa : undefined,
       produto: typeof payload.produto === 'string' ? payload.produto : undefined,
-      numeroColaboradores: typeof payload.numeroColaboradores === 'number' ? payload.numeroColaboradores : undefined,
+      // BUG CORRIGIDO: <input type="number"> do navegador sempre manda
+      // o valor como texto ("5"), nunca como number de verdade — o
+      // check anterior (typeof === 'number') descartava isso sempre,
+      // silenciosamente. Converte com segurança, sem quebrar se vier
+      // vazio ou não numérico.
+      numeroColaboradores: (() => {
+        const bruto = payload.numeroColaboradores
+        if (typeof bruto === 'number') return bruto
+        if (typeof bruto === 'string' && bruto.trim() !== '') {
+          const convertido = Number(bruto)
+          return Number.isFinite(convertido) ? convertido : undefined
+        }
+        return undefined
+      })(),
       observacoes: typeof payload.observacoes === 'string' ? payload.observacoes : undefined,
       documento: typeof payload.documento === 'string' ? payload.documento : undefined,
     },
@@ -309,9 +322,15 @@ Deno.serve(async (req) => {
       utm_lead: lead.utm ?? null, // agora no formato normalizado (source/medium/campaign), não mais utm_source/utm_medium cru
       produto_interesse: produto || null, // CONNECT-003 Cap.01 — campo estruturado, não mais só texto livre
       numero_colaboradores: numeroColaboradores ?? null,
-      tipo_pessoa: tipoPessoa,
-      cpf,
-      cnpj,
+      // BUG CORRIGIDO: tipo_pessoa é NOT NULL com DEFAULT 'juridica'
+      // no banco — mandar `null` explícito sobrescreve o default e
+      // quebra a constraint. Quando o documento não classifica (CPF/
+      // CNPJ ausente ou com formato inválido), os 3 campos abaixo
+      // simplesmente não entram no objeto de insert — o banco aplica
+      // o próprio default sozinho, sem eu inventar nenhum valor aqui.
+      ...(tipoPessoa ? { tipo_pessoa: tipoPessoa } : {}),
+      ...(cpf ? { cpf } : {}),
+      ...(cnpj ? { cnpj } : {}),
       proxima_acao_descricao: observacoes || null,
     })
     .select('id')
@@ -330,7 +349,7 @@ Deno.serve(async (req) => {
       cliente_prospect_id: cliente.id,
       tipo: 'primario',
       nome: lead.nome,
-      telefone: lead.telefone,
+      celular: lead.telefone, // BUG CORRIGIDO: a coluna real é `celular`, não `telefone` — confirmado via schema (contatos: id/cliente_prospect_id/tipo/nome/cargo/celular/email/criado_em/atualizado_em)
       email: lead.email,
     })
 
