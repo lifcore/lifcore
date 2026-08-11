@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { operacional } from '../../lib/supabaseSchemas'
 import { parseValorBR } from '../../lib/crm/clientesService'
-import { criarApoliceLishield, atualizarApoliceLishield, CATEGORIAS_LISHIELD } from '../../lib/crm/lishieldService'
+import { criarApoliceLishield, atualizarApoliceLishield } from '../../lib/crm/lishieldService'
 import { listarCatalogoSeguradoras } from '../../lib/crm/apolicesService'
+import { listarProdutos } from '../../lib/crm/catalogoInstitucionalService'
 
 export default function ApoliceLishieldForm({ clienteProspectId, apoliceExistente, onSalvo, onCancelar }) {
   const { perfil } = useAuth()
@@ -17,11 +18,13 @@ export default function ApoliceLishieldForm({ clienteProspectId, apoliceExistent
   const [vigenciaFim, setVigenciaFim] = useState(apoliceExistente?.vigencia_fim ?? '')
   const [detalhesProduto, setDetalhesProduto] = useState(apoliceExistente?.detalhes_produto ?? '')
   const [catalogoSeguradoras, setCatalogoSeguradoras] = useState([])
+  const [produtos, setProdutos] = useState([])
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
 
   useEffect(() => {
     listarCatalogoSeguradoras().then(setCatalogoSeguradoras).catch(() => {})
+    listarProdutos({ modulo: 'lishield' }).then(setProdutos).catch(() => {})
   }, [])
 
   async function handleSalvar() {
@@ -79,12 +82,8 @@ export default function ApoliceLishieldForm({ clienteProspectId, apoliceExistent
       <label>Produto</label>
       <select value={produto} onChange={(e) => setProduto(e.target.value)}>
         <option value="">Selecione o produto...</option>
-        {CATEGORIAS_LISHIELD.map((grupo) => (
-          <optgroup key={grupo.categoria} label={grupo.categoria}>
-            {grupo.produtos.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </optgroup>
+        {produtos.map((p) => (
+          <option key={p.id} value={p.nome}>{p.nome}</option>
         ))}
       </select>
 

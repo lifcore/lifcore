@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { operacional } from '../../lib/supabaseSchemas'
 import { parseValorBR } from '../../lib/crm/clientesService'
-import { criarContratoLifplan, atualizarContratoLifplan, PRODUTOS_LIFPLAN } from '../../lib/crm/lifplanService'
+import { criarContratoLifplan, atualizarContratoLifplan } from '../../lib/crm/lifplanService'
+import { listarProdutos } from '../../lib/crm/catalogoInstitucionalService'
 
 export default function ContratoLifplanForm({ clienteProspectId, contratoExistente, onSalvo, onCancelar }) {
   const { perfil } = useAuth()
@@ -14,8 +15,13 @@ export default function ContratoLifplanForm({ clienteProspectId, contratoExisten
   const [vigenciaInicio, setVigenciaInicio] = useState(contratoExistente?.vigencia_inicio ?? '')
   const [vigenciaFim, setVigenciaFim] = useState(contratoExistente?.vigencia_fim ?? '')
   const [detalhesProduto, setDetalhesProduto] = useState(contratoExistente?.detalhes_produto ?? '')
+  const [produtos, setProdutos] = useState([])
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
+
+  useEffect(() => {
+    listarProdutos({ modulo: 'lifplan' }).then(setProdutos).catch(() => {})
+  }, [])
 
   async function handleSalvar() {
     if (!produto) {
@@ -65,8 +71,8 @@ export default function ContratoLifplanForm({ clienteProspectId, contratoExisten
       <label>Produto</label>
       <select value={produto} onChange={(e) => setProduto(e.target.value)}>
         <option value="">Selecione o produto...</option>
-        {PRODUTOS_LIFPLAN.map((p) => (
-          <option key={p} value={p}>{p}</option>
+        {produtos.map((p) => (
+          <option key={p.id} value={p.nome}>{p.nome}</option>
         ))}
       </select>
 

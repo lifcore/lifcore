@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { criarContrato, atualizarContrato, listarCatalogoOperadoras, parseValorBR } from '../../lib/crm/clientesService'
+import { listarProdutos } from '../../lib/crm/catalogoInstitucionalService'
 import { enviarAnexo } from '../../lib/especialista/uploadService'
 
 const FAIXAS_ETARIAS_ANS = [
@@ -37,6 +38,7 @@ function reconstruirBlocos(itensContrato) {
 }
 
 export default function ContratoForm({ clienteProspectId, contratoExistente, operadoraInicial, itensIniciais, onSalvo, onCancelar }) {
+  const [produto, setProduto] = useState(contratoExistente?.produto ?? '')
   const [operadoraNome, setOperadoraNome] = useState(contratoExistente?.operadora_nome_livre ?? operadoraInicial ?? '')
   const [modalidade, setModalidade] = useState(contratoExistente?.modalidade ?? '')
   const [numeroApolice, setNumeroApolice] = useState(contratoExistente?.numero_apolice ?? '')
@@ -45,6 +47,7 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
   const [reajuste, setReajuste] = useState(contratoExistente?.reajuste_percentual ?? '')
   const [status, setStatus] = useState(contratoExistente?.status ?? 'ativo')
   const [catalogoOperadoras, setCatalogoOperadoras] = useState([])
+  const [produtos, setProdutos] = useState([])
   const [anexoContratoUrl, setAnexoContratoUrl] = useState(contratoExistente?.anexo_contrato_url ?? null)
   const [anexoPropostaUrl, setAnexoPropostaUrl] = useState(contratoExistente?.anexo_proposta_url ?? null)
   const [enviandoAnexo, setEnviandoAnexo] = useState(null)
@@ -54,6 +57,7 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
 
   useEffect(() => {
     listarCatalogoOperadoras().then(setCatalogoOperadoras).catch(() => {})
+    listarProdutos({ modulo: 'saude' }).then(setProdutos).catch(() => {})
   }, [])
 
   const totalVidas = blocosPlano.reduce(
@@ -112,6 +116,10 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
   }
 
   async function handleSalvar() {
+    if (!produto) {
+      setErro('Selecione o produto (Saúde, Odonto ou Saúde e Odonto).')
+      return
+    }
     if (!operadoraNome.trim()) {
       setErro('Informe a operadora.')
       return
@@ -140,6 +148,7 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
       }
 
       const dados = {
+        produto,
         operadora_nome_livre: operadoraNome,
         plano: blocosPlano.map((b) => b.plano).filter(Boolean).join(' + ') || null,
         modalidade: modalidade || null,
@@ -175,6 +184,15 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
       </datalist>
 
       <div className="cotacao-form-linha">
+        <div>
+          <label>Produto</label>
+          <select value={produto} onChange={(e) => setProduto(e.target.value)}>
+            <option value="">Selecione...</option>
+            {produtos.map((p) => (
+              <option key={p.id} value={p.nome}>{p.nome}</option>
+            ))}
+          </select>
+        </div>
         <div>
           <label>Operadora</label>
           <input list="lista-operadoras-contrato" value={operadoraNome} onChange={(e) => setOperadoraNome(e.target.value)} placeholder="Comece a digitar..." />
