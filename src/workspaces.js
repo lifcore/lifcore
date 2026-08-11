@@ -21,6 +21,14 @@
  * o bloqueio deixou de existir. `documentoFinal` do Lifplan passa de
  * `null` para `'apolice'` (mesma tabela `apolices` que Lifleet/Lifsure/
  * LiShield, confirmado na unificação do Customer 360).
+ *
+ * ATUALIZAÇÃO (BMR-004/CLU-002, Fase 4 — 11/08): auditoria da
+ * Governança de Funcionalidades encontrou `features.customer360`
+ * desatualizado — marcado `false` (⏳) em Lifleet/Lifsure/LiShield/
+ * Lifplan, quando na verdade o Customer 360 está no ar nos 5 módulos
+ * desde 08/08 (Sprint de replicação). Corrigido pra `true` nos 4 —
+ * Registry alinhado à realidade confirmada por leitura direta do
+ * código (ClienteDetail*Page.jsx dos 4 módulos).
  */
 
 const CICLO_COMERCIAL_UNIVERSAL = ['em_negociacao', 'emissao', 'fechada', 'perdida', 'expirada']
@@ -68,7 +76,7 @@ export const WORKSPACES = {
     },
     features: {
       workspaceHeader: true,
-      customer360: false,
+      customer360: true,
       commercialLifecycle: true,
       comparisonQuote: true,
       claims: true,
@@ -93,7 +101,7 @@ export const WORKSPACES = {
     },
     features: {
       workspaceHeader: true,
-      customer360: false,
+      customer360: true,
       commercialLifecycle: true,
       comparisonQuote: false,
       claims: true,
@@ -118,7 +126,7 @@ export const WORKSPACES = {
     },
     features: {
       workspaceHeader: true,
-      customer360: false,
+      customer360: true,
       commercialLifecycle: true,
       comparisonQuote: false,
       claims: true,
@@ -149,7 +157,7 @@ export const WORKSPACES = {
     },
     features: {
       workspaceHeader: true,
-      customer360: false,
+      customer360: true,
       commercialLifecycle: true,
       comparisonQuote: false,
       claims: true,
