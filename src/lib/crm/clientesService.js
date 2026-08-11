@@ -428,13 +428,20 @@ export async function cadastrarCorretor({ email, nomeCompleto, papel }) {
  * operadora_id, busca o nome oficial no catálogo institucional.
  */
 export async function criarCotacao({ clienteProspectId, casoId, dados, itens }) {
+  // CORREÇÃO (11/08): não basta um default — se `dados.status` vier
+  // preenchido com um valor antigo (ex: 'em_analise', que não existe
+  // mais na constraint), ele sobrescrevia a defesa anterior via
+  // spread. Uma cotação SEMPRE nasce em negociação — nenhum
+  // formulário deveria decidir outro status na criação, então
+  // ignoramos qualquer `status` vindo de fora, sem exceção.
+  const { status: _statusIgnoradoNaCriacao, ...dadosSemStatus } = dados
   const { data: cotacao, error } = await operacional
     .from('cotacoes')
     .insert({
       cliente_prospect_id: clienteProspectId,
       caso_id: casoId ?? null,
-      status: dados.status ?? 'em_negociacao',
-      ...dados,
+      ...dadosSemStatus,
+      status: 'em_negociacao',
     })
     .select()
     .single()
