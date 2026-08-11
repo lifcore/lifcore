@@ -3,7 +3,9 @@ import { supabase } from '../supabaseClient'
 import { dataLocalISO } from '../utils/formatarData'
 import { registrarEventoComercial } from './eventosComerciaisService'
 import { criarApolice } from './apolicesService'
-import { avancarEtapaCiclo, avancarParaEmissao } from './commercialLifecycleService'
+import { avancarEtapaCiclo, avancarParaEmissao, fecharCotacaoComDocumento } from './commercialLifecycleService'
+
+export { fecharCotacaoComDocumento }
 
 /** Retorna a data de hoje no formato YYYY-MM-DD, usando o horário LOCAL (não UTC) */
 function dataLocalHoje(diasAFrente = 0) {
@@ -397,6 +399,8 @@ export async function atualizarContrato(contratoId, dados, itens = null) {
   if (dados.status === 'ativo' && contratoAtualizado.cliente_prospect_id) {
     await atualizarStatusClienteProspect(contratoAtualizado.cliente_prospect_id, 'cliente')
   }
+
+  return contratoAtualizado
 }
 
 /** Exclui um contrato (sem histórico próprio vinculado além de beneficiários, que ficam órfãos — atenção) */
@@ -429,6 +433,7 @@ export async function criarCotacao({ clienteProspectId, casoId, dados, itens }) 
     .insert({
       cliente_prospect_id: clienteProspectId,
       caso_id: casoId ?? null,
+      status: dados.status ?? 'em_negociacao',
       ...dados,
     })
     .select()

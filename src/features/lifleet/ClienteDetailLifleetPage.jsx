@@ -12,7 +12,7 @@ import {
   adicionarAtualizacaoManual,
   excluirCotacao,
   fecharCotacaoComOpcao,
-  aprovarPropostaCotacao,
+  fecharCotacaoComDocumento,
 } from '../../lib/crm/clientesService'
 import { listarApolicesDoCliente, excluirApoliceAuto } from '../../lib/crm/lifleetService'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
@@ -170,7 +170,7 @@ export default function ClienteDetailLifleetPage() {
         )}
 
         {abaAtiva === 'Cotações' && (
-          <CotacoesAutoTab clienteId={cliente.id} cotacoes={cotacoes} onAtualizado={carregar} perfil={perfil} navigate={navigate} />
+          <CotacoesAutoTab clienteId={cliente.id} tipoPessoa={cliente.tipo_pessoa} cotacoes={cotacoes} onAtualizado={carregar} perfil={perfil} navigate={navigate} />
         )}
 
         {abaAtiva === 'Apólices' && (
@@ -199,9 +199,17 @@ export default function ClienteDetailLifleetPage() {
   )
 }
 
-function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado, perfil, navigate }) {
+/**
+ * ATUALIZADO (BMR-004/CLU-002, Fase 2 — 11/08): "Aprovar Proposta"
+ * (aprovarPropostaCotacao) autogerava um rascunho de apólice com dado
+ * mínimo — proibido pelo Chief. Agora, em "emissao", "Formalizar
+ * Apólice" abre o ApoliceAutoForm de verdade; o Salvar dele fecha a
+ * cotação de fato via `fecharCotacaoComDocumento`.
+ */
+function CotacoesAutoTab({ clienteId, tipoPessoa, cotacoes, onAtualizado, perfil, navigate }) {
   const [mostrarComparativo, setMostrarComparativo] = useState(false)
   const [cotacaoEditando, setCotacaoEditando] = useState(null)
+  const [cotacaoFormalizando, setCotacaoFormalizando] = useState(null)
   const [processando, setProcessando] = useState(null)
   const [erroWorkflow, setErroWorkflow] = useState(null)
 
@@ -212,7 +220,7 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado, perfil, navigate }
   }
 
   async function handleFechar(cotacaoId) {
-    if (!window.confirm('Fechar com esta seguradora? As demais opções desta rodada serão marcadas como recusadas automaticamente.')) return
+    if (!window.confirm('Fechar com esta seguradora? As demais opções desta rodada serão marcadas como perdidas automaticamente.')) return
     setProcessando(cotacaoId)
     setErroWorkflow(null)
     try {
@@ -225,12 +233,12 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado, perfil, navigate }
     }
   }
 
-  async function handleAprovar(cotacaoId) {
-    if (!window.confirm('Aprovar esta proposta? Um rascunho de apólice será gerado automaticamente — você ainda vai precisar completar os dados do veículo na aba Apólices.')) return
-    setProcessando(cotacaoId)
+  async function handleApoliceFormalizada(apolice) {
+    setProcessando(cotacaoFormalizando.id)
     setErroWorkflow(null)
     try {
-      await aprovarPropostaCotacao(cotacaoId, perfil?.id)
+      await fecharCotacaoComDocumento(cotacaoFormalizando.id, perfil?.id, { apoliceId: apolice.id })
+      setCotacaoFormalizando(null)
       onAtualizado()
     } catch (err) {
       setErroWorkflow(err.message)
@@ -253,7 +261,7 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado, perfil, navigate }
 
   return (
     <div>
-      {!mostrarComparativo && !cotacaoEditando && (
+      {!mostrarComparativo && !cotacaoEditando && !cotacaoFormalizando && (
         <button className="ls-btn ls-btn-accent" onClick={() => setMostrarComparativo(true)}>
           📊 Cotador Comparativo
         </button>
@@ -282,6 +290,22 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado, perfil, navigate }
         />
       )}
 
+      {cotacaoFormalizando && (
+        <div>
+          <p className="config-instrucao">
+            Formalizando a Apólice da cotação com{' '}
+            <strong>{cotacaoFormalizando.operadora?.nome ?? cotacaoFormalizando.operadora_nome_livre}</strong> —
+            preencha os dados reais. Salvar aqui fecha a cotação de vez.
+          </p>
+          <ApoliceAutoForm
+            clienteProspectId={clienteId}
+            tipoPessoa={tipoPessoa}
+            onSalvo={handleApoliceFormalizada}
+            onCancelar={() => setCotacaoFormalizando(null)}
+          />
+        </div>
+      )}
+
       {cotacoes.length === 0 ? (
         <p className="cliente-vazio">Nenhuma cotação registrada ainda.</p>
       ) : (
@@ -295,7 +319,7 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado, perfil, navigate }
               onEditar={setCotacaoEditando}
               onExcluir={handleExcluir}
               onFechar={handleFechar}
-              onAprovar={handleAprovar}
+              onFormalizar={setCotacaoFormalizando}
               processando={processando}
             />
           ))}
@@ -319,15 +343,16 @@ function CotacoesAutoTab({ clienteId, cotacoes, onAtualizado, perfil, navigate }
   )
 }
 
-function GrupoComparativo({ itens, onEditar, onExcluir, onFechar, onAprovar, processando }) {
+function GrupoComparativo({ itens, onEditar, onExcluir, onFechar, onFormalizar, processando }) {
   const menorValor = Math.min(...itens.map((i) => Number(i.valor_total ?? Infinity)))
   const contexto = itens[0]?.contexto_veiculo
 
   const ROTULO_STATUS = {
-    em_analise: { texto: 'Em análise', cor: 'var(--lcds-text-secondary, #94a3b8)' },
-    proposta_emitida: { texto: 'Proposta emitida', cor: 'var(--lcds-gold, #f59e0b)' },
-    aprovada: { texto: 'Aprovada', cor: 'var(--lcds-success, #10b981)' },
-    recusada: { texto: 'Recusada', cor: 'var(--lcds-text-muted, #64748b)' },
+    em_negociacao: { texto: 'Em negociação', cor: 'var(--lcds-text-secondary, #94a3b8)' },
+    emissao: { texto: 'Emissão — formalizar apólice', cor: 'var(--lcds-gold, #f59e0b)' },
+    fechada: { texto: 'Fechada', cor: 'var(--lcds-success, #10b981)' },
+    perdida: { texto: 'Perdida', cor: 'var(--lcds-text-muted, #64748b)' },
+    expirada: { texto: 'Expirada', cor: 'var(--lcds-text-muted, #64748b)' },
   }
 
   function handleImprimir() {
@@ -379,9 +404,9 @@ function GrupoComparativo({ itens, onEditar, onExcluir, onFechar, onAprovar, pro
         </thead>
         <tbody>
           {itens.map((i) => {
-            const status = ROTULO_STATUS[i.status ?? 'em_analise'] ?? ROTULO_STATUS.em_analise
-            const podeFechar = (i.status ?? 'em_analise') === 'em_analise'
-            const podeAprovar = i.status === 'proposta_emitida'
+            const status = ROTULO_STATUS[i.status ?? 'em_negociacao'] ?? ROTULO_STATUS.em_negociacao
+            const podeFechar = (i.status ?? 'em_negociacao') === 'em_negociacao'
+            const podeFormalizar = i.status === 'emissao'
             return (
               <tr key={i.id} style={Number(i.valor_total) === menorValor ? { background: 'var(--ls-accent-soft)', fontWeight: 600 } : {}}>
                 <td>{i.operadora?.nome ?? i.operadora_nome_livre ?? '—'}{Number(i.valor_total) === menorValor && ' 🏆'}</td>
@@ -389,7 +414,7 @@ function GrupoComparativo({ itens, onEditar, onExcluir, onFechar, onAprovar, pro
                 <td>{i.observacoes ?? '—'}</td>
                 <td style={{ color: status.cor, fontWeight: 600 }}>
                   {status.texto}
-                  {i.apolice_id && <div style={{ fontSize: '0.75rem', fontWeight: 400 }}>Rascunho de apólice gerado — complete em Apólices</div>}
+                  {i.status === 'fechada' && i.apolice_id && <div style={{ fontSize: '0.75rem', fontWeight: 400 }}>Apólice gerada — veja em Apólices</div>}
                 </td>
                 <td className="cliente-tabela-acoes">
                   {podeFechar && (
@@ -397,9 +422,9 @@ function GrupoComparativo({ itens, onEditar, onExcluir, onFechar, onAprovar, pro
                       {processando === i.id ? '...' : 'Fechar com esta'}
                     </button>
                   )}
-                  {podeAprovar && (
-                    <button className="cliente-tabela-btn" disabled={processando === i.id} onClick={() => onAprovar(i.id)}>
-                      {processando === i.id ? '...' : 'Aprovar Proposta'}
+                  {podeFormalizar && (
+                    <button className="cliente-tabela-btn" disabled={processando === i.id} onClick={() => onFormalizar(i)}>
+                      {processando === i.id ? '...' : 'Formalizar Apólice'}
                     </button>
                   )}
                   <button className="cliente-tabela-btn" onClick={() => onEditar(i)}>Editar</button>

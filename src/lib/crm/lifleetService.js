@@ -101,6 +101,8 @@ export async function atualizarApoliceAuto({ apoliceId, clienteProspectId, tipoP
   if (dados.vigencia_fim && clienteProspectId) {
     await atualizarClienteProspect(clienteProspectId, { data_vigencia: dados.vigencia_fim })
   }
+
+  return { id: apoliceId, ...dados }
 }
 
 /** Exclui uma apólice (os veículos dela saem juntos, via cascade no banco) */

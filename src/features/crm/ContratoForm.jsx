@@ -146,12 +146,13 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, onS
         anexo_proposta_url: anexoPropostaUrl,
       }
 
+      let contratoResultado
       if (contratoExistente) {
-        await atualizarContrato(contratoExistente.id, dados, itens)
+        contratoResultado = await atualizarContrato(contratoExistente.id, dados, itens)
       } else {
-        await criarContrato(clienteProspectId, dados, itens)
+        contratoResultado = await criarContrato(clienteProspectId, dados, itens)
       }
-      onSalvo()
+      onSalvo(contratoResultado)
     } catch (err) {
       setErro(err.message)
     } finally {

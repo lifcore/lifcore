@@ -86,8 +86,9 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
         vigencia_fim: vigenciaFim || null,
       }
 
+      let apoliceResultado
       if (apoliceExistente) {
-        await atualizarApoliceAuto({
+        apoliceResultado = await atualizarApoliceAuto({
           apoliceId: apoliceExistente.id,
           clienteProspectId,
           tipoPessoa,
@@ -96,7 +97,7 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
         })
       } else {
         const { data: org } = await operacional.from('organizacoes').select('id').limit(1).single()
-        await criarApoliceAuto({
+        apoliceResultado = await criarApoliceAuto({
           corretorId: perfil.id,
           organizacaoId: org.id,
           clienteProspectId,
@@ -105,7 +106,7 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
           veiculos: veiculosLimpos,
         })
       }
-      onSalvo()
+      onSalvo(apoliceResultado)
     } catch (err) {
       setErro(err.message)
     } finally {

@@ -11,7 +11,8 @@ import {
   adicionarAtualizacaoManual,
   excluirContrato,
   excluirCotacao,
-  avancarEtapaComercial,
+  fecharCotacaoComOpcao,
+  fecharCotacaoComDocumento,
   calcularPorte,
   transferirClienteIndividual,
 } from '../../lib/crm/clientesService'
@@ -599,18 +600,33 @@ function ContratosTab({ contratos, clienteProspectId, onAtualizado }) {
   )
 }
 
-const ROTULO_ETAPA_LIFCARE = {
-  em_analise: 'Em análise',
-  proposta_emitida: 'Proposta emitida',
-  analise_operadora: 'Em análise pela operadora',
-  assinatura: 'Aguardando assinatura',
-  aprovada: 'Contrato emitido',
-  recusada: 'Recusada',
+/**
+ * Rótulos do ciclo comercial universal (BMR-004/CLU-002, Fase 2 —
+ * 11/08). Substitui o antigo ROTULO_ETAPA_LIFCARE (5 etapas
+ * específicas do Lifcare, que deixaram de existir na Fase 1).
+ */
+const ROTULO_STATUS_COTACAO = {
+  em_negociacao: { texto: 'Em negociação', cor: 'var(--lcds-text-secondary, #94a3b8)' },
+  emissao: { texto: 'Emissão — formalizar contrato', cor: 'var(--lcds-gold, #f59e0b)' },
+  fechada: { texto: 'Fechada', cor: 'var(--lcds-success, #10b981)' },
+  perdida: { texto: 'Perdida', cor: 'var(--lcds-text-muted, #64748b)' },
+  expirada: { texto: 'Expirada', cor: 'var(--lcds-text-muted, #64748b)' },
 }
 
+/**
+ * ATUALIZADO (BMR-004/CLU-002, Fase 2 — 11/08): antes usava uma lista
+ * de 5 etapas específicas do Lifcare e `avancarEtapaComercial`, que
+ * autogerava um Contrato com dado mínimo ao chegar na etapa final —
+ * exatamente o que o Chief travou como proibido. Agora: "Fechar com
+ * esta" avança em_negociacao→emissao (`fecharCotacaoComOpcao`); em
+ * emissao, "Formalizar Contrato" abre o ContratoForm de verdade — o
+ * corretor preenche os dados reais, e o Salvar chama
+ * `fecharCotacaoComDocumento`, fechando a cotação de fato.
+ */
 function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [cotacaoEditando, setCotacaoEditando] = useState(null)
+  const [cotacaoFormalizando, setCotacaoFormalizando] = useState(null)
   const [processando, setProcessando] = useState(null)
   const [erroWorkflow, setErroWorkflow] = useState(null)
 
@@ -620,12 +636,26 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
     onAtualizado()
   }
 
-  async function handleAvancar(cotacaoId, proximaEtapaLabel) {
-    if (!window.confirm(`Avançar esta cotação para "${proximaEtapaLabel}"?`)) return
+  async function handleFechar(cotacaoId) {
+    if (!window.confirm('O cliente escolheu esta opção? A cotação vai para Emissão.')) return
     setProcessando(cotacaoId)
     setErroWorkflow(null)
     try {
-      await avancarEtapaComercial(cotacaoId, perfil?.id)
+      await fecharCotacaoComOpcao(cotacaoId, perfil?.id)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
+  }
+
+  async function handleContratoFormalizado(contrato) {
+    setProcessando(cotacaoFormalizando.id)
+    setErroWorkflow(null)
+    try {
+      await fecharCotacaoComDocumento(cotacaoFormalizando.id, perfil?.id, { contratoId: contrato.id })
+      setCotacaoFormalizando(null)
       onAtualizado()
     } catch (err) {
       setErroWorkflow(err.message)
@@ -636,7 +666,7 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
 
   return (
     <div>
-      {!mostrarForm && !cotacaoEditando && (
+      {!mostrarForm && !cotacaoEditando && !cotacaoFormalizando && (
         <button className="ls-btn ls-btn-accent" onClick={() => setMostrarForm(true)}>
           + Registrar Cotação
         </button>
@@ -658,6 +688,20 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
         />
       )}
 
+      {cotacaoFormalizando && (
+        <div>
+          <p className="config-instrucao">
+            Formalizando o Contrato da cotação com <strong>{cotacaoFormalizando.operadora_nome_livre}</strong> —
+            preencha os dados reais. Salvar aqui fecha a cotação de vez.
+          </p>
+          <ContratoForm
+            clienteProspectId={clienteId}
+            onSalvo={handleContratoFormalizado}
+            onCancelar={() => setCotacaoFormalizando(null)}
+          />
+        </div>
+      )}
+
       {erroWorkflow && <p className="ls-modal-erro">{erroWorkflow}</p>}
 
       {cotacoes.length === 0 ? (
@@ -665,11 +709,9 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
       ) : (
         <div className="cotacoes-historico" style={{ marginTop: '1rem' }}>
           {cotacoes.map((cot) => {
-            const etapas = ['em_analise', 'proposta_emitida', 'analise_operadora', 'assinatura', 'aprovada']
-            const etapaAtual = cot.status ?? 'em_analise'
-            const indiceAtual = etapas.indexOf(etapaAtual)
-            const proximaEtapa = etapas[indiceAtual + 1]
-            const podeAvancar = etapaAtual !== 'recusada' && proximaEtapa
+            const status = ROTULO_STATUS_COTACAO[cot.status ?? 'em_negociacao'] ?? ROTULO_STATUS_COTACAO.em_negociacao
+            const podeFechar = (cot.status ?? 'em_negociacao') === 'em_negociacao'
+            const podeFormalizar = cot.status === 'emissao'
 
             return (
               <div key={cot.id} className="ls-card cotacao-item">
@@ -678,9 +720,7 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                   <span className="ls-badge ls-badge-prospect">{cot.porte}</span>
                   <span>{cot.numero_vidas} vidas</span>
                   <span>{formatarDataBR(cot.data_cotacao)}</span>
-                  <span style={{ fontWeight: 600, color: etapaAtual === 'recusada' ? '#64748b' : '#f59e0b' }}>
-                    {ROTULO_ETAPA_LIFCARE[etapaAtual] ?? etapaAtual}
-                  </span>
+                  <span style={{ fontWeight: 600, color: status.cor }}>{status.texto}</span>
                 </div>
                 {cot.itens_cotacao?.length > 0 && (
                   <div className="cotacao-item-valores">
@@ -692,16 +732,25 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                   </div>
                 )}
                 {cot.contrato_id && (
-                  <div className="kpi-detalhe" style={{ margin: '0.25rem 0 0' }}>Contrato gerado — complete em Contratos</div>
+                  <div className="kpi-detalhe" style={{ margin: '0.25rem 0 0' }}>Contrato gerado — veja em Contratos</div>
                 )}
                 <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
-                  {podeAvancar && (
+                  {podeFechar && (
                     <button
                       className="cliente-tabela-btn"
                       disabled={processando === cot.id}
-                      onClick={() => handleAvancar(cot.id, ROTULO_ETAPA_LIFCARE[proximaEtapa] ?? proximaEtapa)}
+                      onClick={() => handleFechar(cot.id)}
                     >
-                      {processando === cot.id ? '...' : `Avançar para: ${ROTULO_ETAPA_LIFCARE[proximaEtapa] ?? proximaEtapa}`}
+                      {processando === cot.id ? '...' : 'Fechar com esta (ir pra Emissão)'}
+                    </button>
+                  )}
+                  {podeFormalizar && (
+                    <button
+                      className="cliente-tabela-btn"
+                      disabled={processando === cot.id}
+                      onClick={() => setCotacaoFormalizando(cot)}
+                    >
+                      {processando === cot.id ? '...' : 'Formalizar Contrato'}
                     </button>
                   )}
                   <button className="cliente-tabela-btn" onClick={() => setCotacaoEditando(cot)}>Editar</button>
