@@ -4,9 +4,9 @@ import '../../styles/lcds-tokens.css'
 import { useNavigate } from 'react-router-dom'
 import {
   listarClientesProspects,
-  atualizarStatusClienteProspect,
   listarVigenciasProximas,
 } from '../../lib/crm/clientesService'
+import { listarClienteIdsComCotacaoAberta } from '../../lib/crm/posicaoComercialService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
 import { formatarDataBR, dataLocalISO } from '../../lib/utils/formatarData'
 import { calcularNivelPrazo } from '../../lib/utils/prazoBadge'
@@ -38,6 +38,7 @@ export default function PipelineLishieldPage() {
   const { perfil } = useAuth()
   const ehMaster = perfil?.papel === 'master'
   const [itens, setItens] = useState([])
+  const [idsComCotacaoAberta, setIdsComCotacaoAberta] = useState(new Set())
   const [vigencias, setVigencias] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [modalAberto, setModalAberto] = useState(false)
@@ -64,11 +65,17 @@ export default function PipelineLishieldPage() {
       listarClientesProspects({ mostrarFuturas: mostrarFuturas || busca.trim().length > 0, modulo: 'lishield', corretorId: corretorVisualizado }),
       listarVigenciasProximas(90, 'lishield', corretorVisualizado),
     ])
+    const idsAbertos = await listarClienteIdsComCotacaoAberta(lista.map((i) => i.id))
     setItens(lista)
+    setIdsComCotacaoAberta(idsAbertos)
     setVigencias(vigenciasProximas)
     setCarregando(false)
   }
 
+  /**
+   * BMR-004/CLU-002, Fase 3 (11/08): colunas CALCULADAS — ver mesma
+   * lógica em PipelinePage.jsx (Lifcare).
+   */
   function itensDaColuna(status) {
     const filtrados = busca.trim()
       ? itens.filter(
@@ -78,14 +85,10 @@ export default function PipelineLishieldPage() {
             i.cpf?.toLowerCase().includes(busca.toLowerCase())
         )
       : itens
-    return filtrados.filter((i) => i.status === status)
-  }
 
-  async function handleDrop(e, novoStatus) {
-    e.preventDefault()
-    const id = e.dataTransfer.getData('text/plain')
-    await atualizarStatusClienteProspect(id, novoStatus)
-    carregar()
+    if (status === 'cliente') return filtrados.filter((i) => i.status === 'cliente')
+    if (status === 'em_negociacao') return filtrados.filter((i) => idsComCotacaoAberta.has(i.id))
+    return filtrados.filter((i) => i.status !== 'cliente' && !idsComCotacaoAberta.has(i.id))
   }
 
   const hoje = dataLocalISO()
@@ -135,8 +138,6 @@ export default function PipelineLishieldPage() {
             <div
               key={coluna.status}
               className="pipeline-coluna"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => handleDrop(e, coluna.status)}
             >
               <div className="pipeline-coluna-titulo">
                 <span>{coluna.titulo}</span>
@@ -157,8 +158,6 @@ export default function PipelineLishieldPage() {
                     <div
                       key={item.id}
                       className={`pipeline-card ${atrasada ? 'pipeline-card-atrasada' : ''}`}
-                      draggable
-                      onDragStart={(e) => e.dataTransfer.setData('text/plain', item.id)}
                       onClick={() => navigate(`/lishield/clientes/${item.id}`)}
                     >
                       <div className="pipeline-card-topo">
