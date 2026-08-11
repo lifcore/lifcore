@@ -4,6 +4,7 @@ import { operacional } from '../../lib/supabaseSchemas'
 import { parseValorBR } from '../../lib/crm/clientesService'
 import { criarApoliceAuto, atualizarApoliceAuto } from '../../lib/crm/lifleetService'
 import { listarCatalogoSeguradoras } from '../../lib/crm/apolicesService'
+import { listarProdutos } from '../../lib/crm/catalogoInstitucionalService'
 
 function novoVeiculo() {
   return {
@@ -22,6 +23,7 @@ function novoVeiculo() {
 
 export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apoliceExistente, onSalvo, onCancelar }) {
   const { perfil } = useAuth()
+  const [produto, setProduto] = useState(apoliceExistente?.produto ?? '')
   const [seguradoraNome, setSeguradoraNome] = useState(apoliceExistente?.operadora_nome_livre ?? '')
   const [numeroApolice, setNumeroApolice] = useState(apoliceExistente?.numero_apolice ?? '')
   const [premio, setPremio] = useState(apoliceExistente?.premio ?? '')
@@ -30,6 +32,7 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
   const [vigenciaInicio, setVigenciaInicio] = useState(apoliceExistente?.vigencia_inicio ?? '')
   const [vigenciaFim, setVigenciaFim] = useState(apoliceExistente?.vigencia_fim ?? '')
   const [catalogoSeguradoras, setCatalogoSeguradoras] = useState([])
+  const [produtos, setProdutos] = useState([])
   const [veiculos, setVeiculos] = useState(() => {
     if (apoliceExistente?.veiculos?.length) {
       return apoliceExistente.veiculos.map((v) => ({ ...v, id: v.id ?? crypto.randomUUID() }))
@@ -43,6 +46,7 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
 
   useEffect(() => {
     listarCatalogoSeguradoras().then(setCatalogoSeguradoras).catch(() => {})
+    listarProdutos({ modulo: 'auto' }).then(setProdutos).catch(() => {})
   }, [])
 
   function atualizarVeiculo(id, campo, valor) {
@@ -59,6 +63,10 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
   }
 
   async function handleSalvar() {
+    if (!produto) {
+      setErro('Selecione o produto.')
+      return
+    }
     if (!seguradoraNome.trim() || !premio) {
       setErro('Informe ao menos a seguradora e o valor da apólice.')
       return
@@ -77,6 +85,7 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
       }))
 
       const dados = {
+        produto,
         operadora_nome_livre: seguradoraNome,
         numero_apolice: numeroApolice || null,
         premio: parseValorBR(premio),
@@ -124,6 +133,15 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
 
       <div className="cotacao-form-linha">
         <div>
+          <label>Produto</label>
+          <select value={produto} onChange={(e) => setProduto(e.target.value)}>
+            <option value="">Selecione...</option>
+            {produtos.map((p) => (
+              <option key={p.id} value={p.nome}>{p.nome}</option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label>Seguradora</label>
           <input
             list="lista-seguradoras-apolice-lifleet"
@@ -162,7 +180,7 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
       </div>
 
       <h4 style={{ marginTop: '1.25rem' }}>
-        {ehPessoaFisica ? 'Veículo' : 'Veículo(s) — mais de 1 vira Frota automaticamente'}
+        {ehPessoaFisica ? 'Veículo' : 'Veículo(s)'}
       </h4>
 
       {veiculos.map((v, index) => (

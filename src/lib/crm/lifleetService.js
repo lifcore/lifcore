@@ -50,7 +50,6 @@ export async function criarApoliceAuto({ corretorId, organizacaoId, clienteProsp
       ...dados,
       cliente_prospect_id: clienteProspectId,
       nome_cliente: cliente.razao_social,
-      produto: veiculos.length > 1 ? 'Frota' : 'Auto',
       origem_venda: origemVenda || 'migracao',
     },
   })
@@ -88,10 +87,7 @@ export async function criarApoliceAuto({ corretorId, organizacaoId, clienteProsp
 export async function atualizarApoliceAuto({ apoliceId, clienteProspectId, tipoPessoa, dados, veiculos }) {
   validarQuantidadeVeiculos(tipoPessoa, veiculos)
 
-  await atualizarApolice(apoliceId, {
-    ...dados,
-    produto: veiculos.length > 1 ? 'Frota' : 'Auto',
-  })
+  await atualizarApolice(apoliceId, dados)
 
   await operacional.from('veiculos').delete().eq('apolice_id', apoliceId)
   const veiculosComApoliceId = veiculos.map((v) => ({ ...v, apolice_id: apoliceId }))
