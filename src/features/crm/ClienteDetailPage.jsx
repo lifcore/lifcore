@@ -696,6 +696,8 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
           </p>
           <ContratoForm
             clienteProspectId={clienteId}
+            operadoraInicial={cotacaoFormalizando.operadora_nome_livre}
+            itensIniciais={cotacaoFormalizando.itens_cotacao}
             onSalvo={handleContratoFormalizado}
             onCancelar={() => setCotacaoFormalizando(null)}
           />

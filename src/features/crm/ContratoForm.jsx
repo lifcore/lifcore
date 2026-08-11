@@ -36,8 +36,8 @@ function reconstruirBlocos(itensContrato) {
   return Object.values(blocosPorPlano)
 }
 
-export default function ContratoForm({ clienteProspectId, contratoExistente, onSalvo, onCancelar }) {
-  const [operadoraNome, setOperadoraNome] = useState(contratoExistente?.operadora_nome_livre ?? '')
+export default function ContratoForm({ clienteProspectId, contratoExistente, operadoraInicial, itensIniciais, onSalvo, onCancelar }) {
+  const [operadoraNome, setOperadoraNome] = useState(contratoExistente?.operadora_nome_livre ?? operadoraInicial ?? '')
   const [modalidade, setModalidade] = useState(contratoExistente?.modalidade ?? '')
   const [numeroApolice, setNumeroApolice] = useState(contratoExistente?.numero_apolice ?? '')
   const [vigenciaInicio, setVigenciaInicio] = useState(contratoExistente?.vigencia_inicio ?? '')
@@ -48,7 +48,7 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, onS
   const [anexoContratoUrl, setAnexoContratoUrl] = useState(contratoExistente?.anexo_contrato_url ?? null)
   const [anexoPropostaUrl, setAnexoPropostaUrl] = useState(contratoExistente?.anexo_proposta_url ?? null)
   const [enviandoAnexo, setEnviandoAnexo] = useState(null)
-  const [blocosPlano, setBlocosPlano] = useState(() => reconstruirBlocos(contratoExistente?.itens_contrato))
+  const [blocosPlano, setBlocosPlano] = useState(() => reconstruirBlocos(contratoExistente?.itens_contrato ?? itensIniciais))
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
 
@@ -131,6 +131,12 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, onS
             })
           }
         }
+      }
+
+      if (itens.length === 0) {
+        setErro('Informe ao menos uma faixa etária com vidas e valor — sem isso o Contrato salva sem receita nenhuma.')
+        setSalvando(false)
+        return
       }
 
       const dados = {
