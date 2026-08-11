@@ -48,18 +48,19 @@ export default function ApoliceLishieldForm({ clienteProspectId, apoliceExistent
         detalhes_produto: detalhesProduto || null,
       }
 
+      let apoliceResultado
       if (apoliceExistente) {
-        await atualizarApoliceLishield({ apoliceId: apoliceExistente.id, clienteProspectId, dados })
+        apoliceResultado = await atualizarApoliceLishield({ apoliceId: apoliceExistente.id, clienteProspectId, dados })
       } else {
         const { data: org } = await operacional.from('organizacoes').select('id').limit(1).single()
-        await criarApoliceLishield({
+        apoliceResultado = await criarApoliceLishield({
           corretorId: perfil.id,
           organizacaoId: org.id,
           clienteProspectId,
           dados,
         })
       }
-      onSalvo()
+      onSalvo(apoliceResultado)
     } catch (err) {
       setErro(err.message)
     } finally {

@@ -67,6 +67,7 @@ export async function atualizarApoliceLifsure({ apoliceId, clienteProspectId, da
   if (dados.vigencia_fim && clienteProspectId) {
     await atualizarClienteProspect(clienteProspectId, { data_vigencia: dados.vigencia_fim })
   }
+  return { id: apoliceId, ...dados }
 }
 
 /** Exclui uma apólice do Lifsure */

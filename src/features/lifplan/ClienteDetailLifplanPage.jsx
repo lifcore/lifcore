@@ -10,6 +10,8 @@ import {
   atualizarDemanda,
   adicionarAtualizacaoManual,
   excluirCotacao,
+  fecharCotacaoComOpcao,
+  fecharCotacaoComDocumento,
 } from '../../lib/crm/clientesService'
 import { listarContratosLifplanDoCliente, excluirContratoLifplan } from '../../lib/crm/lifplanService'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
@@ -168,7 +170,7 @@ export default function ClienteDetailLifplanPage() {
         )}
 
         {abaAtiva === 'Propostas' && (
-          <PropostasLifplanTab clienteId={cliente.id} cotacoes={cotacoes} onAtualizado={carregar} />
+          <PropostasLifplanTab clienteId={cliente.id} cotacoes={cotacoes} onAtualizado={carregar} perfil={perfil} />
         )}
 
         {abaAtiva === 'Contratos' && (
@@ -196,9 +198,33 @@ export default function ClienteDetailLifplanPage() {
   )
 }
 
-function PropostasLifplanTab({ clienteId, cotacoes, onAtualizado }) {
+const ROTULO_STATUS_PROPOSTA = {
+  em_negociacao: { texto: 'Em negociação', cor: '#94a3b8' },
+  emissao: { texto: 'Emissão — formalizar contrato', cor: '#f59e0b' },
+  fechada: { texto: 'Fechada', cor: '#10b981' },
+  perdida: { texto: 'Perdida', cor: '#64748b' },
+  expirada: { texto: 'Expirada', cor: '#64748b' },
+}
+
+/**
+ * ATUALIZADO (BMR-004/CLU-002, Fase 2 — 11/08): antes esta aba não
+ * tinha ciclo comercial NENHUM — só criar/editar/excluir Proposta, sem
+ * nenhum vínculo com Contratos. Primeira ligação real ao motor
+ * universal ("comunicação universal sem exceção nos 5 módulos",
+ * diretriz do Chief). "Formalizar Contrato" abre o ContratoLifplanForm
+ * de verdade; o Salvar fecha a proposta via fecharCotacaoComDocumento.
+ *
+ * Nota técnica: o "Contrato" do Lifplan, apesar do nome na tela, é
+ * gravado na tabela `apolices` (mesma dos outros módulos — ver
+ * lifplanService.js) — por isso o vínculo abaixo usa `apoliceId`, não
+ * `contratoId`, mesmo a interface chamando de "Contrato".
+ */
+function PropostasLifplanTab({ clienteId, cotacoes, onAtualizado, perfil }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [propostaEditando, setPropostaEditando] = useState(null)
+  const [propostaFormalizando, setPropostaFormalizando] = useState(null)
+  const [processando, setProcessando] = useState(null)
+  const [erroWorkflow, setErroWorkflow] = useState(null)
 
   async function handleExcluir(propostaId) {
     if (!window.confirm('Excluir esta proposta?')) return
@@ -206,9 +232,37 @@ function PropostasLifplanTab({ clienteId, cotacoes, onAtualizado }) {
     onAtualizado()
   }
 
+  async function handleFechar(propostaId) {
+    if (!window.confirm('O cliente escolheu esta opção? A proposta vai para Emissão.')) return
+    setProcessando(propostaId)
+    setErroWorkflow(null)
+    try {
+      await fecharCotacaoComOpcao(propostaId, perfil?.id)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
+  }
+
+  async function handleContratoFormalizado(contrato) {
+    setProcessando(propostaFormalizando.id)
+    setErroWorkflow(null)
+    try {
+      await fecharCotacaoComDocumento(propostaFormalizando.id, perfil?.id, { apoliceId: contrato.id })
+      setPropostaFormalizando(null)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
+  }
+
   return (
     <div>
-      {!mostrarForm && !propostaEditando && (
+      {!mostrarForm && !propostaEditando && !propostaFormalizando && (
         <button className="ls-btn ls-btn-accent" onClick={() => setMostrarForm(true)}>
           + Registrar Proposta
         </button>
@@ -230,23 +284,58 @@ function PropostasLifplanTab({ clienteId, cotacoes, onAtualizado }) {
         />
       )}
 
+      {propostaFormalizando && (
+        <div>
+          <p className="config-instrucao">
+            Formalizando o Contrato da proposta com <strong>{propostaFormalizando.operadora_nome_livre}</strong> —
+            preencha os dados reais. Salvar aqui fecha a proposta de vez.
+          </p>
+          <ContratoLifplanForm
+            clienteProspectId={clienteId}
+            onSalvo={handleContratoFormalizado}
+            onCancelar={() => setPropostaFormalizando(null)}
+          />
+        </div>
+      )}
+
+      {erroWorkflow && <p className="ls-modal-erro">{erroWorkflow}</p>}
+
       {cotacoes.length === 0 ? (
         <p className="cliente-vazio">Nenhuma proposta registrada ainda.</p>
       ) : (
         <div className="cotacoes-historico" style={{ marginTop: '1rem' }}>
-          {cotacoes.map((cot) => (
-            <div key={cot.id} className="ls-card cotacao-item">
-              <div className="cotacao-item-header">
-                <strong>{cot.operadora_nome_livre}</strong>
-                <span>R$ {Number(cot.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                <span>Válida até: {cot.validade ? formatarDataBR(cot.validade) : '—'}</span>
+          {cotacoes.map((cot) => {
+            const status = ROTULO_STATUS_PROPOSTA[cot.status ?? 'em_negociacao'] ?? ROTULO_STATUS_PROPOSTA.em_negociacao
+            const podeFechar = (cot.status ?? 'em_negociacao') === 'em_negociacao'
+            const podeFormalizar = cot.status === 'emissao'
+            return (
+              <div key={cot.id} className="ls-card cotacao-item">
+                <div className="cotacao-item-header">
+                  <strong>{cot.operadora_nome_livre}</strong>
+                  <span>R$ {Number(cot.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  <span>Válida até: {cot.validade ? formatarDataBR(cot.validade) : '—'}</span>
+                  <span style={{ color: status.cor, fontWeight: 600 }}>{status.texto}</span>
+                </div>
+                {cot.status === 'fechada' && cot.apolice_id && (
+                  <div className="kpi-detalhe" style={{ margin: '0.25rem 0 0' }}>Contrato gerado — veja em Contratos</div>
+                )}
+                <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
+                  {podeFechar && (
+                    <button className="cliente-tabela-btn" disabled={processando === cot.id} onClick={() => handleFechar(cot.id)}>
+                      {processando === cot.id ? '...' : 'Fechar com esta'}
+                    </button>
+                  )}
+                  {podeFormalizar && (
+                    <button className="cliente-tabela-btn" disabled={processando === cot.id} onClick={() => setPropostaFormalizando(cot)}>
+                      {processando === cot.id ? '...' : 'Formalizar Contrato'}
+                    </button>
+                  )}
+                  <button className="cliente-tabela-btn" onClick={() => setPropostaEditando(cot)}>Editar</button>
+                  <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(cot.id)}>Excluir</button>
+                </div>
               </div>
-              <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
-                <button className="cliente-tabela-btn" onClick={() => setPropostaEditando(cot)}>Editar</button>
-                <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(cot.id)}>Excluir</button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

@@ -39,6 +39,7 @@ export async function atualizarContratoLifplan({ contratoId, clienteProspectId, 
   if (dados.vigencia_fim && clienteProspectId) {
     await atualizarClienteProspect(clienteProspectId, { data_vigencia: dados.vigencia_fim })
   }
+  return { id: contratoId, ...dados }
 }
 
 /** Exclui um Contrato do Lifplan */

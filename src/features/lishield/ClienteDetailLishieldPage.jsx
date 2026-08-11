@@ -11,7 +11,7 @@ import {
   adicionarAtualizacaoManual,
   excluirCotacao,
   fecharCotacaoComOpcao,
-  aprovarPropostaCotacao,
+  fecharCotacaoComDocumento,
 } from '../../lib/crm/clientesService'
 import { listarApolicesLishieldDoCliente, excluirApoliceLishield } from '../../lib/crm/lishieldService'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
@@ -195,15 +195,23 @@ export default function ClienteDetailLishieldPage() {
 }
 
 const ROTULO_STATUS_COTACAO = {
-  em_analise: { texto: 'Em análise', cor: '#94a3b8' },
-  proposta_emitida: { texto: 'Proposta emitida', cor: '#f59e0b' },
-  aprovada: { texto: 'Aprovada', cor: '#10b981' },
-  recusada: { texto: 'Recusada', cor: '#64748b' },
+  em_negociacao: { texto: 'Em negociação', cor: '#94a3b8' },
+  emissao: { texto: 'Emissão — formalizar apólice', cor: '#f59e0b' },
+  fechada: { texto: 'Fechada', cor: '#10b981' },
+  perdida: { texto: 'Perdida', cor: '#64748b' },
+  expirada: { texto: 'Expirada', cor: '#64748b' },
 }
 
+/**
+ * ATUALIZADO (BMR-004/CLU-002, Fase 2 — 11/08): "Aprovar Proposta"
+ * autogerava apólice com dado mínimo — proibido pelo Chief. "Formalizar
+ * Apólice" abre o ApoliceLishieldForm de verdade; o Salvar fecha a
+ * cotação via fecharCotacaoComDocumento.
+ */
 function CotacoesLishieldTab({ clienteId, cotacoes, onAtualizado, perfil }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [cotacaoEditando, setCotacaoEditando] = useState(null)
+  const [cotacaoFormalizando, setCotacaoFormalizando] = useState(null)
   const [processando, setProcessando] = useState(null)
   const [erroWorkflow, setErroWorkflow] = useState(null)
 
@@ -214,7 +222,7 @@ function CotacoesLishieldTab({ clienteId, cotacoes, onAtualizado, perfil }) {
   }
 
   async function handleFechar(cotacaoId) {
-    if (!window.confirm('Fechar com esta cotação como Proposta?')) return
+    if (!window.confirm('O cliente escolheu esta opção? A cotação vai para Emissão.')) return
     setProcessando(cotacaoId)
     setErroWorkflow(null)
     try {
@@ -227,12 +235,12 @@ function CotacoesLishieldTab({ clienteId, cotacoes, onAtualizado, perfil }) {
     }
   }
 
-  async function handleAprovar(cotacaoId) {
-    if (!window.confirm('Aprovar esta proposta? Um rascunho de apólice será gerado automaticamente.')) return
-    setProcessando(cotacaoId)
+  async function handleApoliceFormalizada(apolice) {
+    setProcessando(cotacaoFormalizando.id)
     setErroWorkflow(null)
     try {
-      await aprovarPropostaCotacao(cotacaoId, perfil?.id)
+      await fecharCotacaoComDocumento(cotacaoFormalizando.id, perfil?.id, { apoliceId: apolice.id })
+      setCotacaoFormalizando(null)
       onAtualizado()
     } catch (err) {
       setErroWorkflow(err.message)
@@ -243,7 +251,7 @@ function CotacoesLishieldTab({ clienteId, cotacoes, onAtualizado, perfil }) {
 
   return (
     <div>
-      {!mostrarForm && !cotacaoEditando && (
+      {!mostrarForm && !cotacaoEditando && !cotacaoFormalizando && (
         <button className="ls-btn ls-btn-accent" onClick={() => setMostrarForm(true)}>
           + Registrar Cotação
         </button>
@@ -265,6 +273,20 @@ function CotacoesLishieldTab({ clienteId, cotacoes, onAtualizado, perfil }) {
         />
       )}
 
+      {cotacaoFormalizando && (
+        <div>
+          <p className="config-instrucao">
+            Formalizando a Apólice da cotação com <strong>{cotacaoFormalizando.operadora_nome_livre}</strong> —
+            preencha os dados reais. Salvar aqui fecha a cotação de vez.
+          </p>
+          <ApoliceLishieldForm
+            clienteProspectId={clienteId}
+            onSalvo={handleApoliceFormalizada}
+            onCancelar={() => setCotacaoFormalizando(null)}
+          />
+        </div>
+      )}
+
       {erroWorkflow && <p className="ls-modal-erro">{erroWorkflow}</p>}
 
       {cotacoes.length === 0 ? (
@@ -272,9 +294,9 @@ function CotacoesLishieldTab({ clienteId, cotacoes, onAtualizado, perfil }) {
       ) : (
         <div className="cotacoes-historico" style={{ marginTop: '1rem' }}>
           {cotacoes.map((cot) => {
-            const status = ROTULO_STATUS_COTACAO[cot.status ?? 'em_analise'] ?? ROTULO_STATUS_COTACAO.em_analise
-            const podeFechar = (cot.status ?? 'em_analise') === 'em_analise'
-            const podeAprovar = cot.status === 'proposta_emitida'
+            const status = ROTULO_STATUS_COTACAO[cot.status ?? 'em_negociacao'] ?? ROTULO_STATUS_COTACAO.em_negociacao
+            const podeFechar = (cot.status ?? 'em_negociacao') === 'em_negociacao'
+            const podeFormalizar = cot.status === 'emissao'
             return (
               <div key={cot.id} className="ls-card cotacao-item">
                 <div className="cotacao-item-header">
@@ -283,8 +305,8 @@ function CotacoesLishieldTab({ clienteId, cotacoes, onAtualizado, perfil }) {
                   <span>Válida até: {cot.validade ? formatarDataBR(cot.validade) : '—'}</span>
                   <span style={{ color: status.cor, fontWeight: 600 }}>{status.texto}</span>
                 </div>
-                {cot.apolice_id && (
-                  <div className="kpi-detalhe" style={{ margin: '0.25rem 0 0' }}>Rascunho de apólice gerado — complete em Apólices</div>
+                {cot.status === 'fechada' && cot.apolice_id && (
+                  <div className="kpi-detalhe" style={{ margin: '0.25rem 0 0' }}>Apólice gerada — veja em Apólices</div>
                 )}
                 <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
                   {podeFechar && (
@@ -292,9 +314,9 @@ function CotacoesLishieldTab({ clienteId, cotacoes, onAtualizado, perfil }) {
                       {processando === cot.id ? '...' : 'Fechar com esta'}
                     </button>
                   )}
-                  {podeAprovar && (
-                    <button className="cliente-tabela-btn" disabled={processando === cot.id} onClick={() => handleAprovar(cot.id)}>
-                      {processando === cot.id ? '...' : 'Aprovar Proposta'}
+                  {podeFormalizar && (
+                    <button className="cliente-tabela-btn" disabled={processando === cot.id} onClick={() => setCotacaoFormalizando(cot)}>
+                      {processando === cot.id ? '...' : 'Formalizar Apólice'}
                     </button>
                   )}
                   <button className="cliente-tabela-btn" onClick={() => setCotacaoEditando(cot)}>Editar</button>

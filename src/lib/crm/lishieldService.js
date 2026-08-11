@@ -70,6 +70,7 @@ export async function atualizarApoliceLishield({ apoliceId, clienteProspectId, d
   if (dados.vigencia_fim && clienteProspectId) {
     await atualizarClienteProspect(clienteProspectId, { data_vigencia: dados.vigencia_fim })
   }
+  return { id: apoliceId, ...dados }
 }
 
 /** Exclui uma apólice do LiShield */

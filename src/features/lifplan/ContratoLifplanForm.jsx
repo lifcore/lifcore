@@ -40,18 +40,19 @@ export default function ContratoLifplanForm({ clienteProspectId, contratoExisten
         detalhes_produto: detalhesProduto || null,
       }
 
+      let contratoResultado
       if (contratoExistente) {
-        await atualizarContratoLifplan({ contratoId: contratoExistente.id, clienteProspectId, dados })
+        contratoResultado = await atualizarContratoLifplan({ contratoId: contratoExistente.id, clienteProspectId, dados })
       } else {
         const { data: org } = await operacional.from('organizacoes').select('id').limit(1).single()
-        await criarContratoLifplan({
+        contratoResultado = await criarContratoLifplan({
           corretorId: perfil.id,
           organizacaoId: org.id,
           clienteProspectId,
           dados,
         })
       }
-      onSalvo()
+      onSalvo(contratoResultado)
     } catch (err) {
       setErro(err.message)
     } finally {

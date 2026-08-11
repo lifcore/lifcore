@@ -48,18 +48,19 @@ export default function ApoliceLifsureForm({ clienteProspectId, apoliceExistente
         detalhes_produto: detalhesProduto || null,
       }
 
+      let apoliceResultado
       if (apoliceExistente) {
-        await atualizarApoliceLifsure({ apoliceId: apoliceExistente.id, clienteProspectId, dados })
+        apoliceResultado = await atualizarApoliceLifsure({ apoliceId: apoliceExistente.id, clienteProspectId, dados })
       } else {
         const { data: org } = await operacional.from('organizacoes').select('id').limit(1).single()
-        await criarApoliceLifsure({
+        apoliceResultado = await criarApoliceLifsure({
           corretorId: perfil.id,
           organizacaoId: org.id,
           clienteProspectId,
           dados,
         })
       }
-      onSalvo()
+      onSalvo(apoliceResultado)
     } catch (err) {
       setErro(err.message)
     } finally {
