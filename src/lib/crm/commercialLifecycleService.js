@@ -148,18 +148,21 @@ export async function recusarSiblingsDoGrupo(cotacaoId, usuarioId) {
  * `lifleetService.criarApoliceAuto` só dispara quando `origemVenda ===
  * 'venda_nova'` é passado explicitamente — e o único formulário real
  * que chama essa função (ApoliceAutoForm.jsx) NUNCA passa esse
- * parâmetro. Ou seja, esse caminho está morto na prática hoje (toda
- * apólice lançada por ali cai em 'migracao', sem gerar comissão). Sem
+ * parâmetro. Ou seja, esse caminho está morto na prática hoje. Sem
  * risco de duplicidade — pode centralizar.
  *
- * `modulo` aqui usa os valores de `clientes_prospects.modulo`
- * ('saude'/'auto'/'lifsure'/'lishield'/'lifplan'), mas os registros
- * existentes em `comissoes.modulo` usam 'lifleet' (não 'auto') —
- * convenção herdada do único lançamento que já existia. Mapeamos
- * abaixo pra manter consistência com o que já está no banco.
+ * CORREÇÃO (11/08): `modulo` aqui já usa os mesmos valores de
+ * `clientes_prospects.modulo` ('saude'/'auto'/'lifsure'/'lishield'/
+ * 'lifplan') — confirmado por consulta direta que `comissoes.modulo`
+ * usa EXATAMENTE essa mesma convenção (constraint real:
+ * saude/auto/lifsure/lishield/lifplan). Não precisa de nenhuma
+ * tradução — a suposição anterior (`auto→'lifleet'`) estava errada e
+ * foi removida; era baseada no único registro legado existente
+ * (lifleetService.criarApoliceAuto grava 'lifleet' hardcoded, valor
+ * que na verdade NUNCA foi válido pra essa constraint — bug latente
+ * separado, não tocado por decisão de escopo).
  */
 const MODULOS_COM_COMISSAO_CENTRALIZADA = ['auto', 'lifsure', 'lishield', 'lifplan']
-const MODULO_PARA_COMISSAO = { auto: 'lifleet', lifsure: 'lifsure', lishield: 'lishield', lifplan: 'lifplan' }
 
 /**
  * Avança a cotação de "em_negociacao" para "emissao" — o corretor
@@ -255,7 +258,7 @@ export async function fecharCotacaoComDocumento(cotacaoId, usuarioId, { apoliceI
           operadoraId: cotacao.operadora_id ?? null,
           apoliceId,
           corretorId: apolice.corretor_id,
-          modulo: MODULO_PARA_COMISSAO[modulo] ?? modulo,
+          modulo,
           valorPremio: apolice.premio,
         })
       } catch (erroComissao) {
