@@ -13,7 +13,6 @@ import {
   excluirComissao,
   lancarAjuste,
   indicadoresOperacionais,
-  obterConciliacao,
   obterFluxoCaixaPrevisto,
   listarContasAReceber,
   resumirPorFaixaAtraso,
@@ -22,6 +21,13 @@ import {
   buscarComissoesGlobal,
   obterHistoricoLancamento,
 } from '../../lib/crm/comissoesService'
+import {
+  listarRecebimentosPendentesConciliacao,
+  buscarVendasCandidatas,
+  conciliarRecebimento,
+  distribuirRecebimento,
+} from '../../lib/crm/comissionamentoService'
+import { useAuth } from '../auth/AuthContext'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
 import { listarGestoresPorOperadora } from '../../lib/crm/seguradorasService'
 import { montarLinkWhatsApp } from '../../lib/crm/templatesService'
@@ -687,46 +693,224 @@ function LinhaRepasse({ linha, nomeCorretor, onAtualizado }) {
   )
 }
 
+/**
+ * FASE 3.1 — Conciliação migrada pro motor real (comissionamentoService.js).
+ *
+ * Deixou de ser uma comparação agregada de previsto x recebido (o
+ * modelo antigo, descartado — "PREVISÃO NÃO É FATO FINANCEIRO") e
+ * passou a ser uma fila de ação: cada recebimento 'importado' é
+ * vinculado individualmente a uma Venda via conciliarRecebimento().
+ *
+ * O botão "Distribuir" em "Conciliados nesta sessão" é temporário:
+ * chama distribuirRecebimento() (3ª função do motor, já homologada)
+ * só pra permitir o teste ponta a ponta antes da Fase 3.2 (Comissões)
+ * existir como aba própria. Nenhuma lógica nova — só está exposta aqui
+ * provisoriamente.
+ */
 function ConciliacaoTab() {
-  const [linhas, setLinhas] = useState(null)
+  const { user } = useAuth()
+  const [fila, setFila] = useState(null)
   const [carregando, setCarregando] = useState(true)
+  const [recemConciliados, setRecemConciliados] = useState([])
+  const [erro, setErro] = useState('')
 
   useEffect(() => {
-    obterConciliacao().then((r) => {
-      setLinhas(r)
-      setCarregando(false)
-    })
+    carregarFila()
   }, [])
 
-  if (carregando) return <p className="cliente-carregando">Carregando conciliação...</p>
+  async function carregarFila() {
+    setCarregando(true)
+    setErro('')
+    try {
+      const dados = await listarRecebimentosPendentesConciliacao()
+      setFila(dados)
+    } catch (e) {
+      setErro(e.message)
+    }
+    setCarregando(false)
+  }
+
+  function handleConciliado(recebimento, venda) {
+    setFila((atual) => atual.filter((r) => r.id !== recebimento.id))
+    setRecemConciliados((atual) => [...atual, { recebimento, venda, distribuido: false, linhas: null }])
+  }
+
+  function handleDistribuido(recebimentoId, linhas) {
+    setRecemConciliados((atual) =>
+      atual.map((item) => (item.recebimento.id === recebimentoId ? { ...item, distribuido: true, linhas } : item))
+    )
+  }
+
+  if (carregando) return <p className="cliente-carregando">Carregando fila de conciliação...</p>
 
   return (
     <div>
+      {erro && <p className="cliente-vazio" style={{ color: '#b23b3b' }}>{erro}</p>}
 
-      {linhas.length === 0 ? (
-        <p className="cliente-vazio">Nenhum lançamento para conciliar ainda.</p>
+      <h3 style={{ marginTop: 0 }}>Aguardando conciliação</h3>
+      {fila.length === 0 ? (
+        <p className="cliente-vazio">Nenhum recebimento aguardando conciliação.</p>
       ) : (
-        <table className="cliente-tabela">
-          <thead>
-            <tr>
-              <th>Seguradora</th><th>Total Lançado</th><th>Total Recebido</th><th>Pendente (geral)</th><th>Atrasado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {linhas.map((l) => (
-              <tr key={l.operadoraId ?? 'sem_seguradora'}>
-                <td>{l.operadora?.nome ?? 'Sem seguradora'}</td>
-                <td>{formatarMoeda(l.totalLancado)}</td>
-                <td>{formatarMoeda(l.totalRecebido)}</td>
-                <td>{formatarMoeda(l.totalPendenteGeral)}</td>
-                <td style={l.totalAtrasado > 0 ? { color: '#b23b3b', fontWeight: 600 } : {}}>
-                  {formatarMoeda(l.totalAtrasado)}
-                  {l.qtdAtrasados > 0 && ` (${l.qtdAtrasados})`}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        fila.map((recebimento) => (
+          <LinhaRecebimentoPendente
+            key={recebimento.id}
+            recebimento={recebimento}
+            usuarioId={user?.id}
+            onConciliado={handleConciliado}
+          />
+        ))
+      )}
+
+      {recemConciliados.length > 0 && (
+        <>
+          <h3>Conciliados nesta sessão</h3>
+          {recemConciliados.map((item) => (
+            <LinhaRecemConciliada
+              key={item.recebimento.id}
+              item={item}
+              usuarioId={user?.id}
+              onDistribuido={handleDistribuido}
+            />
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
+function LinhaRecebimentoPendente({ recebimento, usuarioId, onConciliado }) {
+  const [expandido, setExpandido] = useState(false)
+  const [termo, setTermo] = useState('')
+  const [buscando, setBuscando] = useState(false)
+  const [candidatas, setCandidatas] = useState([])
+  const [vendaSelecionadaId, setVendaSelecionadaId] = useState(null)
+  const [conciliando, setConciliando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  async function handleBuscar() {
+    setBuscando(true)
+    setErro('')
+    try {
+      const resultado = await buscarVendasCandidatas(termo)
+      setCandidatas(resultado)
+    } catch (e) {
+      setErro(e.message)
+    }
+    setBuscando(false)
+  }
+
+  async function handleConfirmar() {
+    if (!vendaSelecionadaId) return
+    setConciliando(true)
+    setErro('')
+    try {
+      await conciliarRecebimento(recebimento.id, { vendaId: vendaSelecionadaId }, usuarioId)
+      const venda = candidatas.find((v) => v.id === vendaSelecionadaId)
+      onConciliado(recebimento, venda)
+    } catch (e) {
+      setErro(e.message)
+    }
+    setConciliando(false)
+  }
+
+  return (
+    <div className="ls-card" style={{ padding: '0.75rem', marginBottom: '0.75rem' }}>
+      <div className="cotacao-form-linha" style={{ alignItems: 'center' }}>
+        <div><strong>Apólice informada:</strong> {recebimento.numero_apolice_informado || '—'}</div>
+        <div><strong>Segurado informado:</strong> {recebimento.segurado_informado || '—'}</div>
+        <div><strong>Data:</strong> {formatarDataBR(recebimento.data_recebimento)}</div>
+        <div><strong>Bruto:</strong> {formatarMoeda(recebimento.valor_bruto)}</div>
+        <div><strong>Desconto:</strong> {formatarMoeda(recebimento.valor_descontos)}</div>
+        <div><strong>Líquido:</strong> {formatarMoeda(recebimento.valor_liquido)}</div>
+        {recebimento.tipo_recebimento && <span className="ls-badge">{recebimento.tipo_recebimento}</span>}
+      </div>
+
+      {!expandido ? (
+        <button className="cliente-tabela-btn" onClick={() => setExpandido(true)}>Conciliar</button>
+      ) : (
+        <div style={{ marginTop: '0.75rem' }}>
+          {erro && <p style={{ color: '#b23b3b' }}>{erro}</p>}
+          <div className="cotacao-form-linha">
+            <input
+              placeholder="Buscar por nº apólice ou nome do segurado"
+              value={termo}
+              onChange={(e) => setTermo(e.target.value)}
+            />
+            <button className="cliente-tabela-btn" onClick={handleBuscar} disabled={buscando || !termo.trim()}>
+              {buscando ? 'Buscando...' : 'Buscar venda'}
+            </button>
+          </div>
+
+          {candidatas.length > 0 && (
+            <table className="cliente-tabela" style={{ marginTop: '0.5rem' }}>
+              <thead>
+                <tr><th></th><th>Venda</th><th>Apólice</th><th>Segurado</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {candidatas.map((v) => (
+                  <tr key={v.id}>
+                    <td>
+                      <input
+                        type="radio"
+                        name={`venda-${recebimento.id}`}
+                        checked={vendaSelecionadaId === v.id}
+                        onChange={() => setVendaSelecionadaId(v.id)}
+                      />
+                    </td>
+                    <td>{v.id}</td>
+                    <td>{v.apolice?.numero_apolice || '—'}</td>
+                    <td>{v.apolice?.nome_cliente || '—'}</td>
+                    <td><span className="ls-badge">{v.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          <div style={{ marginTop: '0.5rem' }}>
+            <button className="cliente-tabela-btn" onClick={handleConfirmar} disabled={!vendaSelecionadaId || conciliando}>
+              {conciliando ? 'Conciliando...' : 'Confirmar vínculo'}
+            </button>
+            <button className="cliente-tabela-btn" onClick={() => setExpandido(false)} style={{ marginLeft: '0.5rem' }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LinhaRecemConciliada({ item, usuarioId, onDistribuido }) {
+  const { recebimento, venda, distribuido, linhas } = item
+  const [distribuindo, setDistribuindo] = useState(false)
+  const [erro, setErro] = useState('')
+
+  async function handleDistribuir() {
+    setDistribuindo(true)
+    setErro('')
+    try {
+      const linhasCriadas = await distribuirRecebimento(recebimento.id, usuarioId)
+      onDistribuido(recebimento.id, linhasCriadas)
+    } catch (e) {
+      setErro(e.message)
+    }
+    setDistribuindo(false)
+  }
+
+  return (
+    <div className="ls-card" style={{ padding: '0.75rem', marginBottom: '0.75rem' }}>
+      <div><strong>Recebimento</strong> {recebimento.id} → <strong>Venda</strong> {venda?.id}</div>
+      <div>Líquido: {formatarMoeda(recebimento.valor_liquido)}</div>
+      {erro && <p style={{ color: '#b23b3b' }}>{erro}</p>}
+      {!distribuido ? (
+        <button className="cliente-tabela-btn" onClick={handleDistribuir} disabled={distribuindo}>
+          {distribuindo ? 'Distribuindo...' : 'Distribuir'}
+        </button>
+      ) : (
+        <p className="ls-badge" style={{ color: '#2f7a3d' }}>
+          Distribuído — {linhas?.length ?? 0} comissão(ões) gerada(s)
+        </p>
       )}
     </div>
   )
