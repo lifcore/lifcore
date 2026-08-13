@@ -26,6 +26,8 @@ import {
   buscarVendasCandidatas,
   conciliarRecebimento,
   distribuirRecebimento,
+  lancarComissaoRecebida,
+  TIPOS_RECEBIMENTO_VALIDOS,
 } from '../../lib/crm/comissionamentoService'
 import { useAuth } from '../auth/AuthContext'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
@@ -713,9 +715,12 @@ function ConciliacaoTab() {
   const [carregando, setCarregando] = useState(true)
   const [recemConciliados, setRecemConciliados] = useState([])
   const [erro, setErro] = useState('')
+  const [seguradoras, setSeguradoras] = useState([])
+  const [mostrarFormLancamento, setMostrarFormLancamento] = useState(false)
 
   useEffect(() => {
     carregarFila()
+    listarCatalogoSeguradoras().then(setSeguradoras)
   }, [])
 
   async function carregarFila() {
@@ -741,11 +746,31 @@ function ConciliacaoTab() {
     )
   }
 
+  function handleRecebimentoLancado(novoRecebimento) {
+    setFila((atual) => [...(atual ?? []), novoRecebimento])
+    setMostrarFormLancamento(false)
+  }
+
   if (carregando) return <p className="cliente-carregando">Carregando fila de conciliação...</p>
 
   return (
     <div>
       {erro && <p className="cliente-vazio" style={{ color: '#b23b3b' }}>{erro}</p>}
+
+      <div style={{ marginBottom: '1rem' }}>
+        <button className="cliente-tabela-btn" onClick={() => setMostrarFormLancamento(!mostrarFormLancamento)}>
+          {mostrarFormLancamento ? 'Fechar formulário' : '+ Lançar Recebimento'}
+        </button>
+      </div>
+
+      {mostrarFormLancamento && (
+        <FormLancarRecebimento
+          seguradoras={seguradoras}
+          usuarioId={user?.id}
+          onSalvo={handleRecebimentoLancado}
+          onCancelar={() => setMostrarFormLancamento(false)}
+        />
+      )}
 
       <h3 style={{ marginTop: 0 }}>Aguardando conciliação</h3>
       {fila.length === 0 ? (
@@ -774,6 +799,134 @@ function ConciliacaoTab() {
           ))}
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * FASE 3.1 (adição autorizada após teste real revelar a lacuna) —
+ * formulário mínimo para lancarComissaoRecebida(), a 1ª função do
+ * motor. Sem ela, a fila de Conciliação nunca recebe nada — "lançar
+ * apólice" nunca gera recebimento, só a operadora informando um
+ * pagamento real gera. Nenhuma lógica nova: só coleta os campos que a
+ * função já exige e chama o motor.
+ */
+function FormLancarRecebimento({ seguradoras, usuarioId, onSalvo, onCancelar }) {
+  const [operadoraId, setOperadoraId] = useState('')
+  const [numeroApoliceInformado, setNumeroApoliceInformado] = useState('')
+  const [seguradoInformado, setSeguradoInformado] = useState('')
+  const [dataRecebimento, setDataRecebimento] = useState('')
+  const [competenciaReferencia, setCompetenciaReferencia] = useState('')
+  const [valorBruto, setValorBruto] = useState('')
+  const [valorDescontos, setValorDescontos] = useState('')
+  const [documentoOrigem, setDocumentoOrigem] = useState('')
+  const [tipoRecebimento, setTipoRecebimento] = useState('')
+  const [observacoes, setObservacoes] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  async function handleSalvar() {
+    setErro('')
+    setSalvando(true)
+    try {
+      const novoRecebimento = await lancarComissaoRecebida({
+        operadoraId: operadoraId || null,
+        numeroApoliceInformado,
+        seguradoInformado,
+        dataRecebimento,
+        competenciaReferencia,
+        valorBruto,
+        valorDescontos: valorDescontos || 0,
+        documentoOrigem,
+        tipoRecebimento: tipoRecebimento || null,
+        observacoes,
+        criadoPor: usuarioId,
+      })
+      onSalvo(novoRecebimento)
+    } catch (e) {
+      setErro(e.message)
+    }
+    setSalvando(false)
+  }
+
+  return (
+    <div className="ls-card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
+      <h4 style={{ marginTop: 0 }}>Lançar Recebimento</h4>
+      {erro && <p style={{ color: '#b23b3b' }}>{erro}</p>}
+
+      <div className="cotacao-form-linha">
+        <div>
+          <label>Seguradora</label>
+          <select value={operadoraId} onChange={(e) => setOperadoraId(e.target.value)}>
+            <option value="">Selecione</option>
+            {seguradoras.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+          </select>
+        </div>
+        <div>
+          <label>Tipo de recebimento</label>
+          <select value={tipoRecebimento} onChange={(e) => setTipoRecebimento(e.target.value)}>
+            <option value="">Selecione</option>
+            {TIPOS_RECEBIMENTO_VALIDOS.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="cotacao-form-linha">
+        <div>
+          <label>Nº apólice informado (pela operadora)</label>
+          <input value={numeroApoliceInformado} onChange={(e) => setNumeroApoliceInformado(e.target.value)} />
+        </div>
+        <div>
+          <label>Segurado informado (pela operadora)</label>
+          <input value={seguradoInformado} onChange={(e) => setSeguradoInformado(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="cotacao-form-linha">
+        <div>
+          <label>Data do recebimento *</label>
+          <input type="date" value={dataRecebimento} onChange={(e) => setDataRecebimento(e.target.value)} />
+        </div>
+        <div>
+          <label>Competência de referência</label>
+          <input placeholder="ex: 2026-08" value={competenciaReferencia} onChange={(e) => setCompetenciaReferencia(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="cotacao-form-linha">
+        <div>
+          <label>Valor bruto *</label>
+          <input type="number" step="0.01" value={valorBruto} onChange={(e) => setValorBruto(e.target.value)} />
+        </div>
+        <div>
+          <label>Valor de descontos (IOF real etc.)</label>
+          <input type="number" step="0.01" value={valorDescontos} onChange={(e) => setValorDescontos(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="cotacao-form-linha">
+        <div>
+          <label>Documento de origem</label>
+          <input placeholder="ex: demonstrativo XPTO 08/2026" value={documentoOrigem} onChange={(e) => setDocumentoOrigem(e.target.value)} />
+        </div>
+        <div>
+          <label>Observações</label>
+          <input value={observacoes} onChange={(e) => setObservacoes(e.target.value)} />
+        </div>
+      </div>
+
+      <div style={{ marginTop: '0.75rem' }}>
+        <button
+          className="cliente-tabela-btn"
+          onClick={handleSalvar}
+          disabled={salvando || !dataRecebimento || !valorBruto}
+        >
+          {salvando ? 'Lançando...' : 'Lançar recebimento'}
+        </button>
+        <button className="cliente-tabela-btn" onClick={onCancelar} style={{ marginLeft: '0.5rem' }}>
+          Cancelar
+        </button>
+      </div>
     </div>
   )
 }

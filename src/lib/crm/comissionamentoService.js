@@ -37,7 +37,7 @@ async function obterClientePadrao() {
  * client com service_role, sem duplicar nenhuma linha de lógica.
  */
 
-const TIPOS_RECEBIMENTO_VALIDOS = ['implantacao', 'recorrente', 'vitalicio', 'renovacao']
+export const TIPOS_RECEBIMENTO_VALIDOS = ['implantacao', 'recorrente', 'vitalicio', 'renovacao']
 
 /**
  * 1. RECEBIMENTO — registra que a operadora informou um pagamento.
