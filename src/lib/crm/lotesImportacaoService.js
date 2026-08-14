@@ -92,7 +92,32 @@ export async function uploadLoteImportacao({ file, enviadoPor, seguradoraId = nu
     .single()
 
   if (erroLote) throw new Error(`Erro ao registrar o lote: ${erroLote.message}`)
+
+  // DOC-COM-002 (encerramento) — o upload dispara o processamento
+  // automaticamente. Não é mais necessário rodar script manual. Se a
+  // função falhar (ex: fora do ar), o lote fica em 'recebido' — não
+  // trava o usuário, só significa que precisa ser reprocessado depois
+  // (via botão de reprocessar, ou de novo automaticamente se
+  // reenviarmos o gatilho).
+  try {
+    await dispararProcessamento(lote.id, storage)
+  } catch (e) {
+    console.error('Processamento automático falhou, lote ficará como "recebido":', e.message)
+  }
+
   return lote
+}
+
+/**
+ * Dispara a Edge Function que faz a extração/normalização. Chamada
+ * automaticamente pelo upload — pode também ser chamada de novo
+ * manualmente (ex: depois de atribuir seguradora na prévia).
+ */
+export async function dispararProcessamento(loteId, clienteStorage = null) {
+  const storage = clienteStorage || (await obterClienteStorage())
+  const { data, error } = await storage.functions.invoke('processar-lote', { body: { loteId } })
+  if (error) throw new Error(`Erro ao processar o lote: ${error.message}`)
+  return data
 }
 
 /**
@@ -104,6 +129,56 @@ export async function listarSeguradorasCatalogo(cliente = null) {
   const { data, error } = await db.from('operadoras').select('id, nome').order('nome')
   if (error) throw new Error(`Erro ao listar seguradoras: ${error.message}`)
   return data ?? []
+}
+
+/**
+ * Atribuir seguradora manualmente (usado quando a identificação
+ * automática não encontrou) + reprocessar. Substitui o que antes
+ * exigia rodar SQL manual — agora é um botão na prévia.
+ */
+export async function atribuirSeguradoraEReprocessar(loteId, seguradoraId, cliente = null, clienteStorage = null) {
+  const db = cliente || (await obterClientePadrao())
+  const storage = clienteStorage || (await obterClienteStorage())
+
+  if (!seguradoraId) throw new Error('Selecione uma seguradora.')
+
+  // Limpa o processamento anterior (se houve) e volta o lote pro
+  // início da fila, com a seguradora já definida.
+  const { error: erroEventos } = await db.from('eventos_financeiros_normalizados').delete().eq('lote_importacao_id', loteId)
+  if (erroEventos) throw new Error(`Erro ao limpar eventos anteriores: ${erroEventos.message}`)
+
+  const { error: erroUpdate } = await db
+    .from('lotes_importacao')
+    .update({
+      seguradora_id: seguradoraId,
+      status: 'recebido',
+      competencia_informada: null,
+      periodo_inicio: null,
+      periodo_fim: null,
+      quantidade_linhas_extraidas: null,
+      valor_bruto_total_extraido: null,
+      valor_liquido_total_extraido: null,
+      nivel_confianca: null,
+      motivo_confianca: null,
+      assinatura_estrutural_pendente: null,
+      origem_extracao_pendente: null,
+      estrategia_pendente: null,
+      receita_extracao_pendente: null,
+    })
+    .eq('id', loteId)
+  if (erroUpdate) throw new Error(`Erro ao atualizar lote: ${erroUpdate.message}`)
+
+  return dispararProcessamento(loteId, storage)
+}
+
+/**
+ * Reprocessar um lote que ficou em 'recebido' porque o disparo
+ * automático falhou (ex: instabilidade momentânea) — sem precisar
+ * mexer em nada além de chamar de novo.
+ */
+export async function reprocessarLote(loteId, clienteStorage = null) {
+  const storage = clienteStorage || (await obterClienteStorage())
+  return dispararProcessamento(loteId, storage)
 }
 
 export async function listarLotesImportacao(cliente = null) {

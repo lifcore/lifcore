@@ -25,7 +25,7 @@ import {
   gerarSugestoesCompetencia,
   ajustarComissaoSugeridaManualmente,
 } from '../../lib/crm/regrasComissaoService'
-import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote, listarSeguradorasCatalogo } from '../../lib/crm/lotesImportacaoService'
+import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote, listarSeguradorasCatalogo, atribuirSeguradoraEReprocessar, reprocessarLote } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
@@ -481,7 +481,6 @@ function RecebimentosTab() {
   const [seguradoras, setSeguradoras] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [arquivo, setArquivo] = useState(null)
-  const [seguradoraSelecionada, setSeguradoraSelecionada] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [chaveInput, setChaveInput] = useState(0)
   const [erro, setErro] = useState('')
@@ -508,10 +507,9 @@ function RecebimentosTab() {
     setErro('')
     setSucesso('')
     try {
-      const lote = await uploadLoteImportacao({ file: arquivo, enviadoPor: user?.id, seguradoraId: seguradoraSelecionada || null })
-      setSucesso(`"${lote.nome_arquivo_original}" recebido com sucesso.`)
+      const lote = await uploadLoteImportacao({ file: arquivo, enviadoPor: user?.id })
+      setSucesso(`"${lote.nome_arquivo_original}" recebido e processado.`)
       setArquivo(null)
-      setSeguradoraSelecionada('')
       setChaveInput((k) => k + 1)
       await carregar()
     } catch (e) {
@@ -524,22 +522,15 @@ function RecebimentosTab() {
     <div>
       <div className="ls-card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
         <h4 style={{ marginTop: 0 }}>Enviar Relatório Real</h4>
-        <p className="config-instrucao">PDF, imagem (PNG/JPG), Excel ou CSV. O arquivo original fica preservado — nada vira financeiro ainda nesta etapa.</p>
+        <p className="config-instrucao">PDF, imagem (PNG/JPG), Excel ou CSV. O processamento roda automaticamente após o envio — a prévia fica pronta pra conferência em seguida.</p>
 
         {erro && <p className="ls-modal-erro">{erro}</p>}
         {sucesso && <p className="config-sucesso">{sucesso}</p>}
 
         <div className="cotacao-form-linha" style={{ alignItems: 'center' }}>
           <input key={chaveInput} type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
-          <div>
-            <label style={{ fontSize: '0.8rem' }}>Seguradora (opcional — ajuda se a identificação automática não achar)</label>
-            <select value={seguradoraSelecionada} onChange={(e) => setSeguradoraSelecionada(e.target.value)}>
-              <option value="">Identificar automaticamente pelo conteúdo</option>
-              {seguradoras.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
-            </select>
-          </div>
           <button className="ls-btn ls-btn-primary" onClick={handleUpload} disabled={!arquivo || enviando}>
-            {enviando ? 'Enviando...' : 'Enviar'}
+            {enviando ? 'Enviando e processando...' : 'Enviar'}
           </button>
         </div>
       </div>
@@ -556,7 +547,7 @@ function RecebimentosTab() {
           </thead>
           <tbody>
             {lotes.map((l) => (
-              <LinhaLote key={l.id} lote={l} usuarioId={user?.id} ehMaster={perfil?.papel === 'master'} onAtualizado={carregar} />
+              <LinhaLote key={l.id} lote={l} usuarioId={user?.id} ehMaster={perfil?.papel === 'master'} seguradoras={seguradoras} onAtualizado={carregar} />
             ))}
           </tbody>
         </table>
@@ -565,16 +556,20 @@ function RecebimentosTab() {
   )
 }
 
-function LinhaLote({ lote, usuarioId, ehMaster, onAtualizado }) {
+function LinhaLote({ lote, usuarioId, ehMaster, seguradoras, onAtualizado }) {
   const [expandido, setExpandido] = useState(false)
   const [eventos, setEventos] = useState(null)
   const [carregandoEventos, setCarregandoEventos] = useState(false)
   const [confirmando, setConfirmando] = useState(false)
   const [excluindo, setExcluindo] = useState(false)
+  const [reprocessando, setReprocessando] = useState(false)
+  const [atribuindo, setAtribuindo] = useState(false)
+  const [seguradoraEscolhida, setSeguradoraEscolhida] = useState('')
   const [erroConfirmacao, setErroConfirmacao] = useState('')
 
   const temPrevia = lote.status !== 'recebido'
   const corConfianca = { alta: '#2f7a3d', revisao: '#b8860b', bloqueado: '#b23b3b' }[lote.nivel_confianca]
+  const semSeguradora = temPrevia && !lote.seguradora_id
 
   async function handleVerPrevia() {
     if (!expandido && eventos === null) {
@@ -595,6 +590,33 @@ function LinhaLote({ lote, usuarioId, ehMaster, onAtualizado }) {
       setErroConfirmacao(e.message)
     }
     setConfirmando(false)
+  }
+
+  async function handleAtribuirSeguradora() {
+    if (!seguradoraEscolhida) return
+    setAtribuindo(true)
+    setErroConfirmacao('')
+    try {
+      await atribuirSeguradoraEReprocessar(lote.id, seguradoraEscolhida)
+      setEventos(null)
+      onAtualizado()
+    } catch (e) {
+      setErroConfirmacao(e.message)
+    }
+    setAtribuindo(false)
+  }
+
+  async function handleReprocessar() {
+    setReprocessando(true)
+    setErroConfirmacao('')
+    try {
+      await reprocessarLote(lote.id)
+      setEventos(null)
+      onAtualizado()
+    } catch (e) {
+      setErroConfirmacao(e.message)
+    }
+    setReprocessando(false)
   }
 
   async function handleExcluir() {
@@ -624,8 +646,13 @@ function LinhaLote({ lote, usuarioId, ehMaster, onAtualizado }) {
           )}
         </td>
         <td style={{ whiteSpace: 'nowrap' }}>
+          {lote.status === 'recebido' && (
+            <button className="cliente-tabela-btn" onClick={handleReprocessar} disabled={reprocessando}>
+              {reprocessando ? 'Processando...' : 'Processar'}
+            </button>
+          )}
           {temPrevia && (
-            <button className="cliente-tabela-btn" onClick={handleVerPrevia}>
+            <button className="cliente-tabela-btn" onClick={handleVerPrevia} style={{ marginLeft: '0.4rem' }}>
               {expandido ? 'Fechar' : 'Ver Prévia'}
             </button>
           )}
@@ -641,6 +668,7 @@ function LinhaLote({ lote, usuarioId, ehMaster, onAtualizado }) {
           <td colSpan={6}>
             <div className="ls-card" style={{ padding: '0.75rem' }}>
               <div className="cotacao-form-linha" style={{ marginBottom: '0.5rem' }}>
+                <div><strong>Seguradora:</strong> {seguradoras?.find((s) => s.id === lote.seguradora_id)?.nome ?? '—'}</div>
                 <div><strong>Competência informada:</strong> {lote.competencia_informada ? new Date(lote.competencia_informada).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' }) : '—'}</div>
                 <div><strong>Total bruto extraído:</strong> {lote.valor_bruto_total_extraido != null ? formatarMoeda(lote.valor_bruto_total_extraido) : '—'}</div>
                 <div><strong>Linhas extraídas:</strong> {lote.quantidade_linhas_extraidas ?? '—'}</div>
@@ -648,6 +676,25 @@ function LinhaLote({ lote, usuarioId, ehMaster, onAtualizado }) {
 
               {lote.motivo_confianca && (
                 <p className="config-instrucao" style={{ marginBottom: '0.75rem' }}><strong>Motivo:</strong> {lote.motivo_confianca}</p>
+              )}
+
+              {erroConfirmacao && <p className="ls-modal-erro">{erroConfirmacao}</p>}
+
+              {semSeguradora && (
+                <div className="ls-card" style={{ padding: '0.75rem', marginBottom: '0.75rem', borderColor: '#b23b3b' }}>
+                  <p style={{ color: '#b23b3b', marginTop: 0 }}>
+                    <strong>Seguradora não identificada</strong> — obrigatório atribuir antes de confirmar, pra garantir a veracidade do relatório.
+                  </p>
+                  <div className="cotacao-form-linha">
+                    <select value={seguradoraEscolhida} onChange={(e) => setSeguradoraEscolhida(e.target.value)}>
+                      <option value="">Selecione a seguradora...</option>
+                      {seguradoras?.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                    </select>
+                    <button className="cliente-tabela-btn" onClick={handleAtribuirSeguradora} disabled={!seguradoraEscolhida || atribuindo}>
+                      {atribuindo ? 'Atribuindo e reprocessando...' : 'Atribuir Seguradora'}
+                    </button>
+                  </div>
+                </div>
               )}
 
               {carregandoEventos ? (
@@ -676,9 +723,8 @@ function LinhaLote({ lote, usuarioId, ehMaster, onAtualizado }) {
                 </table>
               )}
 
-              {lote.status === 'revisao_necessaria' && (
+              {lote.status === 'revisao_necessaria' && !semSeguradora && (
                 <div style={{ marginTop: '0.75rem' }}>
-                  {erroConfirmacao && <p className="ls-modal-erro">{erroConfirmacao}</p>}
                   <button className="ls-btn ls-btn-primary" onClick={handleConfirmarFormato} disabled={confirmando}>
                     {confirmando ? 'Confirmando...' : 'Confirmar formato e memorizar'}
                   </button>
