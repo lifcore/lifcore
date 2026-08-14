@@ -25,7 +25,7 @@ import {
   gerarSugestoesCompetencia,
   ajustarComissaoSugeridaManualmente,
 } from '../../lib/crm/regrasComissaoService'
-import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote } from '../../lib/crm/lotesImportacaoService'
+import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote, listarSeguradorasCatalogo } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
@@ -478,14 +478,17 @@ function BuscaGlobalTab() {
 function RecebimentosTab() {
   const { user, perfil } = useAuth()
   const [lotes, setLotes] = useState([])
+  const [seguradoras, setSeguradoras] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [arquivo, setArquivo] = useState(null)
+  const [seguradoraSelecionada, setSeguradoraSelecionada] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
 
   useEffect(() => {
     carregar()
+    listarSeguradorasCatalogo().then(setSeguradoras)
   }, [])
 
   async function carregar() {
@@ -504,9 +507,10 @@ function RecebimentosTab() {
     setErro('')
     setSucesso('')
     try {
-      const lote = await uploadLoteImportacao({ file: arquivo, enviadoPor: user?.id })
+      const lote = await uploadLoteImportacao({ file: arquivo, enviadoPor: user?.id, seguradoraId: seguradoraSelecionada || null })
       setSucesso(`"${lote.nome_arquivo_original}" recebido com sucesso.`)
       setArquivo(null)
+      setSeguradoraSelecionada('')
       await carregar()
     } catch (e) {
       setErro(e.message)
@@ -525,6 +529,13 @@ function RecebimentosTab() {
 
         <div className="cotacao-form-linha" style={{ alignItems: 'center' }}>
           <input type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
+          <div>
+            <label style={{ fontSize: '0.8rem' }}>Seguradora (opcional — ajuda se a identificação automática não achar)</label>
+            <select value={seguradoraSelecionada} onChange={(e) => setSeguradoraSelecionada(e.target.value)}>
+              <option value="">Identificar automaticamente pelo conteúdo</option>
+              {seguradoras.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+            </select>
+          </div>
           <button className="ls-btn ls-btn-primary" onClick={handleUpload} disabled={!arquivo || enviando}>
             {enviando ? 'Enviando...' : 'Enviar'}
           </button>

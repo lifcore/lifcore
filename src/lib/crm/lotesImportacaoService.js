@@ -51,7 +51,7 @@ async function calcularHashArquivo(file) {
  * subir o arquivo (evita gastar storage com reimportação do mesmo
  * arquivo — idempotência exigida desde a Sprint de arquitetura).
  */
-export async function uploadLoteImportacao({ file, enviadoPor }, clienteDb = null, clienteStorage = null) {
+export async function uploadLoteImportacao({ file, enviadoPor, seguradoraId = null }, clienteDb = null, clienteStorage = null) {
   const db = clienteDb || (await obterClientePadrao())
   const storage = clienteStorage || (await obterClienteStorage())
 
@@ -82,12 +82,28 @@ export async function uploadLoteImportacao({ file, enviadoPor }, clienteDb = nul
       tipo_documento: tipoDocumento,
       status: 'recebido',
       enviado_por: enviadoPor || null,
+      // Seleção manual do Gestor — reforço/fallback pra quando a
+      // identificação automática por conteúdo não encontrar a
+      // seguradora no catálogo. O motor, ao processar, respeita essa
+      // escolha em vez de tentar adivinhar de novo.
+      seguradora_id: seguradoraId || null,
     })
     .select()
     .single()
 
   if (erroLote) throw new Error(`Erro ao registrar o lote: ${erroLote.message}`)
   return lote
+}
+
+/**
+ * Catálogo de seguradoras pro seletor do upload.
+ */
+export async function listarSeguradorasCatalogo(cliente = null) {
+  const { institucional } = await import('../supabaseSchemas')
+  const db = cliente || institucional
+  const { data, error } = await db.from('operadoras').select('id, nome').order('nome')
+  if (error) throw new Error(`Erro ao listar seguradoras: ${error.message}`)
+  return data ?? []
 }
 
 export async function listarLotesImportacao(cliente = null) {
