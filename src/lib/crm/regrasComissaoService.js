@@ -46,6 +46,7 @@ const RECORRENCIAS_VALIDAS = ['unico', 'limitado_periodos', 'recorrente', 'vital
 
 const MODELOS_RECEBIMENTO_VALIDOS = ['cascata', 'proporcional', 'desdobrada']
 const BASES_CALCULO_REGRA_VALIDAS = ['premio_sem_iof', 'mensalidade', 'parcela_recebida', 'manual']
+const ORIGENS_PERCENTUAL_VALIDAS = ['fixo', 'informado_por_apolice']
 
 function primeiroDiaDoMes(data) {
   const d = new Date(data)
@@ -81,10 +82,20 @@ function validarComponente(c, indice) {
  *     que o desdobramento corresponde ao percentual total")
  *   - Cascata/Proporcional: NUNCA tem componente — se vier algum, é erro
  */
-function validarRegra({ baseCalculo, percentual, modeloRecebimento, vitalicio, vitalicioPercentual, vitalicioPeriodoInicio, componentes }) {
+function validarRegra({ baseCalculo, percentual, modeloRecebimento, origemPercentual, vitalicio, vitalicioPercentual, vitalicioPeriodoInicio, componentes }) {
   if (!BASES_CALCULO_REGRA_VALIDAS.includes(baseCalculo)) throw new Error(`Base de cálculo inválida: "${baseCalculo}"`)
-  if (percentual == null || Number(percentual) <= 0) throw new Error('Informe o percentual (ou valor) da comissão, maior que zero.')
+  if (!ORIGENS_PERCENTUAL_VALIDAS.includes(origemPercentual)) throw new Error(`Origem do percentual inválida: "${origemPercentual}"`)
   if (!MODELOS_RECEBIMENTO_VALIDOS.includes(modeloRecebimento)) throw new Error(`Modelo de recebimento inválido: "${modeloRecebimento}"`)
+
+  if (origemPercentual === 'informado_por_apolice' && modeloRecebimento === 'desdobrada') {
+    throw new Error('Desdobrada exige percentual fixo da regra (a soma dos componentes depende dele) — não suporta "informado por apólice".')
+  }
+
+  if (origemPercentual === 'fixo') {
+    if (percentual == null || Number(percentual) <= 0) throw new Error('Informe o percentual (ou valor) da comissão, maior que zero.')
+  } else if (percentual != null) {
+    throw new Error('Percentual informado, mas a origem está marcada como "informado por apólice" — deixe o percentual da regra vazio.')
+  }
 
   if (vitalicio) {
     if (vitalicioPercentual == null || Number(vitalicioPercentual) <= 0) throw new Error('Vitalício marcado — informe o percentual vitalício.')
@@ -118,7 +129,7 @@ function validarRegra({ baseCalculo, percentual, modeloRecebimento, vitalicio, v
  * Cria uma regra única (uso interno — a função pública é
  * criarRegraComissao, que faz fan-out pra múltiplos produtos/operadoras).
  */
-async function criarRegraUnica(db, { produtoId, operadoraId, competenciaReferencia, descricao, baseCalculo, percentual, modeloRecebimento, vitalicio, vitalicioPercentual, vitalicioPeriodoInicio, componentes, criadoPor, observacoes }) {
+async function criarRegraUnica(db, { produtoId, operadoraId, competenciaReferencia, descricao, baseCalculo, percentual, origemPercentual, modeloRecebimento, vitalicio, vitalicioPercentual, vitalicioPeriodoInicio, componentes, criadoPor, observacoes }) {
   const { data: regra, error: erroRegra } = await db
     .from('regras_comissao')
     .insert({
@@ -127,7 +138,8 @@ async function criarRegraUnica(db, { produtoId, operadoraId, competenciaReferenc
       competencia_referencia: primeiroDiaDoMes(competenciaReferencia),
       descricao,
       base_calculo: baseCalculo,
-      percentual,
+      percentual: origemPercentual === 'fixo' ? percentual : null,
+      origem_percentual: origemPercentual,
       modelo_recebimento: modeloRecebimento,
       vitalicio: !!vitalicio,
       vitalicio_percentual: vitalicio ? vitalicioPercentual : null,
@@ -176,7 +188,7 @@ async function criarRegraUnica(db, { produtoId, operadoraId, competenciaReferenc
  * (nenhuma regra parcial fica órfã).
  */
 export async function criarRegraComissao(
-  { produtoIds, operadoraIds = [], competenciaReferencia, descricao, baseCalculo, percentual, modeloRecebimento, vitalicio = false, vitalicioPercentual, vitalicioPeriodoInicio, componentes = [], criadoPor, observacoes },
+  { produtoIds, operadoraIds = [], competenciaReferencia, descricao, baseCalculo, percentual, origemPercentual = 'fixo', modeloRecebimento, vitalicio = false, vitalicioPercentual, vitalicioPeriodoInicio, componentes = [], criadoPor, observacoes },
   cliente = null
 ) {
   const db = cliente || (await obterClientePadrao())
@@ -184,7 +196,7 @@ export async function criarRegraComissao(
   if (!competenciaReferencia) throw new Error('Informe a competência de referência.')
   if (!descricao?.trim()) throw new Error('Informe a descrição da regra.')
 
-  validarRegra({ baseCalculo, percentual, modeloRecebimento, vitalicio, vitalicioPercentual, vitalicioPeriodoInicio, componentes })
+  validarRegra({ baseCalculo, percentual, modeloRecebimento, origemPercentual, vitalicio, vitalicioPercentual, vitalicioPeriodoInicio, componentes })
 
   const operadorasParaFanOut = operadoraIds?.length ? operadoraIds : [null]
   const criadas = []
@@ -199,6 +211,7 @@ export async function criarRegraComissao(
           descricao,
           baseCalculo,
           percentual,
+          origemPercentual,
           modeloRecebimento,
           vitalicio,
           vitalicioPercentual,
@@ -458,26 +471,42 @@ async function calcularSugestaoDesdobrada(db, { vendaId, competencia, venda, reg
 
 /**
  * Cascata / Proporcional (DOC-COM-003, Seção 8) — calcula a EXPECTATIVA
- * TOTAL na Etapa 2 ("quando houver dados suficientes"), sem componente
- * nenhum. A distribuição real por parcela/recebimento fica pra
- * Conciliação (Etapa 4), que ainda não existe.
+ * TOTAL na Etapa 2, sem componente nenhum.
  *
- * LIMITE HONESTO, sem inventar dado: só sei calcular com segurança
- * quando base_calculo = 'premio_sem_iof', porque é o único valor que
- * tenho confirmado em `vendas.valor_base`. Não existe hoje, confirmado
- * por inspeção, um campo separado de "mensalidade" em `vendas` — usar
- * valor_base pra isso seria arriscar errar exatamente o que vocês me
- * disseram pra não errar (Auto × Saúde terem base diferente). Então:
- * 'mensalidade', 'parcela_recebida' e 'manual' ficam como
- * 'pendente_parametro' até essa base existir/for confirmada — nunca
- * calculado às cegas.
+ * origem_percentual = 'informado_por_apolice' (extensão pontual
+ * aprovada): em vez do percentual da regra, usa
+ * `apolices.comissionamento_percentual` da venda específica — pra
+ * produtos como Auto, onde o percentual é negociado apólice por
+ * apólice, não padronizado pela seguradora. Se a apólice não tiver
+ * esse campo preenchido, fica pendente_parametro — nunca assume valor.
+ *
+ * LIMITE HONESTO (já registrado antes): só calculo com segurança
+ * quando base_calculo = 'premio_sem_iof' — é o único valor confirmado
+ * em vendas.valor_base. Outras bases ficam pendente_parametro.
  */
 async function calcularSugestaoCascataOuProporcional(db, { vendaId, competencia, venda, regra }) {
+  let percentualAplicavel = regra.percentual
+
+  if (regra.origem_percentual === 'informado_por_apolice') {
+    if (!venda.apolice_id) {
+      return upsertSugestao(db, { vendaId, competencia, regraId: regra.id, valor: null, status: 'pendente_parametro' })
+    }
+    const { data: apolice } = await db
+      .from('apolices')
+      .select('comissionamento_percentual')
+      .eq('id', venda.apolice_id)
+      .maybeSingle()
+    if (!apolice?.comissionamento_percentual) {
+      return upsertSugestao(db, { vendaId, competencia, regraId: regra.id, valor: null, status: 'pendente_parametro' })
+    }
+    percentualAplicavel = Number(apolice.comissionamento_percentual)
+  }
+
   if (regra.base_calculo !== 'premio_sem_iof') {
     return upsertSugestao(db, { vendaId, competencia, regraId: regra.id, valor: null, status: 'pendente_parametro' })
   }
 
-  const valorCalculado = Number(((Number(venda.valor_base) * Number(regra.percentual)) / 100).toFixed(2))
+  const valorCalculado = Number(((Number(venda.valor_base) * percentualAplicavel) / 100).toFixed(2))
   return upsertSugestao(db, { vendaId, competencia, regraId: regra.id, valor: valorCalculado, status: 'calculada' })
 }
 

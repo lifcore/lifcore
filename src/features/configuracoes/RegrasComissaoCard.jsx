@@ -127,7 +127,7 @@ export default function RegrasComissaoCard() {
                   <td>{new Date(r.competencia_referencia).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' })}</td>
                   <td>{r.descricao}</td>
                   <td>{BASES_CALCULO.find((b) => b.valor === r.base_calculo)?.label ?? '—'}</td>
-                  <td>{r.percentual != null ? `${r.percentual}%` : '—'}</td>
+                  <td>{r.origem_percentual === 'informado_por_apolice' ? 'Por apólice' : r.percentual != null ? `${r.percentual}%` : '—'}</td>
                   <td>{BADGE_MODELO[r.modelo_recebimento] ?? ''} {r.modelo_recebimento}</td>
                   <td>{r.vitalicio ? `Sim (${r.vitalicio_percentual}%)` : 'Não'}</td>
                   <td>
@@ -155,6 +155,7 @@ function FormNovaRegra({ produtos, operadoras, usuarioId, onSalvo, onErro }) {
   const [descricao, setDescricao] = useState('')
   const [baseCalculo, setBaseCalculo] = useState('premio_sem_iof')
   const [percentual, setPercentual] = useState('')
+  const [origemPercentual, setOrigemPercentual] = useState('fixo')
   const [modeloRecebimento, setModeloRecebimento] = useState('desdobrada')
   const [vitalicio, setVitalicio] = useState(false)
   const [vitalicioPercentual, setVitalicioPercentual] = useState('')
@@ -186,7 +187,7 @@ function FormNovaRegra({ produtos, operadoras, usuarioId, onSalvo, onErro }) {
     if (!produtoIds.length) return onErro('Selecione ao menos 1 produto.')
     if (!competencia) return onErro('Informe a competência.')
     if (!descricao.trim()) return onErro('Informe a descrição da regra.')
-    if (!percentual) return onErro('Informe o percentual da comissão.')
+    if (origemPercentual === 'fixo' && !percentual) return onErro('Informe o percentual da comissão.')
     if (modeloRecebimento === 'desdobrada' && !somaBate) {
       return onErro(`A soma dos componentes (${somaComponentes.toFixed(2)}%) precisa bater com o percentual total (${Number(percentual).toFixed(2)}%) antes de salvar.`)
     }
@@ -199,7 +200,8 @@ function FormNovaRegra({ produtos, operadoras, usuarioId, onSalvo, onErro }) {
         competenciaReferencia: `${competencia}-01`,
         descricao,
         baseCalculo,
-        percentual: Number(percentual),
+        percentual: origemPercentual === 'fixo' ? Number(percentual) : null,
+        origemPercentual,
         modeloRecebimento,
         vitalicio,
         vitalicioPercentual: vitalicio ? Number(vitalicioPercentual) : null,
@@ -277,15 +279,56 @@ function FormNovaRegra({ produtos, operadoras, usuarioId, onSalvo, onErro }) {
           ))}
         </div>
         <div>
-          <label>Percentual (%) *</label>
-          <input type="number" step="0.01" min="0" value={percentual} onChange={(e) => setPercentual(e.target.value)} placeholder="ex: 10 ou 400" />
+          <label>Percentual (%) {origemPercentual === 'fixo' ? '*' : ''}</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={percentual}
+            onChange={(e) => setPercentual(e.target.value)}
+            placeholder="ex: 10 ou 400"
+            disabled={origemPercentual === 'informado_por_apolice'}
+          />
+          {modeloRecebimento !== 'desdobrada' && (
+            <div style={{ marginTop: '0.4rem' }}>
+              <label style={{ display: 'block', fontWeight: 'normal' }}>
+                <input
+                  type="radio"
+                  name="origemPercentual"
+                  checked={origemPercentual === 'fixo'}
+                  onChange={() => setOrigemPercentual('fixo')}
+                /> Percentual fixo (definido aqui)
+              </label>
+              <label style={{ display: 'block', fontWeight: 'normal' }}>
+                <input
+                  type="radio"
+                  name="origemPercentual"
+                  checked={origemPercentual === 'informado_por_apolice'}
+                  onChange={() => { setOrigemPercentual('informado_por_apolice'); setPercentual('') }}
+                /> Informado por apólice (negociado pelo corretor, campo já existente na venda)
+              </label>
+              {origemPercentual === 'informado_por_apolice' && (
+                <p className="config-instrucao">
+                  A sugestão vai usar o "Comissionamento (%)" preenchido em cada apólice. Se a apólice não tiver esse campo, a sugestão fica pendente até alguém preencher — nunca assume valor.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       <h5 style={{ marginTop: '1.25rem' }}>Como receber?</h5>
       {MODELOS_RECEBIMENTO.map((m) => (
         <label key={m.valor} style={{ display: 'block', fontWeight: 'normal', marginBottom: '0.3rem' }}>
-          <input type="radio" name="modelo" checked={modeloRecebimento === m.valor} onChange={() => setModeloRecebimento(m.valor)} />{' '}
+          <input
+            type="radio"
+            name="modelo"
+            checked={modeloRecebimento === m.valor}
+            onChange={() => {
+              setModeloRecebimento(m.valor)
+              if (m.valor === 'desdobrada') setOrigemPercentual('fixo')
+            }}
+          />{' '}
           {BADGE_MODELO[m.valor]} <strong>{m.label}</strong> — <span className="config-instrucao">{m.descricao}</span>
         </label>
       ))}
