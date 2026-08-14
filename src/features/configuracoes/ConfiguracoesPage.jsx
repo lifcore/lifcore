@@ -7,6 +7,7 @@ import { listarPerfis, atualizarPerfil, desativarPerfil, reativarPerfil, transfe
 import { operacional } from '../../lib/supabaseSchemas'
 import { useAuth } from '../auth/AuthContext'
 import SeguradorasCard from './MasterCenterSeguradoras'
+import RegrasComissaoCard from './RegrasComissaoCard'
 
 export default function ConfiguracoesPage() {
   const { perfil } = useAuth()
@@ -34,6 +35,7 @@ export default function ConfiguracoesPage() {
     { id: 'corretores', label: 'Corretores' },
     ...(ehMaster ? [{ id: 'transferir', label: 'Transferir Carteira' }] : []),
     ...(ehMaster ? [{ id: 'seguradoras', label: 'Seguradoras' }] : []),
+    ...(ehMaster ? [{ id: 'regras-comissao', label: 'Regras de Comissão' }] : []),
     ...(ehMaster ? [{ id: 'conexoes', label: 'Conexões' }] : []),
   ]
 
@@ -129,6 +131,8 @@ export default function ConfiguracoesPage() {
       {abaAtiva === 'transferir' && ehMaster && <TransferirCarteiraCard />}
 
       {abaAtiva === 'seguradoras' && ehMaster && <SeguradorasCard />}
+
+      {abaAtiva === 'regras-comissao' && ehMaster && <RegrasComissaoCard />}
 
       {abaAtiva === 'conexoes' && ehMaster && <ConexoesRedirectCard />}
     </div>
