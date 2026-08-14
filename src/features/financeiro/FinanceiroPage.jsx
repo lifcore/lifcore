@@ -539,7 +539,7 @@ function RecebimentosTab() {
       ) : (
         <table className="cliente-tabela">
           <thead>
-            <tr><th>Arquivo</th><th>Tipo</th><th>Enviado em</th><th>Status</th><th></th></tr>
+            <tr><th>Arquivo</th><th>Tipo</th><th>Enviado em</th><th>Status</th><th>Confiança</th><th></th></tr>
           </thead>
           <tbody>
             {lotes.map((l) => (
@@ -602,15 +602,15 @@ function LinhaLote({ lote, usuarioId, ehMaster, onAtualizado }) {
         <td>{lote.nome_arquivo_original}</td>
         <td>{lote.tipo_documento}</td>
         <td>{new Date(lote.enviado_em).toLocaleString('pt-BR')}</td>
+        <td><span className="ls-badge">{lote.status}</span></td>
         <td>
-          <span className="ls-badge">{lote.status}</span>
           {lote.nivel_confianca && (
-            <span className="ls-badge" style={{ marginLeft: '0.4rem', background: corConfianca, color: '#fff' }}>
+            <span className="ls-badge" style={{ background: corConfianca, color: '#fff' }}>
               {lote.nivel_confianca === 'alta' ? '🟢 alta' : lote.nivel_confianca === 'revisao' ? '🟡 revisão' : '🔴 bloqueado'}
             </span>
           )}
         </td>
-        <td>
+        <td style={{ whiteSpace: 'nowrap' }}>
           {temPrevia && (
             <button className="cliente-tabela-btn" onClick={handleVerPrevia}>
               {expandido ? 'Fechar' : 'Ver Prévia'}
@@ -625,7 +625,7 @@ function LinhaLote({ lote, usuarioId, ehMaster, onAtualizado }) {
       </tr>
       {expandido && (
         <tr>
-          <td colSpan={5}>
+          <td colSpan={6}>
             <div className="ls-card" style={{ padding: '0.75rem' }}>
               <div className="cotacao-form-linha" style={{ marginBottom: '0.5rem' }}>
                 <div><strong>Competência informada:</strong> {lote.competencia_informada ? new Date(lote.competencia_informada).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' }) : '—'}</div>
