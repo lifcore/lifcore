@@ -41,8 +41,11 @@ export async function listarOperadoras(cliente = null) {
 
 const EVENTOS_VALIDOS = ['implantacao', 'primeira_parcela', 'parcela', 'mes_relativo', 'renovacao', 'recorrencia']
 const TIPOS_VALOR_VALIDOS = ['percentual', 'valor_fixo', 'proporcional']
-const BASES_CALCULO_VALIDAS = ['valor_base_venda', 'valor_liquido_recebimento']
+const BASES_CALCULO_COMPONENTE_VALIDAS = ['valor_base_venda', 'valor_liquido_recebimento']
 const RECORRENCIAS_VALIDAS = ['unico', 'limitado_periodos', 'recorrente', 'vitalicio']
+
+const MODELOS_RECEBIMENTO_VALIDOS = ['cascata', 'proporcional', 'desdobrada']
+const BASES_CALCULO_REGRA_VALIDAS = ['premio_sem_iof', 'mensalidade', 'parcela_recebida', 'manual']
 
 function primeiroDiaDoMes(data) {
   const d = new Date(data)
@@ -56,7 +59,7 @@ function validarComponente(c, indice) {
   if (!c.periodoInicio || c.periodoInicio < 1) throw new Error(`Componente ${indice + 1}: período de início deve ser >= 1`)
   if (c.periodoFim != null && c.periodoFim < c.periodoInicio) throw new Error(`Componente ${indice + 1}: período fim não pode ser menor que o início`)
   if (c.valor == null || Number(c.valor) < 0) throw new Error(`Componente ${indice + 1}: valor deve ser >= 0`)
-  if (c.tipoValor === 'proporcional' && !BASES_CALCULO_VALIDAS.includes(c.baseCalculo)) {
+  if (c.tipoValor === 'proporcional' && !BASES_CALCULO_COMPONENTE_VALIDAS.includes(c.baseCalculo)) {
     throw new Error(`Componente ${indice + 1}: tipo_valor proporcional exige base_calculo válida`)
   }
   if (c.tipoValor !== 'proporcional' && c.baseCalculo) {
@@ -70,28 +73,52 @@ function validarComponente(c, indice) {
   }
 }
 
+/**
+ * Validação de nível de regra (DOC-COM-003). Universal primeiro
+ * (base/percentual/modelo/vitalício), depois específica por modelo:
+ *   - Desdobrada: exige componentes, e a soma precisa bater com o
+ *     percentual total informado (Seção 5.3 — "o sistema deve validar
+ *     que o desdobramento corresponde ao percentual total")
+ *   - Cascata/Proporcional: NUNCA tem componente — se vier algum, é erro
+ */
+function validarRegra({ baseCalculo, percentual, modeloRecebimento, vitalicio, vitalicioPercentual, vitalicioPeriodoInicio, componentes }) {
+  if (!BASES_CALCULO_REGRA_VALIDAS.includes(baseCalculo)) throw new Error(`Base de cálculo inválida: "${baseCalculo}"`)
+  if (percentual == null || Number(percentual) <= 0) throw new Error('Informe o percentual (ou valor) da comissão, maior que zero.')
+  if (!MODELOS_RECEBIMENTO_VALIDOS.includes(modeloRecebimento)) throw new Error(`Modelo de recebimento inválido: "${modeloRecebimento}"`)
+
+  if (vitalicio) {
+    if (vitalicioPercentual == null || Number(vitalicioPercentual) <= 0) throw new Error('Vitalício marcado — informe o percentual vitalício.')
+    if (modeloRecebimento === 'desdobrada' && (vitalicioPeriodoInicio == null || vitalicioPeriodoInicio < 1)) {
+      throw new Error('Vitalício em regra Desdobrada exige o período de início.')
+    }
+  } else if (vitalicioPercentual != null || vitalicioPeriodoInicio != null) {
+    throw new Error('Percentual/período de vitalício informado, mas vitalício não está marcado como Sim.')
+  }
+
+  if (modeloRecebimento === 'desdobrada') {
+    if (!componentes?.length) throw new Error('Modelo Desdobrada exige pelo menos 1 componente (parcela + percentual).')
+    componentes.forEach(validarComponente)
+    const somaComponentes = componentes.reduce((s, c) => s + Number(c.valor), 0)
+    const diferenca = Math.round((somaComponentes - Number(percentual)) * 100) / 100
+    if (Math.abs(diferenca) > 0.01) {
+      throw new Error(
+        `A soma dos componentes (${somaComponentes.toFixed(2)}%) não bate com o percentual total informado (${Number(percentual).toFixed(2)}%). Ajuste um dos dois antes de salvar.`
+      )
+    }
+  } else if (componentes?.length) {
+    throw new Error(`Modelo ${modeloRecebimento} não usa componentes — o percentual já é suficiente. Remova os componentes adicionados.`)
+  }
+}
+
 // ============================================================
 // 1. REGRAS DE COMISSÃO + COMPONENTES
 // ============================================================
 
 /**
- * Cria uma regra e seus componentes juntos. Exige pelo menos 1
- * componente (Seção 5 — "Pelo menos um componente" é obrigatório).
- * Se a criação dos componentes falhar, desfaz a regra (compensação
- * manual — Supabase REST não dá transação nativa entre 2 tabelas).
+ * Cria uma regra única (uso interno — a função pública é
+ * criarRegraComissao, que faz fan-out pra múltiplos produtos/operadoras).
  */
-export async function criarRegraComissao(
-  { produtoId, operadoraId = null, competenciaReferencia, descricao, componentes, criadoPor, observacoes },
-  cliente = null
-) {
-  const db = cliente || (await obterClientePadrao())
-  if (!produtoId) throw new Error('Informe o produto.')
-  if (!competenciaReferencia) throw new Error('Informe a competência de referência.')
-  if (!descricao?.trim()) throw new Error('Informe a descrição da regra.')
-  if (!componentes?.length) throw new Error('A regra precisa de pelo menos 1 componente.')
-
-  componentes.forEach(validarComponente)
-
+async function criarRegraUnica(db, { produtoId, operadoraId, competenciaReferencia, descricao, baseCalculo, percentual, modeloRecebimento, vitalicio, vitalicioPercentual, vitalicioPeriodoInicio, componentes, criadoPor, observacoes }) {
   const { data: regra, error: erroRegra } = await db
     .from('regras_comissao')
     .insert({
@@ -99,12 +126,22 @@ export async function criarRegraComissao(
       operadora_id: operadoraId,
       competencia_referencia: primeiroDiaDoMes(competenciaReferencia),
       descricao,
+      base_calculo: baseCalculo,
+      percentual,
+      modelo_recebimento: modeloRecebimento,
+      vitalicio: !!vitalicio,
+      vitalicio_percentual: vitalicio ? vitalicioPercentual : null,
+      vitalicio_periodo_inicio: vitalicio && modeloRecebimento === 'desdobrada' ? vitalicioPeriodoInicio : null,
       observacoes: observacoes || null,
       criado_por: criadoPor || null,
     })
     .select()
     .single()
-  if (erroRegra) throw new Error(`Erro ao criar regra: ${erroRegra.message}`)
+  if (erroRegra) throw new Error(`Erro ao criar regra (produto ${produtoId}${operadoraId ? `, operadora ${operadoraId}` : ''}): ${erroRegra.message}`)
+
+  if (modeloRecebimento !== 'desdobrada') {
+    return { ...regra, componentes: [] }
+  }
 
   const linhasComponentes = componentes.map((c, i) => ({
     regra_comissao_id: regra.id,
@@ -121,12 +158,68 @@ export async function criarRegraComissao(
 
   const { data: comps, error: erroComps } = await db.from('regra_comissao_componentes').insert(linhasComponentes).select()
   if (erroComps) {
-    // compensação: regra sem componente válido não pode ficar órfã
     await db.from('regras_comissao').delete().eq('id', regra.id)
     throw new Error(`Erro ao criar componentes — regra desfeita: ${erroComps.message}`)
   }
 
   return { ...regra, componentes: comps }
+}
+
+/**
+ * Cria uma ou várias regras de uma vez (Seção 2.1 — "aplicar a
+ * múltiplas operadoras e/ou múltiplos produtos"). Pro Gestor é uma
+ * operação só; no banco, vira 1 linha por combinação produto×operadora
+ * — fan-out feito aqui, sem tabela de junção nova.
+ *
+ * operadoraIds vazio/null = regra geral (1 por produto, operadora nula).
+ * Se qualquer combinação falhar, desfaz TODAS as já criadas neste lote
+ * (nenhuma regra parcial fica órfã).
+ */
+export async function criarRegraComissao(
+  { produtoIds, operadoraIds = [], competenciaReferencia, descricao, baseCalculo, percentual, modeloRecebimento, vitalicio = false, vitalicioPercentual, vitalicioPeriodoInicio, componentes = [], criadoPor, observacoes },
+  cliente = null
+) {
+  const db = cliente || (await obterClientePadrao())
+  if (!produtoIds?.length) throw new Error('Selecione pelo menos 1 produto.')
+  if (!competenciaReferencia) throw new Error('Informe a competência de referência.')
+  if (!descricao?.trim()) throw new Error('Informe a descrição da regra.')
+
+  validarRegra({ baseCalculo, percentual, modeloRecebimento, vitalicio, vitalicioPercentual, vitalicioPeriodoInicio, componentes })
+
+  const operadorasParaFanOut = operadoraIds?.length ? operadoraIds : [null]
+  const criadas = []
+
+  try {
+    for (const produtoId of produtoIds) {
+      for (const operadoraId of operadorasParaFanOut) {
+        const regra = await criarRegraUnica(db, {
+          produtoId,
+          operadoraId,
+          competenciaReferencia,
+          descricao,
+          baseCalculo,
+          percentual,
+          modeloRecebimento,
+          vitalicio,
+          vitalicioPercentual,
+          vitalicioPeriodoInicio,
+          componentes,
+          criadoPor,
+          observacoes,
+        })
+        criadas.push(regra)
+      }
+    }
+  } catch (e) {
+    // Desfaz tudo que já foi criado neste lote — não deixar fan-out pela metade
+    for (const regra of criadas) {
+      await db.from('regra_comissao_componentes').delete().eq('regra_comissao_id', regra.id)
+      await db.from('regras_comissao').delete().eq('id', regra.id)
+    }
+    throw e
+  }
+
+  return criadas
 }
 
 /**
@@ -308,6 +401,17 @@ export async function calcularComissaoSugerida({ vendaId, competenciaReferencia 
     return upsertSugestao(db, { vendaId, competencia, regraId: null, valor: null, status: 'nao_definida' })
   }
 
+  if (regra.modelo_recebimento === 'desdobrada') {
+    return calcularSugestaoDesdobrada(db, { vendaId, competencia, venda, regra, vigenciaInicio })
+  }
+  return calcularSugestaoCascataOuProporcional(db, { vendaId, competencia, venda, regra })
+}
+
+/**
+ * Desdobrada — igual ao motor original: percorre componentes conforme
+ * o mês relativo da venda.
+ */
+async function calcularSugestaoDesdobrada(db, { vendaId, competencia, venda, regra, vigenciaInicio }) {
   const mesRelativo = calcularMesRelativo(vigenciaInicio, competencia)
   const componente = (regra.componentes ?? [])
     .slice()
@@ -319,7 +423,6 @@ export async function calcularComissaoSugerida({ vendaId, competenciaReferencia 
     })
 
   if (!componente) {
-    // Nenhum componente cobre esse mês relativo — venda ainda não elegível, ou já passou do período
     return upsertSugestao(db, { vendaId, competencia, regraId: regra.id, valor: null, status: 'nao_definida' })
   }
 
@@ -328,7 +431,6 @@ export async function calcularComissaoSugerida({ vendaId, competenciaReferencia 
     if (componente.base_calculo === 'valor_base_venda') {
       baseValor = Number(venda.valor_base)
     } else if (componente.base_calculo === 'valor_liquido_recebimento') {
-      // Seção 10: só pode usar se o recebimento real já existir — nunca como previsão
       const { data: recebimento } = await db
         .from('recebimentos_comissao')
         .select('valor_liquido')
@@ -348,10 +450,34 @@ export async function calcularComissaoSugerida({ vendaId, competenciaReferencia 
   } else if (componente.tipo_valor === 'percentual') {
     valorCalculado = Number(((Number(venda.valor_base) * Number(componente.valor)) / 100).toFixed(2))
   } else {
-    // proporcional — tratado como percentual sobre a base escolhida
     valorCalculado = Number(((baseValor * Number(componente.valor)) / 100).toFixed(2))
   }
 
+  return upsertSugestao(db, { vendaId, competencia, regraId: regra.id, valor: valorCalculado, status: 'calculada' })
+}
+
+/**
+ * Cascata / Proporcional (DOC-COM-003, Seção 8) — calcula a EXPECTATIVA
+ * TOTAL na Etapa 2 ("quando houver dados suficientes"), sem componente
+ * nenhum. A distribuição real por parcela/recebimento fica pra
+ * Conciliação (Etapa 4), que ainda não existe.
+ *
+ * LIMITE HONESTO, sem inventar dado: só sei calcular com segurança
+ * quando base_calculo = 'premio_sem_iof', porque é o único valor que
+ * tenho confirmado em `vendas.valor_base`. Não existe hoje, confirmado
+ * por inspeção, um campo separado de "mensalidade" em `vendas` — usar
+ * valor_base pra isso seria arriscar errar exatamente o que vocês me
+ * disseram pra não errar (Auto × Saúde terem base diferente). Então:
+ * 'mensalidade', 'parcela_recebida' e 'manual' ficam como
+ * 'pendente_parametro' até essa base existir/for confirmada — nunca
+ * calculado às cegas.
+ */
+async function calcularSugestaoCascataOuProporcional(db, { vendaId, competencia, venda, regra }) {
+  if (regra.base_calculo !== 'premio_sem_iof') {
+    return upsertSugestao(db, { vendaId, competencia, regraId: regra.id, valor: null, status: 'pendente_parametro' })
+  }
+
+  const valorCalculado = Number(((Number(venda.valor_base) * Number(regra.percentual)) / 100).toFixed(2))
   return upsertSugestao(db, { vendaId, competencia, regraId: regra.id, valor: valorCalculado, status: 'calculada' })
 }
 
