@@ -157,9 +157,40 @@ export async function confirmarFormatoHomologado(loteId, usuarioId, cliente = nu
 
   const { error: erroUpdateLote } = await db
     .from('lotes_importacao')
-    .update({ status: 'aguardando_confirmacao' })
+    .update({
+      status: 'aguardando_confirmacao',
+      nivel_confianca: 'alta',
+      motivo_confianca: 'Formato confirmado manualmente pelo Gestor — memorizado pra próximos documentos.',
+    })
     .eq('id', loteId)
   if (erroUpdateLote) throw new Error(`Erro ao atualizar status do lote: ${erroUpdateLote.message}`)
 
   return formato
+}
+
+/**
+ * Exclusão de lote — pra corrigir upload errado. Remove os eventos
+ * normalizados, o registro do lote, e o arquivo original do Storage.
+ * NÃO mexe em formatos_homologados — se o formato já foi memorizado,
+ * essa memória continua valendo (apagar um upload errado não deveria
+ * apagar conhecimento correto aprendido a partir dele).
+ */
+export async function excluirLote(loteId, cliente = null, clienteStorage = null) {
+  const db = cliente || (await obterClientePadrao())
+  const storage = clienteStorage || (await obterClienteStorage())
+
+  const { data: lote, error: erroLote } = await db.from('lotes_importacao').select('storage_path').eq('id', loteId).single()
+  if (erroLote) throw new Error(`Erro ao buscar lote: ${erroLote.message}`)
+
+  const { error: erroEventos } = await db.from('eventos_financeiros_normalizados').delete().eq('lote_importacao_id', loteId)
+  if (erroEventos) throw new Error(`Erro ao excluir eventos do lote: ${erroEventos.message}`)
+
+  const { error: erroDelete } = await db.from('lotes_importacao').delete().eq('id', loteId)
+  if (erroDelete) throw new Error(`Erro ao excluir lote: ${erroDelete.message}`)
+
+  if (lote?.storage_path) {
+    // best-effort — se falhar em apagar o arquivo do Storage, o
+    // registro já foi removido do banco, não trava o usuário por isso
+    await storage.storage.from(BUCKET).remove([lote.storage_path]).catch(() => {})
+  }
 }

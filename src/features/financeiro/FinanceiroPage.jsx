@@ -25,7 +25,7 @@ import {
   gerarSugestoesCompetencia,
   ajustarComissaoSugeridaManualmente,
 } from '../../lib/crm/regrasComissaoService'
-import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado } from '../../lib/crm/lotesImportacaoService'
+import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
@@ -476,7 +476,7 @@ function BuscaGlobalTab() {
  * ainda — vem em etapa própria, testada separadamente.
  */
 function RecebimentosTab() {
-  const { user } = useAuth()
+  const { user, perfil } = useAuth()
   const [lotes, setLotes] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [arquivo, setArquivo] = useState(null)
@@ -543,7 +543,7 @@ function RecebimentosTab() {
           </thead>
           <tbody>
             {lotes.map((l) => (
-              <LinhaLote key={l.id} lote={l} usuarioId={user?.id} onAtualizado={carregar} />
+              <LinhaLote key={l.id} lote={l} usuarioId={user?.id} ehMaster={perfil?.papel === 'master'} onAtualizado={carregar} />
             ))}
           </tbody>
         </table>
@@ -552,11 +552,12 @@ function RecebimentosTab() {
   )
 }
 
-function LinhaLote({ lote, usuarioId, onAtualizado }) {
+function LinhaLote({ lote, usuarioId, ehMaster, onAtualizado }) {
   const [expandido, setExpandido] = useState(false)
   const [eventos, setEventos] = useState(null)
   const [carregandoEventos, setCarregandoEventos] = useState(false)
   const [confirmando, setConfirmando] = useState(false)
+  const [excluindo, setExcluindo] = useState(false)
   const [erroConfirmacao, setErroConfirmacao] = useState('')
 
   const temPrevia = lote.status !== 'recebido'
@@ -583,6 +584,18 @@ function LinhaLote({ lote, usuarioId, onAtualizado }) {
     setConfirmando(false)
   }
 
+  async function handleExcluir() {
+    if (!window.confirm(`Excluir "${lote.nome_arquivo_original}"? Isso remove o arquivo e todos os eventos extraídos dele. Não pode ser desfeito.`)) return
+    setExcluindo(true)
+    try {
+      await excluirLote(lote.id)
+      onAtualizado()
+    } catch (e) {
+      alert(`Erro ao excluir: ${e.message}`)
+      setExcluindo(false)
+    }
+  }
+
   return (
     <>
       <tr>
@@ -601,6 +614,11 @@ function LinhaLote({ lote, usuarioId, onAtualizado }) {
           {temPrevia && (
             <button className="cliente-tabela-btn" onClick={handleVerPrevia}>
               {expandido ? 'Fechar' : 'Ver Prévia'}
+            </button>
+          )}
+          {ehMaster && (
+            <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleExcluir} disabled={excluindo} style={{ marginLeft: '0.4rem' }}>
+              {excluindo ? 'Excluindo...' : 'Excluir'}
             </button>
           )}
         </td>
