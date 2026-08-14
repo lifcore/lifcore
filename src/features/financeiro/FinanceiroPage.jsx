@@ -483,6 +483,7 @@ function RecebimentosTab() {
   const [arquivo, setArquivo] = useState(null)
   const [seguradoraSelecionada, setSeguradoraSelecionada] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const [chaveInput, setChaveInput] = useState(0)
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
 
@@ -511,6 +512,7 @@ function RecebimentosTab() {
       setSucesso(`"${lote.nome_arquivo_original}" recebido com sucesso.`)
       setArquivo(null)
       setSeguradoraSelecionada('')
+      setChaveInput((k) => k + 1)
       await carregar()
     } catch (e) {
       setErro(e.message)
@@ -528,7 +530,7 @@ function RecebimentosTab() {
         {sucesso && <p className="config-sucesso">{sucesso}</p>}
 
         <div className="cotacao-form-linha" style={{ alignItems: 'center' }}>
-          <input type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
+          <input key={chaveInput} type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
           <div>
             <label style={{ fontSize: '0.8rem' }}>Seguradora (opcional — ajuda se a identificação automática não achar)</label>
             <select value={seguradoraSelecionada} onChange={(e) => setSeguradoraSelecionada(e.target.value)}>
