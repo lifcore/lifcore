@@ -25,7 +25,7 @@ import {
   gerarSugestoesCompetencia,
   ajustarComissaoSugeridaManualmente,
 } from '../../lib/crm/regrasComissaoService'
-import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote } from '../../lib/crm/lotesImportacaoService'
+import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
@@ -543,7 +543,7 @@ function RecebimentosTab() {
           </thead>
           <tbody>
             {lotes.map((l) => (
-              <LinhaLote key={l.id} lote={l} />
+              <LinhaLote key={l.id} lote={l} usuarioId={user?.id} onAtualizado={carregar} />
             ))}
           </tbody>
         </table>
@@ -552,12 +552,15 @@ function RecebimentosTab() {
   )
 }
 
-function LinhaLote({ lote }) {
+function LinhaLote({ lote, usuarioId, onAtualizado }) {
   const [expandido, setExpandido] = useState(false)
   const [eventos, setEventos] = useState(null)
   const [carregandoEventos, setCarregandoEventos] = useState(false)
+  const [confirmando, setConfirmando] = useState(false)
+  const [erroConfirmacao, setErroConfirmacao] = useState('')
 
-  const temPrevia = lote.status !== 'recebido' // já passou por extração/normalização
+  const temPrevia = lote.status !== 'recebido'
+  const corConfianca = { alta: '#2f7a3d', revisao: '#b8860b', bloqueado: '#b23b3b' }[lote.nivel_confianca]
 
   async function handleVerPrevia() {
     if (!expandido && eventos === null) {
@@ -568,13 +571,32 @@ function LinhaLote({ lote }) {
     setExpandido(!expandido)
   }
 
+  async function handleConfirmarFormato() {
+    setConfirmando(true)
+    setErroConfirmacao('')
+    try {
+      await confirmarFormatoHomologado(lote.id, usuarioId)
+      onAtualizado()
+    } catch (e) {
+      setErroConfirmacao(e.message)
+    }
+    setConfirmando(false)
+  }
+
   return (
     <>
       <tr>
         <td>{lote.nome_arquivo_original}</td>
         <td>{lote.tipo_documento}</td>
         <td>{new Date(lote.enviado_em).toLocaleString('pt-BR')}</td>
-        <td><span className="ls-badge">{lote.status}</span></td>
+        <td>
+          <span className="ls-badge">{lote.status}</span>
+          {lote.nivel_confianca && (
+            <span className="ls-badge" style={{ marginLeft: '0.4rem', background: corConfianca, color: '#fff' }}>
+              {lote.nivel_confianca === 'alta' ? '🟢 alta' : lote.nivel_confianca === 'revisao' ? '🟡 revisão' : '🔴 bloqueado'}
+            </span>
+          )}
+        </td>
         <td>
           {temPrevia && (
             <button className="cliente-tabela-btn" onClick={handleVerPrevia}>
@@ -592,6 +614,10 @@ function LinhaLote({ lote }) {
                 <div><strong>Total bruto extraído:</strong> {lote.valor_bruto_total_extraido != null ? formatarMoeda(lote.valor_bruto_total_extraido) : '—'}</div>
                 <div><strong>Linhas extraídas:</strong> {lote.quantidade_linhas_extraidas ?? '—'}</div>
               </div>
+
+              {lote.motivo_confianca && (
+                <p className="config-instrucao" style={{ marginBottom: '0.75rem' }}><strong>Motivo:</strong> {lote.motivo_confianca}</p>
+              )}
 
               {carregandoEventos ? (
                 <p className="cliente-carregando">Carregando prévia...</p>
@@ -618,6 +644,19 @@ function LinhaLote({ lote }) {
                   </tbody>
                 </table>
               )}
+
+              {lote.status === 'revisao_necessaria' && (
+                <div style={{ marginTop: '0.75rem' }}>
+                  {erroConfirmacao && <p className="ls-modal-erro">{erroConfirmacao}</p>}
+                  <button className="ls-btn ls-btn-primary" onClick={handleConfirmarFormato} disabled={confirmando}>
+                    {confirmando ? 'Confirmando...' : 'Confirmar formato e memorizar'}
+                  </button>
+                  <p className="config-instrucao" style={{ marginTop: '0.4rem' }}>
+                    Confirma que a interpretação acima está correta. Os próximos relatórios com esse mesmo formato serão processados automaticamente, sem passar por revisão de novo.
+                  </p>
+                </div>
+              )}
+
               <p className="config-instrucao" style={{ marginTop: '0.5rem' }}>
                 Isto é uma prévia — nenhum destes eventos virou recebimento financeiro ainda.
               </p>

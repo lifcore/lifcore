@@ -112,3 +112,54 @@ export async function listarEventosPorLote(loteId, cliente = null) {
   if (error) throw new Error(`Erro ao listar eventos do lote: ${error.message}`)
   return data ?? []
 }
+
+/**
+ * PASSO 8 (DOC-COM-002) — Gestor confirma que a interpretação de um
+ * formato novo/alterado está correta. Isso grava (ou atualiza) a
+ * memória do Motor Universal — os próximos documentos com a mesma
+ * assinatura passam a ser processados automaticamente, sem passar de
+ * novo por aqui.
+ *
+ * Só faz sentido pra lotes com status 'revisao_necessaria' — não
+ * existe confirmação de formato pra lote 'bloqueado' (inconsistência
+ * matemática não se resolve confirmando, se resolve corrigindo).
+ */
+export async function confirmarFormatoHomologado(loteId, usuarioId, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+
+  const { data: lote, error: erroLote } = await db.from('lotes_importacao').select('*').eq('id', loteId).single()
+  if (erroLote) throw new Error(`Erro ao buscar lote: ${erroLote.message}`)
+  if (lote.status !== 'revisao_necessaria') {
+    throw new Error(`Só é possível confirmar formato de um lote em revisão. Status atual: ${lote.status}.`)
+  }
+  if (!lote.seguradora_id) {
+    throw new Error('Lote sem seguradora identificada — não é possível memorizar o formato sem saber de quem ele é.')
+  }
+
+  const { data: formato, error: erroFormato } = await db
+    .from('formatos_homologados')
+    .upsert(
+      {
+        seguradora_id: lote.seguradora_id,
+        tipo_documento: 'comissoes',
+        assinatura_estrutural: lote.assinatura_estrutural_pendente,
+        estrategia: lote.estrategia_pendente,
+        receita_extracao: lote.receita_extracao_pendente,
+        status: 'homologado',
+        homologado_por: usuarioId,
+        homologado_em: new Date().toISOString(),
+      },
+      { onConflict: 'seguradora_id,tipo_documento,assinatura_estrutural' }
+    )
+    .select()
+    .single()
+  if (erroFormato) throw new Error(`Erro ao gravar formato homologado: ${erroFormato.message}`)
+
+  const { error: erroUpdateLote } = await db
+    .from('lotes_importacao')
+    .update({ status: 'aguardando_confirmacao' })
+    .eq('id', loteId)
+  if (erroUpdateLote) throw new Error(`Erro ao atualizar status do lote: ${erroUpdateLote.message}`)
+
+  return formato
+}
