@@ -5,10 +5,8 @@ import InfoTooltip from '../../components/InfoTooltip'
 import KpiCard from '../../components/KpiCard'
 import { useSearchParams } from 'react-router-dom'
 import {
-  marcarComoRecebida,
   marcarRepasseComoPago,
   obterFluxoCaixaPrevisto,
-  listarContasAReceber,
   resumirPorFaixaAtraso,
   listarRepassesAPagar,
   obterCentralPendencias,
@@ -27,10 +25,9 @@ import {
   gerarSugestoesCompetencia,
   ajustarComissaoSugeridaManualmente,
 } from '../../lib/crm/regrasComissaoService'
+import { uploadLoteImportacao, listarLotesImportacao } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
-import { listarGestoresPorOperadora } from '../../lib/crm/seguradorasService'
-import { montarLinkWhatsApp } from '../../lib/crm/templatesService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 import { operacional } from '../../lib/supabaseSchemas'
 import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
@@ -62,7 +59,7 @@ function formatarMoeda(valor) {
 const TEXTOS_ABA = {
   lancamentos: 'Etapa 2 do modelo: apólice → regra → comissão sugerida. Nunca é fato financeiro — é expectativa calculada a partir da regra cadastrada em Configurações. Gestor pode ajustar individualmente sem alterar a regra.',
   pendencias: 'Consolida tudo que exige atenção administrativa agora — clique num card pra ir direto à fila correspondente.',
-  contasareceber: 'Fila de lançamentos pendentes, ordenada por urgência — o que está mais atrasado aparece primeiro. Complementa a Conciliação (que mostra visão agregada por seguradora): aqui é por lançamento individual.',
+  contasareceber: 'Etapa 3 do modelo: upload do relatório real da seguradora. Primeira entrega — armazena o documento e cria o lote. Extração, prévia e confronto com a sugestão vêm em etapas seguintes, testadas separadamente.',
   repasses: 'O outro lado do Ledger: dinheiro que a LifitSeg deve repassar ao corretor (não à seguradora). Repasses que dependem de uma comissão ainda não recebida aparecem separados, no fim da lista — não são "atrasados", só ainda não estão liberados pra pagamento.',
   conciliacao: 'Compara o total lançado com o total já confirmado como recebido, por seguradora. "Atrasado" é o que está pendente com previsão de recebimento já vencida.',
   fluxo: 'Soma direta do que já está cadastrado (data prevista de recebimento), pros próximos 3 meses. Sem projeção estatística — só o que já foi lançado.',
@@ -84,7 +81,7 @@ export default function FinanceiroPage() {
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
         <button className={`cliente-aba ${abaAtiva === 'lancamentos' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('lancamentos')}>Comissões Sugeridas</button>
         <button className={`cliente-aba ${abaAtiva === 'pendencias' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('pendencias')}>Pendências</button>
-        <button className={`cliente-aba ${abaAtiva === 'contasareceber' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('contasareceber')}>Contas a Receber</button>
+        <button className={`cliente-aba ${abaAtiva === 'contasareceber' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('contasareceber')}>Recebimentos</button>
         <button className={`cliente-aba ${abaAtiva === 'repasses' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('repasses')}>Repasses</button>
         <button className={`cliente-aba ${abaAtiva === 'conciliacao' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('conciliacao')}>Conciliação</button>
         <button className={`cliente-aba ${abaAtiva === 'fluxo' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('fluxo')}>Fluxo de Caixa</button>
@@ -92,7 +89,7 @@ export default function FinanceiroPage() {
       </div>
 
       {abaAtiva === 'pendencias' && <PendenciasTab setAbaAtiva={setAbaAtiva} />}
-      {abaAtiva === 'contasareceber' && <ContasAReceberTab />}
+      {abaAtiva === 'contasareceber' && <RecebimentosTab />}
       {abaAtiva === 'repasses' && <RepassesTab />}
       {abaAtiva === 'conciliacao' && <ConciliacaoTab />}
       {abaAtiva === 'fluxo' && <FluxoCaixaTab />}
@@ -472,10 +469,20 @@ function BuscaGlobalTab() {
   )
 }
 
-function ContasAReceberTab() {
-  const [linhas, setLinhas] = useState(null)
-  const [filtroFaixa, setFiltroFaixa] = useState('')
+/**
+ * Etapa 3 do DOC-COM-001.1 — primeira entrega funcional, deliberadamente
+ * mínima: Upload → Storage (bucket 'anexos', já existente) → cria o
+ * lote → mostra que foi recebido. Nada de extração/normalização/prévia
+ * ainda — vem em etapa própria, testada separadamente.
+ */
+function RecebimentosTab() {
+  const { user } = useAuth()
+  const [lotes, setLotes] = useState([])
   const [carregando, setCarregando] = useState(true)
+  const [arquivo, setArquivo] = useState(null)
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [sucesso, setSucesso] = useState('')
 
   useEffect(() => {
     carregar()
@@ -483,103 +490,70 @@ function ContasAReceberTab() {
 
   async function carregar() {
     setCarregando(true)
-    const r = await listarContasAReceber()
-    setLinhas(r)
+    try {
+      setLotes(await listarLotesImportacao())
+    } catch (e) {
+      setErro(e.message)
+    }
     setCarregando(false)
   }
 
-  if (carregando) return <p className="cliente-carregando">Carregando contas a receber...</p>
-
-  const resumo = resumirPorFaixaAtraso(linhas)
-  const linhasFiltradas = filtroFaixa ? linhas.filter((l) => l.faixaAtraso === filtroFaixa) : linhas
+  async function handleUpload() {
+    if (!arquivo) return
+    setEnviando(true)
+    setErro('')
+    setSucesso('')
+    try {
+      const lote = await uploadLoteImportacao({ file: arquivo, enviadoPor: user?.id })
+      setSucesso(`"${lote.nome_arquivo_original}" recebido com sucesso.`)
+      setArquivo(null)
+      await carregar()
+    } catch (e) {
+      setErro(e.message)
+    }
+    setEnviando(false)
+  }
 
   return (
     <div>
+      <div className="ls-card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
+        <h4 style={{ marginTop: 0 }}>Enviar Relatório Real</h4>
+        <p className="config-instrucao">PDF, imagem (PNG/JPG), Excel ou CSV. O arquivo original fica preservado — nada vira financeiro ainda nesta etapa.</p>
 
-      <div className="kpi-grid">
-        {Object.entries(resumo.porFaixa).map(([faixa, dados]) => (
-          <KpiCard
-            key={faixa}
-            label={FAIXAS_LABEL[faixa]}
-            valor={formatarMoeda(dados.total)}
-            trendTexto={`${dados.quantidade} lançamento(s)`}
-            trendTipo={faixa !== '0-30' ? 'negativo' : 'neutro'}
-            destacado={filtroFaixa === faixa}
-            onClick={() => setFiltroFaixa(filtroFaixa === faixa ? '' : faixa)}
-          />
-        ))}
+        {erro && <p className="ls-modal-erro">{erro}</p>}
+        {sucesso && <p className="config-sucesso">{sucesso}</p>}
+
+        <div className="cotacao-form-linha" style={{ alignItems: 'center' }}>
+          <input type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
+          <button className="ls-btn ls-btn-primary" onClick={handleUpload} disabled={!arquivo || enviando}>
+            {enviando ? 'Enviando...' : 'Enviar'}
+          </button>
+        </div>
       </div>
 
-      {linhasFiltradas.length === 0 ? (
-        <p className="cliente-vazio">Nenhuma conta a receber pendente {filtroFaixa ? 'nessa faixa' : ''}.</p>
+      <h4>Lotes Recebidos</h4>
+      {carregando ? (
+        <p className="cliente-carregando">Carregando...</p>
+      ) : lotes.length === 0 ? (
+        <p className="cliente-vazio">Nenhum relatório enviado ainda.</p>
       ) : (
         <table className="cliente-tabela">
           <thead>
-            <tr>
-              <th>Seguradora</th><th>Módulo</th><th>Valor</th><th>Previsão</th><th>Atraso</th><th>Ações</th>
-            </tr>
+            <tr><th>Arquivo</th><th>Tipo</th><th>Enviado em</th><th>Status</th></tr>
           </thead>
           <tbody>
-            {linhasFiltradas.map((l) => (
-              <LinhaContaAReceber key={l.id} linha={l} onAtualizado={carregar} />
+            {lotes.map((l) => (
+              <tr key={l.id}>
+                <td>{l.nome_arquivo_original}</td>
+                <td>{l.tipo_documento}</td>
+                <td>{new Date(l.enviado_em).toLocaleString('pt-BR')}</td>
+                <td><span className="ls-badge">{l.status}</span></td>
+              </tr>
             ))}
           </tbody>
         </table>
       )}
     </div>
-  )
-}
-
-function LinhaContaAReceber({ linha, onAtualizado }) {
-  const [cobrando, setCobrando] = useState(false)
-
-  async function handleMarcarRecebida() {
-    await marcarComoRecebida(linha.id)
-    onAtualizado()
-  }
-
-  async function handleCobrar() {
-    setCobrando(true)
-    try {
-      const gestores = await listarGestoresPorOperadora(linha.operadora_id)
-      const gestor = gestores.find((g) => g.modulo === linha.modulo)
-      const numero = gestor?.whatsapp || gestor?.telefone
-      if (!numero) {
-        alert('Nenhum WhatsApp/telefone cadastrado pro gestor dessa seguradora nesse módulo. Cadastre em Configurações → Seguradoras.')
-        return
-      }
-      const texto = `Olá${gestor.nome ? ', ' + gestor.nome : ''}! Temos um recebimento de comissão pendente` +
-        `${linha.operadora?.nome ? ` (${linha.operadora.nome})` : ''}, valor ${formatarMoeda(linha.valor_comissao)}` +
-        `${linha.data_prevista_recebimento ? `, previsto para ${formatarDataBR(linha.data_prevista_recebimento)}` : ''}.` +
-        ` Poderia nos ajudar a verificar o status? Obrigado!`
-      window.open(montarLinkWhatsApp(numero, texto), '_blank')
-    } finally {
-      setCobrando(false)
-    }
-  }
-
-  return (
-    <tr>
-      <td>{linha.operadora?.nome || '—'}</td>
-      <td>{MODULOS.find((m) => m.id === linha.modulo)?.label || linha.modulo}</td>
-      <td>{formatarMoeda(linha.valor_comissao)}</td>
-      <td>{linha.data_prevista_recebimento ? formatarDataBR(linha.data_prevista_recebimento) : '—'}</td>
-      <td>
-        {linha.faixaAtraso ? (
-          <span className="ls-badge" style={{ background: '#f5d9d9', color: '#b23b3b' }}>
-            {linha.diasAtraso}d ({FAIXAS_LABEL[linha.faixaAtraso]})
-          </span>
-        ) : (
-          <span className="ls-badge">No prazo</span>
-        )}
-      </td>
-      <td className="cliente-tabela-acoes">
-        <button className="cliente-tabela-btn" onClick={handleMarcarRecebida}>Marcar recebida</button>
-        <button className="cliente-tabela-btn" onClick={handleCobrar} disabled={cobrando}>
-          {cobrando ? '...' : '💬 Cobrar'}
-        </button>
-      </td>
-    </tr>
   )
 }
 
