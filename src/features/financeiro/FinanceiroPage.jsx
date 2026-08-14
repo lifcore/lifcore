@@ -25,7 +25,7 @@ import {
   gerarSugestoesCompetencia,
   ajustarComissaoSugeridaManualmente,
 } from '../../lib/crm/regrasComissaoService'
-import { uploadLoteImportacao, listarLotesImportacao } from '../../lib/crm/lotesImportacaoService'
+import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
@@ -539,21 +539,93 @@ function RecebimentosTab() {
       ) : (
         <table className="cliente-tabela">
           <thead>
-            <tr><th>Arquivo</th><th>Tipo</th><th>Enviado em</th><th>Status</th></tr>
+            <tr><th>Arquivo</th><th>Tipo</th><th>Enviado em</th><th>Status</th><th></th></tr>
           </thead>
           <tbody>
             {lotes.map((l) => (
-              <tr key={l.id}>
-                <td>{l.nome_arquivo_original}</td>
-                <td>{l.tipo_documento}</td>
-                <td>{new Date(l.enviado_em).toLocaleString('pt-BR')}</td>
-                <td><span className="ls-badge">{l.status}</span></td>
-              </tr>
+              <LinhaLote key={l.id} lote={l} />
             ))}
           </tbody>
         </table>
       )}
     </div>
+  )
+}
+
+function LinhaLote({ lote }) {
+  const [expandido, setExpandido] = useState(false)
+  const [eventos, setEventos] = useState(null)
+  const [carregandoEventos, setCarregandoEventos] = useState(false)
+
+  const temPrevia = lote.status !== 'recebido' // já passou por extração/normalização
+
+  async function handleVerPrevia() {
+    if (!expandido && eventos === null) {
+      setCarregandoEventos(true)
+      setEventos(await listarEventosPorLote(lote.id))
+      setCarregandoEventos(false)
+    }
+    setExpandido(!expandido)
+  }
+
+  return (
+    <>
+      <tr>
+        <td>{lote.nome_arquivo_original}</td>
+        <td>{lote.tipo_documento}</td>
+        <td>{new Date(lote.enviado_em).toLocaleString('pt-BR')}</td>
+        <td><span className="ls-badge">{lote.status}</span></td>
+        <td>
+          {temPrevia && (
+            <button className="cliente-tabela-btn" onClick={handleVerPrevia}>
+              {expandido ? 'Fechar' : 'Ver Prévia'}
+            </button>
+          )}
+        </td>
+      </tr>
+      {expandido && (
+        <tr>
+          <td colSpan={5}>
+            <div className="ls-card" style={{ padding: '0.75rem' }}>
+              <div className="cotacao-form-linha" style={{ marginBottom: '0.5rem' }}>
+                <div><strong>Competência informada:</strong> {lote.competencia_informada ? new Date(lote.competencia_informada).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' }) : '—'}</div>
+                <div><strong>Total bruto extraído:</strong> {lote.valor_bruto_total_extraido != null ? formatarMoeda(lote.valor_bruto_total_extraido) : '—'}</div>
+                <div><strong>Linhas extraídas:</strong> {lote.quantidade_linhas_extraidas ?? '—'}</div>
+              </div>
+
+              {carregandoEventos ? (
+                <p className="cliente-carregando">Carregando prévia...</p>
+              ) : !eventos?.length ? (
+                <p className="cliente-vazio">Nenhum evento normalizado encontrado pra este lote.</p>
+              ) : (
+                <table className="cliente-tabela">
+                  <thead>
+                    <tr>
+                      <th>Apólice</th><th>Recibo</th><th>Parcela</th><th>Data</th><th>Valor</th><th>Classificação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {eventos.map((e) => (
+                      <tr key={e.id}>
+                        <td>{e.numero_apolice_informado ?? '—'}</td>
+                        <td>{e.numero_recibo_informado ?? '—'}</td>
+                        <td>{e.numero_parcela_informado ?? '—'}</td>
+                        <td>{e.data_evento ? formatarDataBR(e.data_evento) : '—'}</td>
+                        <td style={e.valor_bruto < 0 ? { color: '#b23b3b' } : {}}>{formatarMoeda(e.valor_bruto)}</td>
+                        <td><span className="ls-badge">{e.classificacao}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <p className="config-instrucao" style={{ marginTop: '0.5rem' }}>
+                Isto é uma prévia — nenhum destes eventos virou recebimento financeiro ainda.
+              </p>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
 

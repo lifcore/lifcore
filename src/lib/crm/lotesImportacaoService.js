@@ -96,3 +96,19 @@ export async function listarLotesImportacao(cliente = null) {
   if (error) throw new Error(`Erro ao listar lotes: ${error.message}`)
   return data ?? []
 }
+
+/**
+ * Prévia — lista os eventos que a extração/normalização encontrou num
+ * lote, pro Gestor conferir antes de qualquer confirmação. Leitura
+ * pura, não altera nada.
+ */
+export async function listarEventosPorLote(loteId, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+  const { data, error } = await db
+    .from('eventos_financeiros_normalizados')
+    .select('*')
+    .eq('lote_importacao_id', loteId)
+    .order('linha_original_ref', { ascending: true })
+  if (error) throw new Error(`Erro ao listar eventos do lote: ${error.message}`)
+  return data ?? []
+}
