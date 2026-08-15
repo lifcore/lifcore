@@ -623,6 +623,110 @@ export async function confrontarFechamentoAgregado({ operadoraId, competenciaRef
   }
 }
 
+// ============================================================
+// VITALÍCIO SOB DEMANDA (Etapa 4, Peça 5 — aprovado pelo Chief). Nunca
+// gera calendário em lote pro vitalício (não tem fim, geraria lixo
+// infinito). Materializa UMA linha nova de cada vez, só quando a
+// última competência do calendário já existente foi quitada por
+// recebimento real conciliado — funciona igual pra "quitou a comissão
+// inicial, libera o 1º vitalício" quanto pra "quitou o vitalício
+// anterior, libera o próximo": em ambos os casos é sempre "a última
+// linha do calendário já foi paga de verdade?", sem precisar de lógica
+// separada pros dois momentos.
+// ============================================================
+
+export async function materializarVitalicioSeElegivel(vendaId, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+
+  const { data: venda, error: erroVenda } = await db
+    .from('vendas')
+    .select('id, apolice_id')
+    .eq('id', vendaId)
+    .single()
+  if (erroVenda) throw new Error(`Erro ao buscar venda: ${erroVenda.message}`)
+  if (!venda.apolice_id) return { materializado: false, motivo: 'venda sem apólice — fora da mecânica de calendário' }
+
+  const { data: apolice, error: erroApolice } = await db
+    .from('apolices')
+    .select('premio')
+    .eq('id', venda.apolice_id)
+    .maybeSingle()
+  if (erroApolice) throw new Error(`Erro ao buscar apólice: ${erroApolice.message}`)
+  if (!apolice?.premio) return { materializado: false, motivo: 'apólice sem prêmio' }
+
+  // Última linha do calendário — âncora dupla: decide se já quitou E
+  // onde a próxima competência cai.
+  const { data: ultimaLinha, error: erroUltima } = await db
+    .from('comissao_sugerida')
+    .select('id, competencia_referencia, valor_sugerido, regra_comissao_id')
+    .eq('venda_id', vendaId)
+    .order('competencia_referencia', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (erroUltima) throw new Error(`Erro ao buscar última competência do calendário: ${erroUltima.message}`)
+  if (!ultimaLinha) return { materializado: false, motivo: 'venda sem calendário projetado ainda' }
+
+  const { data: regra, error: erroRegra } = await db
+    .from('regras_comissao')
+    .select('id, vitalicio, vitalicio_percentual')
+    .eq('id', ultimaLinha.regra_comissao_id)
+    .maybeSingle()
+  if (erroRegra) throw new Error(`Erro ao buscar regra: ${erroRegra.message}`)
+  if (!regra?.vitalicio) return { materializado: false, motivo: 'regra não prevê vitalício' }
+  if (!regra.vitalicio_percentual) return { materializado: false, motivo: 'regra marca vitalício mas não tem percentual definido — sem inventar valor' }
+
+  // Líquido real esperado da última linha (com ajustes/estornos já
+  // aplicados por cima, se houver).
+  const { data: ajustesLinha, error: erroAjustesLinha } = await db
+    .from('ajustes_comissao_sugerida')
+    .select('valor')
+    .eq('comissao_sugerida_id', ultimaLinha.id)
+  if (erroAjustesLinha) throw new Error(`Erro ao buscar ajustes da última linha: ${erroAjustesLinha.message}`)
+  const totalAjustesLinha = (ajustesLinha ?? []).reduce((soma, a) => soma + Number(a.valor), 0)
+  const esperadoLiquidoUltimaLinha = Number(ultimaLinha.valor_sugerido) + totalAjustesLinha
+
+  const { data: recebimentos, error: erroRecebimentos } = await db
+    .from('recebimentos_comissao')
+    .select('valor_liquido')
+    .eq('venda_id', vendaId)
+    .eq('competencia_referencia', ultimaLinha.competencia_referencia)
+    .in('status', ['conciliado', 'distribuido'])
+  if (erroRecebimentos) throw new Error(`Erro ao buscar recebimentos da última competência: ${erroRecebimentos.message}`)
+  const totalRecebidoUltimaLinha = (recebimentos ?? []).reduce((soma, r) => soma + Number(r.valor_liquido), 0)
+
+  if (totalRecebidoUltimaLinha + 0.01 < esperadoLiquidoUltimaLinha) {
+    return { materializado: false, motivo: 'última competência do calendário ainda não foi quitada por recebimento real' }
+  }
+
+  const proximaCompetencia = somarMesesRelativo(ultimaLinha.competencia_referencia, 2)
+
+  const { data: existente, error: erroExistente } = await db
+    .from('comissao_sugerida')
+    .select('id')
+    .eq('venda_id', vendaId)
+    .eq('competencia_referencia', proximaCompetencia)
+    .maybeSingle()
+  if (erroExistente) throw new Error(`Erro ao verificar linha existente: ${erroExistente.message}`)
+  if (existente) return { materializado: false, motivo: 'próxima competência já existe (idempotente — não duplica)' }
+
+  const valorVitalicio = Number(((Number(apolice.premio) * Number(regra.vitalicio_percentual)) / 100).toFixed(2))
+
+  const { data: novaLinha, error: erroInsert } = await db
+    .from('comissao_sugerida')
+    .insert({
+      venda_id: vendaId,
+      regra_comissao_id: regra.id,
+      competencia_referencia: proximaCompetencia,
+      valor_sugerido: valorVitalicio,
+      status_calculo: 'calculada',
+    })
+    .select()
+    .single()
+  if (erroInsert) throw new Error(`Erro ao materializar vitalício: ${erroInsert.message}`)
+
+  return { materializado: true, competencia: proximaCompetencia, valor: valorVitalicio, linha: novaLinha }
+}
+
 /**
  * VALIDAÇÃO (Etapa 4, Peça 1 — aprovado pelo Chief).
  *

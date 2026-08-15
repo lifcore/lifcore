@@ -36,6 +36,7 @@ import {
   lancarAjusteEstorno,
   obterConfrontoDaVenda,
   confrontarFechamentoAgregado,
+  materializarVitalicioSeElegivel,
 } from '../../lib/crm/regrasComissaoService'
 import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote, listarSeguradorasCatalogo, atribuirSeguradoraEReprocessar, reprocessarLote } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
@@ -1726,18 +1727,36 @@ function PainelConfrontoVenda({ vendaId, usuarioId }) {
   const [motivoAjuste, setMotivoAjuste] = useState('')
   const [competenciaAjuste, setCompetenciaAjuste] = useState('')
   const [salvandoAjuste, setSalvandoAjuste] = useState(false)
+  const [avisoVitalicio, setAvisoVitalicio] = useState('')
 
   useEffect(() => {
     carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vendaId])
 
+  /**
+   * VITALÍCIO SOB DEMANDA (Etapa 4, Peça 5). Roda toda vez que o
+   * confronto é (re)carregado — é idempotente (não duplica se a
+   * próxima competência já existe), então é seguro chamar sempre,
+   * sem precisar de gatilho manual. Se materializar uma linha nova,
+   * recarrega o confronto pra ela já aparecer.
+   */
   async function carregar() {
     setCarregando(true)
     setErro('')
+    setAvisoVitalicio('')
     try {
       const dados = await obterConfrontoDaVenda(vendaId)
       setConfronto(dados)
+
+      const resultadoVitalicio = await materializarVitalicioSeElegivel(vendaId)
+      if (resultadoVitalicio.materializado) {
+        setAvisoVitalicio(
+          `Vitalício materializado: ${new Date(resultadoVitalicio.competencia).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' })} — ${formatarMoeda(resultadoVitalicio.valor)}. Aparece na tela de Comissão Sugerida, aguardando validação.`
+        )
+        const dadosAtualizados = await obterConfrontoDaVenda(vendaId)
+        setConfronto(dadosAtualizados)
+      }
     } catch (e) {
       setErro(e.message)
     }
@@ -1790,6 +1809,11 @@ function PainelConfrontoVenda({ vendaId, usuarioId }) {
 
   return (
     <div className="ls-card" style={{ padding: '0.6rem', marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+      {avisoVitalicio && (
+        <p className="config-instrucao" style={{ borderLeft: '3px solid var(--ls-success, #2f7a3d)', paddingLeft: '0.5rem', marginBottom: '0.5rem' }}>
+          🔓 {avisoVitalicio}
+        </p>
+      )}
       <div className="cotacao-form-linha" style={{ alignItems: 'center' }}>
         <strong style={{ fontSize: '0.85rem' }}>Confronto — cenário esperado × recebido</strong>
         <span className="ls-badge" style={{ background: CORES_STATUS[confronto.statusGeral] }}>
