@@ -240,7 +240,36 @@ export async function cancelarComissao(id, motivo) {
 }
 
 /** Exclui definitivamente um lançamento (uso em fase de testes) */
+/**
+ * Exclui um lançamento de comissão do ledger (Bloco B — extensão,
+ * aprovado pelo Chief: "precisamos de mais um botão de exclusão, a da
+ * comissão no Financeiro"). Uso: corrigir lançamento errado do
+ * corretor, ou limpar resíduo do gatilho automático legado
+ * (desligado na Sprint Vendas Central, mas que já tinha gravado linhas
+ * antes disso).
+ *
+ * Trava de segurança: NUNCA apaga se `recebimento_comissao_id` estiver
+ * preenchido — isso significa que a comissão já está batida com um
+ * recebimento real conciliado, fato financeiro que não pode
+ * desaparecer. Sem esse vínculo, é lançamento solto (erro ou lixo
+ * legado), liberado pra excluir.
+ *
+ * Restrição de acesso (Master-only) fica na camada de UI
+ * (FinanceiroPage.jsx), não aqui — mesmo padrão já usado no resto do
+ * projeto (ex: `ehMaster` nas telas de Pipeline).
+ */
 export async function excluirComissao(id) {
+  const { data: comissao, error: erroBuscar } = await operacional
+    .from('comissoes')
+    .select('id, recebimento_comissao_id')
+    .eq('id', id)
+    .single()
+  if (erroBuscar) throw new Error(`Erro ao buscar comissão: ${erroBuscar.message}`)
+
+  if (comissao.recebimento_comissao_id) {
+    throw new Error('Não é possível excluir: esta comissão está vinculada a um recebimento real conciliado.')
+  }
+
   const { error } = await operacional.from('comissoes').delete().eq('id', id)
   if (error) throw new Error(`Erro ao excluir comissão: ${error.message}`)
 }

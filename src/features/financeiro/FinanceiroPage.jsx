@@ -11,6 +11,7 @@ import {
   listarRepassesAPagar,
   obterCentralPendencias,
   buscarComissoesGlobal,
+  excluirComissao,
 } from '../../lib/crm/comissoesService'
 import {
   listarRecebimentosPendentesConciliacao,
@@ -393,6 +394,8 @@ function PendenciasTab({ setAbaAtiva }) {
 }
 
 function BuscaGlobalTab() {
+  const { perfil } = useAuth()
+  const ehMaster = perfil?.papel === 'master'
   const [corretores, setCorretores] = useState([])
   const [seguradoras, setSeguradoras] = useState([])
   const [filtroCorretor, setFiltroCorretor] = useState('')
@@ -405,6 +408,8 @@ function BuscaGlobalTab() {
   const [filtroValorMaximo, setFiltroValorMaximo] = useState('')
   const [resultados, setResultados] = useState(null)
   const [buscando, setBuscando] = useState(false)
+  const [excluindo, setExcluindo] = useState(null)
+  const [erroExclusao, setErroExclusao] = useState('')
 
   useEffect(() => {
     listarCorretores().then(setCorretores)
@@ -427,6 +432,28 @@ function BuscaGlobalTab() {
       setResultados(r)
     } finally {
       setBuscando(false)
+    }
+  }
+
+  /**
+   * Master-only (Bloco B — extensão, aprovado pelo Chief). Corrige
+   * lançamento de comissão errado do corretor, ou limpa resíduo do
+   * gatilho automático legado. A trava real (nunca apagar comissão
+   * vinculada a recebimento conciliado) está no service, não aqui —
+   * esta função só decide QUEM pode chamar o botão, não SE é seguro
+   * apagar.
+   */
+  async function handleExcluirComissao(id) {
+    if (!window.confirm('Excluir este lançamento de comissão? Isso não afeta a Venda nem a apólice — só remove este registro do ledger.')) return
+    setExcluindo(id)
+    setErroExclusao('')
+    try {
+      await excluirComissao(id)
+      setResultados((atual) => atual.filter((r) => r.id !== id))
+    } catch (err) {
+      setErroExclusao(err.message)
+    } finally {
+      setExcluindo(null)
     }
   }
 
@@ -485,12 +512,19 @@ function BuscaGlobalTab() {
         </button>
       </div>
 
+      {erroExclusao && <p className="ls-modal-erro">{erroExclusao}</p>}
+
       {resultados && (
         resultados.length === 0 ? (
           <p className="cliente-vazio">Nenhum resultado encontrado.</p>
         ) : (
           <table className="cliente-tabela">
-            <thead><tr><th>Seguradora</th><th>Módulo</th><th>Valor</th><th>Status</th><th>Data</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Seguradora</th><th>Módulo</th><th>Valor</th><th>Status</th><th>Data</th>
+                {ehMaster && <th>Ação</th>}
+              </tr>
+            </thead>
             <tbody>
               {resultados.map((r) => (
                 <tr key={r.id}>
@@ -499,6 +533,18 @@ function BuscaGlobalTab() {
                   <td>{formatarMoeda(r.valor_comissao)}</td>
                   <td><span className="ls-badge">{r.status_recebimento}</span></td>
                   <td>{new Date(r.created_at).toLocaleDateString('pt-BR')}</td>
+                  {ehMaster && (
+                    <td>
+                      <button
+                        className="ls-btn ls-btn-ghost"
+                        style={{ color: 'var(--ls-danger, #d33)', fontSize: '0.8rem' }}
+                        onClick={() => handleExcluirComissao(r.id)}
+                        disabled={excluindo === r.id}
+                      >
+                        {excluindo === r.id ? 'Excluindo...' : 'Excluir'}
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
