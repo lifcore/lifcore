@@ -38,11 +38,13 @@ function reconstruirBlocos(itensContrato) {
 }
 
 export default function ContratoForm({ clienteProspectId, contratoExistente, operadoraInicial, itensIniciais, onSalvo, onCancelar }) {
-  // produtoId é o vínculo real com institucional.produtos (Sprint Vendas
-  // Central, aprovada pelo Chief). `produto` (texto) continua existindo
-  // por compatibilidade com telas que só leem o nome — mas quem alimenta
-  // Venda → Regra de Comissão → Comissão Sugerida agora é o produtoId.
+  // produtoId e operadoraId são os vínculos reais com institucional.produtos
+  // e institucional.operadoras (Sprint Vendas Central, aprovada pelo
+  // Chief). `produto`/`operadora_nome_livre` (texto) continuam existindo
+  // por compatibilidade — quem alimenta Venda → Regra de Comissão →
+  // Comissão Sugerida agora são os IDs reais.
   const [produtoId, setProdutoId] = useState(contratoExistente?.produto_id ?? '')
+  const [operadoraId, setOperadoraId] = useState(contratoExistente?.operadora_id ?? '')
   const [operadoraNome, setOperadoraNome] = useState(contratoExistente?.operadora_nome_livre ?? operadoraInicial ?? '')
   const [modalidade, setModalidade] = useState(contratoExistente?.modalidade ?? '')
   const [numeroApolice, setNumeroApolice] = useState(contratoExistente?.numero_apolice ?? '')
@@ -73,6 +75,11 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
       soma + Object.values(bloco.faixas).reduce((s, f) => s + (parseInt(f.vidas, 10) || 0) * parseValorBR(f.valor), 0),
     0
   )
+
+  function selecionarOperadora(id) {
+    setOperadoraId(id)
+    setOperadoraNome(catalogoOperadoras.find((op) => op.id === id)?.nome ?? '')
+  }
 
   function atualizarFaixa(blocoId, faixa, campo, valor) {
     setBlocosPlano((blocos) =>
@@ -124,8 +131,8 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
       setErro('Selecione o produto (Saúde, Odonto ou Saúde e Odonto).')
       return
     }
-    if (!operadoraNome.trim()) {
-      setErro('Informe a operadora.')
+    if (!operadoraId) {
+      setErro('Selecione a operadora do catálogo.')
       return
     }
     setSalvando(true)
@@ -156,6 +163,7 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
       const dados = {
         produto: produtoSelecionado?.nome ?? null,
         produto_id: produtoId,
+        operadora_id: operadoraId,
         operadora_nome_livre: operadoraNome,
         plano: blocosPlano.map((b) => b.plano).filter(Boolean).join(' + ') || null,
         modalidade: modalidade || null,
@@ -184,12 +192,6 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
 
   return (
     <div className="cotacao-form">
-      <datalist id="lista-operadoras-contrato">
-        {catalogoOperadoras.map((op) => (
-          <option key={op.codigo} value={op.nome} />
-        ))}
-      </datalist>
-
       <div className="cotacao-form-linha">
         <div>
           <label>Produto</label>
@@ -202,7 +204,12 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
         </div>
         <div>
           <label>Operadora</label>
-          <input list="lista-operadoras-contrato" value={operadoraNome} onChange={(e) => setOperadoraNome(e.target.value)} placeholder="Comece a digitar..." />
+          <select value={operadoraId} onChange={(e) => selecionarOperadora(e.target.value)}>
+            <option value="">Selecione...</option>
+            {catalogoOperadoras.map((op) => (
+              <option key={op.id} value={op.id}>{op.nome}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label>Modalidade</label>

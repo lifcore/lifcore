@@ -3,15 +3,22 @@ import { useAuth } from '../auth/AuthContext'
 import { operacional } from '../../lib/supabaseSchemas'
 import { parseValorBR } from '../../lib/crm/clientesService'
 import { criarContratoLifplan, atualizarContratoLifplan } from '../../lib/crm/lifplanService'
+import { listarCatalogoSeguradoras, criarSeguradora } from '../../lib/crm/apolicesService'
 import { listarProdutos } from '../../lib/crm/catalogoInstitucionalService'
 
+/**
+ * CORREÇÃO (Sprint Vendas Central — vínculo Operadora, aprovada pelo
+ * Chief): "Instituição" era texto livre puro, sem catálogo nenhum
+ * antes. Agora seleciona do catálogo real (institucional.operadoras,
+ * mesmo compartilhado por Lifleet/Lifsure/Lishield), gravando
+ * `operadora_id` verdadeiro — necessário pra cadeia Venda → Regra de
+ * Comissão. Cadastro rápido disponível (mesmo padrão de ApoliceForm.jsx)
+ * pra instituições ainda não cadastradas.
+ */
 export default function ContratoLifplanForm({ clienteProspectId, contratoExistente, onSalvo, onCancelar }) {
   const { perfil } = useAuth()
-  // produtoId é o vínculo real com institucional.produtos (Sprint Vendas
-  // Central, aprovada pelo Chief). `produto` (texto) continua existindo
-  // por compatibilidade com telas que só leem o nome — mas quem alimenta
-  // Venda → Regra de Comissão → Comissão Sugerida agora é o produtoId.
   const [produtoId, setProdutoId] = useState(contratoExistente?.produto_id ?? '')
+  const [operadoraId, setOperadoraId] = useState(contratoExistente?.operadora_id ?? '')
   const [instituicao, setInstituicao] = useState(contratoExistente?.operadora_nome_livre ?? '')
   const [numeroContrato, setNumeroContrato] = useState(contratoExistente?.numero_apolice ?? '')
   const [valor, setValor] = useState(contratoExistente?.premio ?? '')
@@ -20,20 +27,43 @@ export default function ContratoLifplanForm({ clienteProspectId, contratoExisten
   const [vigenciaFim, setVigenciaFim] = useState(contratoExistente?.vigencia_fim ?? '')
   const [detalhesProduto, setDetalhesProduto] = useState(contratoExistente?.detalhes_produto ?? '')
   const [produtos, setProdutos] = useState([])
+  const [catalogoSeguradoras, setCatalogoSeguradoras] = useState([])
+  const [cadastrandoNova, setCadastrandoNova] = useState(false)
+  const [nomeNovaSeguradora, setNomeNovaSeguradora] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
 
   useEffect(() => {
     listarProdutos({ modulo: 'lifplan' }).then(setProdutos).catch(() => {})
+    listarCatalogoSeguradoras().then(setCatalogoSeguradoras).catch(() => {})
   }, [])
+
+  function selecionarInstituicao(id) {
+    setOperadoraId(id)
+    setInstituicao(catalogoSeguradoras.find((s) => s.id === id)?.nome ?? '')
+  }
+
+  async function handleCadastrarNovaInstituicao() {
+    if (!nomeNovaSeguradora.trim()) return
+    try {
+      const nova = await criarSeguradora({ nome: nomeNovaSeguradora, categoriaSeguro: 'Lifplan' })
+      const listaAtualizada = await listarCatalogoSeguradoras()
+      setCatalogoSeguradoras(listaAtualizada)
+      selecionarInstituicao(nova.id)
+      setCadastrandoNova(false)
+      setNomeNovaSeguradora('')
+    } catch (err) {
+      setErro(err.message)
+    }
+  }
 
   async function handleSalvar() {
     if (!produtoId) {
       setErro('Escolha o produto.')
       return
     }
-    if (!instituicao.trim() || !valor) {
-      setErro('Informe ao menos a instituição e o valor da operação.')
+    if (!operadoraId || !valor) {
+      setErro('Selecione a instituição do catálogo e informe o valor da operação.')
       return
     }
     setSalvando(true)
@@ -44,6 +74,7 @@ export default function ContratoLifplanForm({ clienteProspectId, contratoExisten
       const dados = {
         produto: produtoSelecionado?.nome ?? null,
         produto_id: produtoId,
+        operadora_id: operadoraId,
         operadora_nome_livre: instituicao,
         numero_apolice: numeroContrato || null,
         premio: parseValorBR(valor),
@@ -86,7 +117,15 @@ export default function ContratoLifplanForm({ clienteProspectId, contratoExisten
       <div className="cotacao-form-linha" style={{ marginTop: '0.6rem' }}>
         <div>
           <label>Instituição</label>
-          <input value={instituicao} onChange={(e) => setInstituicao(e.target.value)} placeholder="Banco, administradora, corretora..." />
+          <select value={operadoraId} onChange={(e) => selecionarInstituicao(e.target.value)}>
+            <option value="">Selecione...</option>
+            {catalogoSeguradoras.map((s) => (
+              <option key={s.id} value={s.id}>{s.nome}</option>
+            ))}
+          </select>
+          <button className="ls-btn ls-btn-ghost" style={{ marginTop: '0.4rem', fontSize: '0.75rem' }} onClick={() => setCadastrandoNova(true)}>
+            + Instituição não está na lista
+          </button>
         </div>
         <div>
           <label>Número do contrato</label>
@@ -97,6 +136,17 @@ export default function ContratoLifplanForm({ clienteProspectId, contratoExisten
           <input value={valor} onChange={(e) => setValor(e.target.value)} placeholder="Ex: 80000,00" />
         </div>
       </div>
+
+      {cadastrandoNova && (
+        <div className="ls-card" style={{ padding: '0.6rem', marginBottom: '0.6rem' }}>
+          <label>Nome da nova instituição</label>
+          <input value={nomeNovaSeguradora} onChange={(e) => setNomeNovaSeguradora(e.target.value)} placeholder="Ex: Banco, administradora..." />
+          <div className="ls-modal-acoes">
+            <button className="ls-btn ls-btn-ghost" onClick={() => { setCadastrandoNova(false); setNomeNovaSeguradora('') }}>Cancelar</button>
+            <button className="ls-btn ls-btn-primary" onClick={handleCadastrarNovaInstituicao}>Cadastrar e Selecionar</button>
+          </div>
+        </div>
+      )}
 
       <div className="cotacao-form-linha">
         <div>

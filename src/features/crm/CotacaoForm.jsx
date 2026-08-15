@@ -35,7 +35,18 @@ function reconstruirBlocos(itensCotacao) {
   return Object.values(blocosPorPlano)
 }
 
+/**
+ * CORREÇÃO (Sprint Vendas Central — vínculo Operadora, aprovada pelo
+ * Chief): antes usava datalist de texto livre, sem vínculo real —
+ * `listarCatalogoOperadoras` nem trazia `id` (corrigido junto, em
+ * clientesService.js). Agora é select vinculado ao catálogo real,
+ * gravando `operadora_id` verdadeiro. Sem cadastro rápido aqui (Lifcare
+ * usa o catálogo compartilhado institucional; cadastro de operadora
+ * nova continua pela tela de Configurações, fora de escopo desta
+ * correção).
+ */
 export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoId, onSalvo, onCancelar }) {
+  const [operadoraId, setOperadoraId] = useState(cotacaoExistente?.operadora_id ?? '')
   const [operadoraNome, setOperadoraNome] = useState(cotacaoExistente?.operadora_nome_livre ?? '')
   const [validade, setValidade] = useState(cotacaoExistente?.validade ?? '')
   const [blocosPlano, setBlocosPlano] = useState(() => reconstruirBlocos(cotacaoExistente?.itens_cotacao))
@@ -63,6 +74,11 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
   )
   const porteCalculado = totalVidas ? calcularPorte(totalVidas) : null
 
+  function selecionarOperadora(id) {
+    setOperadoraId(id)
+    setOperadoraNome(catalogoOperadoras.find((op) => op.id === id)?.nome ?? '')
+  }
+
   function atualizarFaixa(blocoId, faixa, campo, valor) {
     setBlocosPlano((blocos) =>
       blocos.map((b) =>
@@ -86,8 +102,8 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
   }
 
   async function handleSalvar() {
-    if (!operadoraNome.trim() || !totalVidas) {
-      setErro('Informe ao menos a operadora e o número de vidas em algum plano.')
+    if (!operadoraId || !totalVidas) {
+      setErro('Selecione a operadora do catálogo e informe o número de vidas em algum plano.')
       return
     }
     setSalvando(true)
@@ -109,6 +125,7 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
       }
 
       const dados = {
+        operadora_id: operadoraId,
         operadora_nome_livre: operadoraNome,
         porte: porteCalculado ?? 'Negociado',
         numero_vidas: totalVidas,
@@ -131,16 +148,15 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
 
   return (
     <div className="cotacao-form">
-      <datalist id="lista-operadoras-cotacao">
-        {catalogoOperadoras.map((op) => (
-          <option key={op.codigo} value={op.nome} />
-        ))}
-      </datalist>
-
       <div className="cotacao-form-linha">
         <div>
           <label>Operadora</label>
-          <input list="lista-operadoras-cotacao" value={operadoraNome} onChange={(e) => setOperadoraNome(e.target.value)} placeholder="Ex: Amil, SulAmérica..." />
+          <select value={operadoraId} onChange={(e) => selecionarOperadora(e.target.value)}>
+            <option value="">Selecione...</option>
+            {catalogoOperadoras.map((op) => (
+              <option key={op.id} value={op.id}>{op.nome}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label>Validade da proposta</label>

@@ -20,17 +20,19 @@ import { operacional } from '../supabaseSchemas'
  * A checagem por SELECT abaixo evita o round-trip de erro no caso comum
  * (sem concorrência); quem garante de fato é o banco.
  *
- * ATUALIZADO (correção obrigatória — vínculo Produto → Venda, aprovada
- * pelo Chief): `vendas.produto_id` é lido diretamente de
- * `apolices.produto_id`/`contratos.produto_id` (FK real pro catálogo
- * `institucional.produtos`, adicionada nesta mesma entrega) — nunca por
- * correspondência de texto. Se a apólice/contrato de origem não tiver
- * produto_id preenchido (formulário ainda não migrado, ex: ApoliceForm
- * genérico, ou registro histórico anterior a esta correção), a Venda
- * ainda É criada — o fechamento comercial nunca pode ser bloqueado por
- * isso — mas nasce com produto_id nulo, e o filtro já existente em
- * `regrasComissaoService.listarVendasFechadasComProduto` naturalmente a
- * exclui de "Gerar Sugestões" até alguém vincular o produto
+ * ATUALIZADO (correção obrigatória — vínculo Produto + Operadora →
+ * Venda, aprovada pelo Chief): `vendas.produto_id` e `vendas.operadora_id`
+ * são lidos diretamente de `apolices`/`contratos` (FKs reais pro catálogo
+ * institucional, nunca por correspondência de texto). A fonte de verdade
+ * é sempre o documento fechado (apólice/contrato), não a cotação
+ * original — o corretor pode confirmar/trocar seguradora entre a
+ * cotação e o fechamento, então ler daqui é o dado mais correto. Se a
+ * apólice/contrato de origem não tiver os IDs preenchidos (formulário
+ * ainda não migrado, ou registro histórico anterior a esta correção), a
+ * Venda ainda É criada — o fechamento comercial nunca pode ser bloqueado
+ * por isso — mas nasce com produto_id/operadora_id nulos, e o filtro já
+ * existente em `regrasComissaoService.listarVendasFechadasComProduto`
+ * naturalmente a exclui de "Gerar Sugestões" até alguém vincular
  * explicitamente (sem inferência automática).
  */
 export async function criarVendaSeElegivel({
@@ -39,7 +41,6 @@ export async function criarVendaSeElegivel({
   contratoId,
   cotacaoId,
   modulo,
-  operadoraId,
   usuarioId,
   geraComissao,
 }) {
@@ -59,32 +60,37 @@ export async function criarVendaSeElegivel({
   if (erroExistente) throw new Error(`Erro ao verificar venda existente: ${erroExistente.message}`)
   if (existente) return existente
 
-  // valor_base (obrigatório) e produto_id vêm da apólice real.
-  // Caminho de contrato (Lifcare): `contratos` não tem coluna de valor
-  // único (valor vem de itens_contrato, por faixa etária) — valorBase
-  // fica 0 por enquanto. Não é problema prático hoje: `geraComissao` já
-  // é sempre false para Lifcare (regra existente, não alterada nesta
-  // sprint), então este ramo nunca chega a criar Venda de verdade ainda.
+  // valor_base (obrigatório), produto_id e operadora_id vêm do
+  // documento real (apólice ou contrato) — nunca da cotação, nunca por
+  // texto. Caminho de contrato (Lifcare): `contratos` não tem coluna de
+  // valor único (valor vem de itens_contrato, por faixa etária) —
+  // valorBase fica 0 por enquanto. Não é problema prático hoje:
+  // `geraComissao` já é sempre false para Lifcare (regra existente, não
+  // alterada nesta sprint), então este ramo nunca chega a criar Venda de
+  // verdade ainda.
   let valorBase = 0
   let produtoId = null
+  let operadoraId = null
 
   if (apoliceId) {
     const { data: apolice, error: erroApolice } = await operacional
       .from('apolices')
-      .select('premio, produto_id')
+      .select('premio, produto_id, operadora_id')
       .eq('id', apoliceId)
       .single()
     if (erroApolice) throw new Error(`Erro ao buscar dados da apólice para a venda: ${erroApolice.message}`)
     valorBase = apolice?.premio ?? 0
     produtoId = apolice?.produto_id ?? null
+    operadoraId = apolice?.operadora_id ?? null
   } else if (contratoId) {
     const { data: contrato, error: erroContrato } = await operacional
       .from('contratos')
-      .select('produto_id')
+      .select('produto_id, operadora_id')
       .eq('id', contratoId)
       .single()
     if (erroContrato) throw new Error(`Erro ao buscar dados do contrato para a venda: ${erroContrato.message}`)
     produtoId = contrato?.produto_id ?? null
+    operadoraId = contrato?.operadora_id ?? null
   }
 
   const { data: venda, error } = await operacional
@@ -94,7 +100,7 @@ export async function criarVendaSeElegivel({
       apolice_id: apoliceId || null,
       contrato_id: contratoId || null,
       cotacao_id: cotacaoId || null,
-      operadora_id: operadoraId || null,
+      operadora_id: operadoraId,
       produto_id: produtoId,
       modulo,
       tipo,

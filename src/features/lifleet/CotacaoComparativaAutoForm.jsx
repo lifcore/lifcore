@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { criarCotacao, parseValorBR } from '../../lib/crm/clientesService'
+import { listarCatalogoSeguradoras, criarSeguradora } from '../../lib/crm/apolicesService'
 
 function novaLinhaSeguradora() {
-  return { id: crypto.randomUUID(), seguradora: '', valor: '', observacoes: '' }
+  return { id: crypto.randomUUID(), operadoraId: '', seguradora: '', valor: '', observacoes: '' }
 }
 
 /**
@@ -13,16 +14,51 @@ function novaLinhaSeguradora() {
  * verdade ainda por trás (a maioria das seguradoras hoje ainda é
  * cotada manualmente), mas já organiza e apresenta a comparação de um
  * jeito profissional, pronto pra imprimir/compartilhar com o cliente.
+ *
+ * CORREÇÃO (Sprint Vendas Central — vínculo Operadora, aprovada pelo
+ * Chief): cada linha agora seleciona a seguradora do catálogo real
+ * (`institucional.operadoras`), gravando `operadora_id` verdadeiro —
+ * antes era texto livre, sem vínculo nenhum, o que quebrava a cadeia
+ * Cotação → Apólice → Venda → Regra de Comissão mais à frente. Sem
+ * correspondência por texto: ou a seguradora já está no catálogo (select),
+ * ou o corretor cadastra rapidamente uma nova (mesmo padrão já usado em
+ * ApoliceForm.jsx) — nunca inferência automática.
  */
 export default function CotacaoComparativaAutoForm({ clienteProspectId, casoId, onSalvo, onCancelar }) {
   const [contextoVeiculo, setContextoVeiculo] = useState('')
   const [validade, setValidade] = useState('')
   const [linhas, setLinhas] = useState([novaLinhaSeguradora(), novaLinhaSeguradora()])
+  const [catalogoSeguradoras, setCatalogoSeguradoras] = useState([])
+  const [linhaCadastrandoNova, setLinhaCadastrandoNova] = useState(null)
+  const [nomeNovaSeguradora, setNomeNovaSeguradora] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
 
+  useEffect(() => {
+    listarCatalogoSeguradoras().then(setCatalogoSeguradoras).catch(() => {})
+  }, [])
+
   function atualizarLinha(id, campo, valor) {
     setLinhas((lista) => lista.map((l) => (l.id === id ? { ...l, [campo]: valor } : l)))
+  }
+
+  function selecionarOperadora(id, operadoraId) {
+    const nome = catalogoSeguradoras.find((s) => s.id === operadoraId)?.nome ?? ''
+    setLinhas((lista) => lista.map((l) => (l.id === id ? { ...l, operadoraId, seguradora: nome } : l)))
+  }
+
+  async function handleCadastrarNovaSeguradora(linhaId) {
+    if (!nomeNovaSeguradora.trim()) return
+    try {
+      const nova = await criarSeguradora({ nome: nomeNovaSeguradora, categoriaSeguro: 'Auto' })
+      const listaAtualizada = await listarCatalogoSeguradoras()
+      setCatalogoSeguradoras(listaAtualizada)
+      selecionarOperadora(linhaId, nova.id)
+      setLinhaCadastrandoNova(null)
+      setNomeNovaSeguradora('')
+    } catch (err) {
+      setErro(err.message)
+    }
   }
 
   function adicionarLinha() {
@@ -34,9 +70,9 @@ export default function CotacaoComparativaAutoForm({ clienteProspectId, casoId, 
   }
 
   async function handleSalvar() {
-    const linhasPreenchidas = linhas.filter((l) => l.seguradora.trim() && l.valor)
+    const linhasPreenchidas = linhas.filter((l) => l.operadoraId && l.valor)
     if (linhasPreenchidas.length === 0) {
-      setErro('Preencha ao menos uma seguradora com valor.')
+      setErro('Selecione ao menos uma seguradora do catálogo, com valor.')
       return
     }
     setSalvando(true)
@@ -48,6 +84,7 @@ export default function CotacaoComparativaAutoForm({ clienteProspectId, casoId, 
           clienteProspectId,
           casoId: casoId ?? null,
           dados: {
+            operadora_id: linha.operadoraId,
             operadora_nome_livre: linha.seguradora,
             valor_total: parseValorBR(linha.valor),
             validade: validade || null,
@@ -89,7 +126,19 @@ export default function CotacaoComparativaAutoForm({ clienteProspectId, casoId, 
           <div className="cotacao-form-linha">
             <div>
               <label>Seguradora</label>
-              <input value={linha.seguradora} onChange={(e) => atualizarLinha(linha.id, 'seguradora', e.target.value)} placeholder="Ex: Porto Seguro" />
+              <select value={linha.operadoraId} onChange={(e) => selecionarOperadora(linha.id, e.target.value)}>
+                <option value="">Selecione...</option>
+                {catalogoSeguradoras.map((s) => (
+                  <option key={s.id} value={s.id}>{s.nome}</option>
+                ))}
+              </select>
+              <button
+                className="ls-btn ls-btn-ghost"
+                style={{ marginTop: '0.4rem', fontSize: '0.75rem' }}
+                onClick={() => setLinhaCadastrandoNova(linha.id)}
+              >
+                + Seguradora não está na lista
+              </button>
             </div>
             <div>
               <label>Valor (R$)</label>
@@ -100,6 +149,17 @@ export default function CotacaoComparativaAutoForm({ clienteProspectId, casoId, 
               <input value={linha.observacoes} onChange={(e) => atualizarLinha(linha.id, 'observacoes', e.target.value)} placeholder="Ex: Franquia R$ 1.800, vidros inclusos" />
             </div>
           </div>
+
+          {linhaCadastrandoNova === linha.id && (
+            <div className="ls-card" style={{ padding: '0.6rem', marginTop: '0.6rem' }}>
+              <label>Nome da nova seguradora</label>
+              <input value={nomeNovaSeguradora} onChange={(e) => setNomeNovaSeguradora(e.target.value)} placeholder="Ex: Porto Seguro" />
+              <div className="ls-modal-acoes">
+                <button className="ls-btn ls-btn-ghost" onClick={() => { setLinhaCadastrandoNova(null); setNomeNovaSeguradora('') }}>Cancelar</button>
+                <button className="ls-btn ls-btn-primary" onClick={() => handleCadastrarNovaSeguradora(linha.id)}>Cadastrar e Selecionar</button>
+              </div>
+            </div>
+          )}
         </div>
       ))}
 

@@ -3,16 +3,18 @@ import { useAuth } from '../auth/AuthContext'
 import { operacional } from '../../lib/supabaseSchemas'
 import { parseValorBR } from '../../lib/crm/clientesService'
 import { criarApoliceLishield, atualizarApoliceLishield } from '../../lib/crm/lishieldService'
-import { listarCatalogoSeguradoras } from '../../lib/crm/apolicesService'
+import { listarCatalogoSeguradoras, criarSeguradora } from '../../lib/crm/apolicesService'
 import { listarProdutos } from '../../lib/crm/catalogoInstitucionalService'
 
 export default function ApoliceLishieldForm({ clienteProspectId, apoliceExistente, onSalvo, onCancelar }) {
   const { perfil } = useAuth()
-  // produtoId é o vínculo real com institucional.produtos (Sprint Vendas
-  // Central, aprovada pelo Chief). `produto` (texto) continua existindo
-  // por compatibilidade com telas que só leem o nome — mas quem alimenta
-  // Venda → Regra de Comissão → Comissão Sugerida agora é o produtoId.
+  // produtoId e operadoraId são os vínculos reais com institucional.produtos
+  // e institucional.operadoras (Sprint Vendas Central, aprovada pelo
+  // Chief). `produto`/`operadora_nome_livre` (texto) continuam existindo
+  // por compatibilidade — quem alimenta Venda → Regra de Comissão →
+  // Comissão Sugerida agora são os IDs reais.
   const [produtoId, setProdutoId] = useState(apoliceExistente?.produto_id ?? '')
+  const [operadoraId, setOperadoraId] = useState(apoliceExistente?.operadora_id ?? '')
   const [seguradoraNome, setSeguradoraNome] = useState(apoliceExistente?.operadora_nome_livre ?? '')
   const [numeroApolice, setNumeroApolice] = useState(apoliceExistente?.numero_apolice ?? '')
   const [premio, setPremio] = useState(apoliceExistente?.premio ?? '')
@@ -23,6 +25,8 @@ export default function ApoliceLishieldForm({ clienteProspectId, apoliceExistent
   const [detalhesProduto, setDetalhesProduto] = useState(apoliceExistente?.detalhes_produto ?? '')
   const [catalogoSeguradoras, setCatalogoSeguradoras] = useState([])
   const [produtos, setProdutos] = useState([])
+  const [cadastrandoNova, setCadastrandoNova] = useState(false)
+  const [nomeNovaSeguradora, setNomeNovaSeguradora] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
 
@@ -31,13 +35,32 @@ export default function ApoliceLishieldForm({ clienteProspectId, apoliceExistent
     listarProdutos({ modulo: 'lishield' }).then(setProdutos).catch(() => {})
   }, [])
 
+  function selecionarSeguradora(id) {
+    setOperadoraId(id)
+    setSeguradoraNome(catalogoSeguradoras.find((s) => s.id === id)?.nome ?? '')
+  }
+
+  async function handleCadastrarNovaSeguradora() {
+    if (!nomeNovaSeguradora.trim()) return
+    try {
+      const nova = await criarSeguradora({ nome: nomeNovaSeguradora, categoriaSeguro: 'Lishield' })
+      const listaAtualizada = await listarCatalogoSeguradoras()
+      setCatalogoSeguradoras(listaAtualizada)
+      selecionarSeguradora(nova.id)
+      setCadastrandoNova(false)
+      setNomeNovaSeguradora('')
+    } catch (err) {
+      setErro(err.message)
+    }
+  }
+
   async function handleSalvar() {
     if (!produtoId) {
       setErro('Escolha o produto.')
       return
     }
-    if (!seguradoraNome.trim() || !premio) {
-      setErro('Informe ao menos a seguradora e o valor da apólice.')
+    if (!operadoraId || !premio) {
+      setErro('Selecione a seguradora do catálogo e informe o valor da apólice.')
       return
     }
     setSalvando(true)
@@ -48,6 +71,7 @@ export default function ApoliceLishieldForm({ clienteProspectId, apoliceExistent
       const dados = {
         produto: produtoSelecionado?.nome ?? null,
         produto_id: produtoId,
+        operadora_id: operadoraId,
         operadora_nome_livre: seguradoraNome,
         numero_apolice: numeroApolice || null,
         premio: parseValorBR(premio),
@@ -80,12 +104,6 @@ export default function ApoliceLishieldForm({ clienteProspectId, apoliceExistent
 
   return (
     <div className="cotacao-form">
-      <datalist id="lista-seguradoras-lishield">
-        {catalogoSeguradoras.map((s) => (
-          <option key={s.id} value={s.nome} />
-        ))}
-      </datalist>
-
       <label>Produto</label>
       <select value={produtoId} onChange={(e) => setProdutoId(e.target.value)}>
         <option value="">Selecione o produto...</option>
@@ -97,12 +115,15 @@ export default function ApoliceLishieldForm({ clienteProspectId, apoliceExistent
       <div className="cotacao-form-linha" style={{ marginTop: '0.6rem' }}>
         <div>
           <label>Seguradora</label>
-          <input
-            list="lista-seguradoras-lishield"
-            value={seguradoraNome}
-            onChange={(e) => setSeguradoraNome(e.target.value)}
-            placeholder="Comece a digitar..."
-          />
+          <select value={operadoraId} onChange={(e) => selecionarSeguradora(e.target.value)}>
+            <option value="">Selecione...</option>
+            {catalogoSeguradoras.map((s) => (
+              <option key={s.id} value={s.id}>{s.nome}</option>
+            ))}
+          </select>
+          <button className="ls-btn ls-btn-ghost" style={{ marginTop: '0.4rem', fontSize: '0.75rem' }} onClick={() => setCadastrandoNova(true)}>
+            + Seguradora não está na lista
+          </button>
         </div>
         <div>
           <label>Número da apólice</label>
@@ -113,6 +134,17 @@ export default function ApoliceLishieldForm({ clienteProspectId, apoliceExistent
           <input value={premio} onChange={(e) => setPremio(e.target.value)} placeholder="Ex: 15000,00" />
         </div>
       </div>
+
+      {cadastrandoNova && (
+        <div className="ls-card" style={{ padding: '0.6rem', marginBottom: '0.6rem' }}>
+          <label>Nome da nova seguradora</label>
+          <input value={nomeNovaSeguradora} onChange={(e) => setNomeNovaSeguradora(e.target.value)} placeholder="Ex: Porto Seguro" />
+          <div className="ls-modal-acoes">
+            <button className="ls-btn ls-btn-ghost" onClick={() => { setCadastrandoNova(false); setNomeNovaSeguradora('') }}>Cancelar</button>
+            <button className="ls-btn ls-btn-primary" onClick={handleCadastrarNovaSeguradora}>Cadastrar e Selecionar</button>
+          </div>
+        </div>
+      )}
 
       <div className="cotacao-form-linha">
         <div>

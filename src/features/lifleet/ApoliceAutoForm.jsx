@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthContext'
 import { operacional } from '../../lib/supabaseSchemas'
 import { parseValorBR } from '../../lib/crm/clientesService'
 import { criarApoliceAuto, atualizarApoliceAuto } from '../../lib/crm/lifleetService'
-import { listarCatalogoSeguradoras } from '../../lib/crm/apolicesService'
+import { listarCatalogoSeguradoras, criarSeguradora } from '../../lib/crm/apolicesService'
 import { listarProdutos } from '../../lib/crm/catalogoInstitucionalService'
 
 function novoVeiculo() {
@@ -23,11 +23,13 @@ function novoVeiculo() {
 
 export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apoliceExistente, onSalvo, onCancelar }) {
   const { perfil } = useAuth()
-  // produtoId é o vínculo real com institucional.produtos (Sprint Vendas
-  // Central, aprovada pelo Chief). `produto` (texto) continua existindo
-  // por compatibilidade com telas que só leem o nome — mas quem alimenta
-  // Venda → Regra de Comissão → Comissão Sugerida agora é o produtoId.
+  // produtoId e operadoraId são os vínculos reais com institucional.produtos
+  // e institucional.operadoras (Sprint Vendas Central, aprovada pelo
+  // Chief). `produto`/`operadora_nome_livre` (texto) continuam existindo
+  // por compatibilidade — quem alimenta Venda → Regra de Comissão →
+  // Comissão Sugerida agora são os IDs reais.
   const [produtoId, setProdutoId] = useState(apoliceExistente?.produto_id ?? '')
+  const [operadoraId, setOperadoraId] = useState(apoliceExistente?.operadora_id ?? '')
   const [seguradoraNome, setSeguradoraNome] = useState(apoliceExistente?.operadora_nome_livre ?? '')
   const [numeroApolice, setNumeroApolice] = useState(apoliceExistente?.numero_apolice ?? '')
   const [premio, setPremio] = useState(apoliceExistente?.premio ?? '')
@@ -37,6 +39,8 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
   const [vigenciaFim, setVigenciaFim] = useState(apoliceExistente?.vigencia_fim ?? '')
   const [catalogoSeguradoras, setCatalogoSeguradoras] = useState([])
   const [produtos, setProdutos] = useState([])
+  const [cadastrandoNova, setCadastrandoNova] = useState(false)
+  const [nomeNovaSeguradora, setNomeNovaSeguradora] = useState('')
   const [veiculos, setVeiculos] = useState(() => {
     if (apoliceExistente?.veiculos?.length) {
       return apoliceExistente.veiculos.map((v) => ({ ...v, id: v.id ?? crypto.randomUUID() }))
@@ -52,6 +56,25 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
     listarCatalogoSeguradoras().then(setCatalogoSeguradoras).catch(() => {})
     listarProdutos({ modulo: 'auto' }).then(setProdutos).catch(() => {})
   }, [])
+
+  function selecionarSeguradora(id) {
+    setOperadoraId(id)
+    setSeguradoraNome(catalogoSeguradoras.find((s) => s.id === id)?.nome ?? '')
+  }
+
+  async function handleCadastrarNovaSeguradora() {
+    if (!nomeNovaSeguradora.trim()) return
+    try {
+      const nova = await criarSeguradora({ nome: nomeNovaSeguradora, categoriaSeguro: 'Auto' })
+      const listaAtualizada = await listarCatalogoSeguradoras()
+      setCatalogoSeguradoras(listaAtualizada)
+      selecionarSeguradora(nova.id)
+      setCadastrandoNova(false)
+      setNomeNovaSeguradora('')
+    } catch (err) {
+      setErro(err.message)
+    }
+  }
 
   function atualizarVeiculo(id, campo, valor) {
     setVeiculos((lista) => lista.map((v) => (v.id === id ? { ...v, [campo]: valor } : v)))
@@ -71,8 +94,8 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
       setErro('Selecione o produto.')
       return
     }
-    if (!seguradoraNome.trim() || !premio) {
-      setErro('Informe ao menos a seguradora e o valor da apólice.')
+    if (!operadoraId || !premio) {
+      setErro('Selecione a seguradora do catálogo e informe o valor da apólice.')
       return
     }
     if (veiculos.some((v) => !v.placa.trim())) {
@@ -93,6 +116,7 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
       const dados = {
         produto: produtoSelecionado?.nome ?? null,
         produto_id: produtoId,
+        operadora_id: operadoraId,
         operadora_nome_livre: seguradoraNome,
         numero_apolice: numeroApolice || null,
         premio: parseValorBR(premio),
@@ -132,12 +156,6 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
 
   return (
     <div className="cotacao-form">
-      <datalist id="lista-seguradoras-apolice-lifleet">
-        {catalogoSeguradoras.map((s) => (
-          <option key={s.id} value={s.nome} />
-        ))}
-      </datalist>
-
       <div className="cotacao-form-linha">
         <div>
           <label>Produto</label>
@@ -150,12 +168,15 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
         </div>
         <div>
           <label>Seguradora</label>
-          <input
-            list="lista-seguradoras-apolice-lifleet"
-            value={seguradoraNome}
-            onChange={(e) => setSeguradoraNome(e.target.value)}
-            placeholder="Comece a digitar..."
-          />
+          <select value={operadoraId} onChange={(e) => selecionarSeguradora(e.target.value)}>
+            <option value="">Selecione...</option>
+            {catalogoSeguradoras.map((s) => (
+              <option key={s.id} value={s.id}>{s.nome}</option>
+            ))}
+          </select>
+          <button className="ls-btn ls-btn-ghost" style={{ marginTop: '0.4rem', fontSize: '0.75rem' }} onClick={() => setCadastrandoNova(true)}>
+            + Seguradora não está na lista
+          </button>
         </div>
         <div>
           <label>Número da apólice</label>
@@ -166,6 +187,17 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
           <input value={premio} onChange={(e) => setPremio(e.target.value)} placeholder="Ex: 3200,00" />
         </div>
       </div>
+
+      {cadastrandoNova && (
+        <div className="ls-card" style={{ padding: '0.6rem', marginBottom: '0.6rem' }}>
+          <label>Nome da nova seguradora</label>
+          <input value={nomeNovaSeguradora} onChange={(e) => setNomeNovaSeguradora(e.target.value)} placeholder="Ex: Porto Seguro" />
+          <div className="ls-modal-acoes">
+            <button className="ls-btn ls-btn-ghost" onClick={() => { setCadastrandoNova(false); setNomeNovaSeguradora('') }}>Cancelar</button>
+            <button className="ls-btn ls-btn-primary" onClick={handleCadastrarNovaSeguradora}>Cadastrar e Selecionar</button>
+          </div>
+        </div>
+      )}
 
       <div className="cotacao-form-linha">
         <div>

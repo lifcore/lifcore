@@ -215,6 +215,13 @@ export async function avancarParaEmissao(cotacaoId, usuarioId) {
  * tabela `comissoes`) foi retirada deste fluxo — a função e a tabela
  * continuam existindo, só não são mais chamadas automaticamente daqui.
  *
+ * ATUALIZADO (correção obrigatória — vínculo Produto + Operadora,
+ * aprovada pelo Chief): não passa mais `operadoraId` da cotação pro
+ * vendasService — ele agora busca `produto_id`/`operadora_id` direto da
+ * apólice/contrato fechado, que é a fonte de verdade real do negócio
+ * (o corretor pode confirmar/trocar seguradora entre a cotação e o
+ * fechamento).
+ *
  * ATENÇÃO — MUDANÇA NO FORMATO DO RETORNO: antes esta função devolvia
  * `{ fechada, comissaoGerada, erroComissao }`. Agora devolve
  * `{ fechada, vendaCriada, vendaId, erroVenda }`. Se algum componente de
@@ -268,7 +275,6 @@ export async function fecharCotacaoComDocumento(cotacaoId, usuarioId, { apoliceI
         contratoId,
         cotacaoId,
         modulo,
-        operadoraId: cotacao.operadora_id ?? null,
         usuarioId,
         geraComissao,
       })
