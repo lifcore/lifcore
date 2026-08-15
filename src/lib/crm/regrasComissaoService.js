@@ -363,6 +363,63 @@ export async function ajustarComissaoSugeridaManualmente(comissaoSugeridaId, nov
   return data
 }
 
+/**
+ * VALIDAÇÃO (Etapa 4, Peça 1 — aprovado pelo Chief).
+ *
+ * Marca a expectativa daquela venda+competência como "cenário
+ * validado" — a partir daqui, ela vira a referência oficial pra
+ * Conciliação, e o motor de geração NUNCA mais pode sobrescrevê-la
+ * silenciosamente (ver trava em `upsertSugestao`, mais abaixo).
+ *
+ * Validar não exige ajuste prévio: uma sugestão que já calculou certo
+ * também precisa de validação explícita do Gestor — "calculado certo"
+ * e "confirmado pelo Gestor" são coisas diferentes.
+ */
+export async function validarComissaoSugerida(comissaoSugeridaId, usuarioId, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+  if (!usuarioId) throw new Error('Validação exige um usuário identificado.')
+
+  const { data, error } = await db
+    .from('comissao_sugerida')
+    .update({
+      status_validacao: 'validado',
+      validado_por: usuarioId,
+      validado_em: new Date().toISOString(),
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq('id', comissaoSugeridaId)
+    .select()
+    .single()
+
+  if (error) throw new Error(`Erro ao validar comissão sugerida: ${error.message}`)
+  return data
+}
+
+/**
+ * Desfaz uma validação feita por engano — devolve a linha pro estado
+ * "pendente", liberando o motor de geração pra recalculá-la de novo se
+ * "Gerar Sugestões" for rodado. Não apaga `ajustado_manualmente` nem o
+ * valor ajustado — só o status de validação em si.
+ */
+export async function desvalidarComissaoSugerida(comissaoSugeridaId, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+
+  const { data, error } = await db
+    .from('comissao_sugerida')
+    .update({
+      status_validacao: 'pendente',
+      validado_por: null,
+      validado_em: null,
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq('id', comissaoSugeridaId)
+    .select()
+    .single()
+
+  if (error) throw new Error(`Erro ao desvalidar comissão sugerida: ${error.message}`)
+  return data
+}
+
 // ============================================================
 // 3. calcularComissaoSugerida — motor de cálculo
 // ============================================================
@@ -376,7 +433,8 @@ export async function ajustarComissaoSugeridaManualmente(comissaoSugeridaId, nov
  * ou `contratos.vigencia_inicio`, conforme a venda tenha apolice_id ou
  * contrato_id — confirmado por inspeção real, não suposição.
  *
- * Nunca sobrescreve um valor que o Gestor já ajustou manualmente
+ * Nunca sobrescreve um valor que o Gestor já ajustou manualmente OU já
+ * validou (Etapa 4, Peça 1) — as duas são travas equivalentes.
  * (Seção 17) — recalcular não pode apagar uma exceção registrada.
  */
 export async function calcularComissaoSugerida({ vendaId, competenciaReferencia }, cliente = null) {
@@ -529,16 +587,21 @@ function calcularMesRelativo(vigenciaInicio, competenciaReferencia) {
 }
 
 async function upsertSugestao(db, { vendaId, competencia, regraId, valor, status }) {
-  // Nunca sobrescreve exceção manual já registrada (Seção 17)
+  // Nunca sobrescreve exceção manual já registrada (Seção 17) NEM
+  // cenário já validado pelo Gestor (Etapa 4, Peça 1) — validação é
+  // uma trava tão forte quanto ajuste manual: uma vez que o Gestor
+  // confirmou aquela expectativa, ela vira referência da Conciliação e
+  // nenhuma nova execução de "Gerar Sugestões" pode mudar isso por
+  // baixo dos panos.
   const { data: existente } = await db
     .from('comissao_sugerida')
-    .select('id, ajustado_manualmente')
+    .select('id, ajustado_manualmente, status_validacao')
     .eq('venda_id', vendaId)
     .eq('competencia_referencia', competencia)
     .maybeSingle()
 
-  if (existente?.ajustado_manualmente) {
-    return existente // preserva a exceção do Gestor, não recalcula por cima
+  if (existente?.ajustado_manualmente || existente?.status_validacao === 'validado') {
+    return existente // preserva a exceção do Gestor ou o cenário validado, não recalcula por cima
   }
 
   const { data, error } = await db

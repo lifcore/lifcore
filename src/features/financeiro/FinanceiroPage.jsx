@@ -25,6 +25,8 @@ import {
   listarComissoesSugeridasDetalhado,
   gerarSugestoesCompetencia,
   ajustarComissaoSugeridaManualmente,
+  validarComissaoSugerida,
+  desvalidarComissaoSugerida,
 } from '../../lib/crm/regrasComissaoService'
 import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote, listarSeguradorasCatalogo, atribuirSeguradoraEReprocessar, reprocessarLote } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
@@ -194,7 +196,7 @@ function ComissoesSugeridasTab() {
         <table className="cliente-tabela">
           <thead>
             <tr>
-              <th>Apólice</th><th>Cliente</th><th>Operadora</th><th>Produto</th><th>Regra</th><th>Sugestão</th><th>Ajuste</th>
+              <th>Apólice</th><th>Cliente</th><th>Operadora</th><th>Produto</th><th>Regra</th><th>Sugestão</th><th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -239,6 +241,36 @@ function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
     setSalvando(false)
   }
 
+  /**
+   * VALIDAÇÃO (Etapa 4, Peça 1). Não exige valor ajustado — mesmo uma
+   * sugestão calculada certa precisa de confirmação explícita do
+   * Gestor antes de virar referência da Conciliação.
+   */
+  async function handleValidar() {
+    setSalvando(true)
+    setErro('')
+    try {
+      await validarComissaoSugerida(item.id, usuarioId)
+      onAtualizado()
+    } catch (e) {
+      setErro(e.message)
+    }
+    setSalvando(false)
+  }
+
+  async function handleDesvalidar() {
+    if (!window.confirm('Desfazer a validação? Esta linha volta a poder ser recalculada por "Gerar Sugestões".')) return
+    setSalvando(true)
+    setErro('')
+    try {
+      await desvalidarComissaoSugerida(item.id)
+      onAtualizado()
+    } catch (e) {
+      setErro(e.message)
+    }
+    setSalvando(false)
+  }
+
   return (
     <>
       <tr onClick={() => setExpandido(!expandido)} style={{ cursor: 'pointer' }}>
@@ -248,7 +280,15 @@ function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
         <td>{item.nomeProduto}</td>
         <td>{item.regra?.descricao ?? '—'}</td>
         <td>{item.valor_sugerido != null ? formatarMoeda(item.valor_sugerido) : '—'}</td>
-        <td>{item.ajustado_manualmente ? <span className="ls-badge">ajustado</span> : '—'}</td>
+        <td>
+          {item.ajustado_manualmente && <span className="ls-badge">ajustado</span>}
+          {item.status_validacao === 'validado' && (
+            <span className="ls-badge" style={{ marginLeft: item.ajustado_manualmente ? '0.3rem' : 0, background: 'var(--ls-success, #2f7a3d)' }}>
+              validado
+            </span>
+          )}
+          {!item.ajustado_manualmente && item.status_validacao !== 'validado' && '—'}
+        </td>
       </tr>
       {expandido && (
         <tr>
@@ -325,6 +365,31 @@ function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
                 <button className="cliente-tabela-btn" onClick={handleAjustar} disabled={salvando || novoValor === ''}>
                   {salvando ? 'Salvando...' : 'Aplicar Ajuste'}
                 </button>
+              </div>
+
+              <div className="cotacao-form-linha" style={{ marginTop: '0.75rem', alignItems: 'center' }}>
+                {item.status_validacao === 'validado' ? (
+                  <>
+                    <div>
+                      <span className="ls-badge" style={{ background: 'var(--ls-success, #2f7a3d)' }}>Cenário validado</span>{' '}
+                      {item.validado_em && (
+                        <span style={{ fontSize: '0.8rem' }}>em {new Date(item.validado_em).toLocaleString('pt-BR')}</span>
+                      )}
+                    </div>
+                    <button className="ls-btn ls-btn-ghost" onClick={handleDesvalidar} disabled={salvando}>
+                      Desfazer validação
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="config-instrucao" style={{ margin: 0 }}>
+                      Confirme este valor como o cenário esperado — ele passa a ser a referência da Conciliação e não é mais recalculado automaticamente.
+                    </p>
+                    <button className="cliente-tabela-btn" onClick={handleValidar} disabled={salvando}>
+                      {salvando ? 'Salvando...' : 'Validar'}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </td>
