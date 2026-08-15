@@ -1,22 +1,60 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { criarCotacao, atualizarCotacao, parseValorBR } from '../../lib/crm/clientesService'
+import { listarCatalogoSeguradoras, criarSeguradora } from '../../lib/crm/apolicesService'
 
+/**
+ * CORREÇÃO (Bloco C — vínculo Operadora nas cotações, aprovado pelo
+ * Chief): antes era texto livre, sem vínculo com o catálogo — mesmo
+ * gap já corrigido no Lifleet/Lifcare. Agora seleciona do catálogo
+ * real (`institucional.operadoras`), gravando `operadora_id`
+ * verdadeiro — necessário pra cadeia Cotação → Apólice → Venda → Regra
+ * de Comissão. Sem correspondência por texto: ou já está no catálogo
+ * (select), ou cadastra rápido — nunca inferência automática.
+ */
 export default function CotacaoLishieldForm({ clienteProspectId, cotacaoExistente, casoId, onSalvo, onCancelar }) {
+  const [operadoraId, setOperadoraId] = useState(cotacaoExistente?.operadora_id ?? '')
   const [seguradoraNome, setSeguradoraNome] = useState(cotacaoExistente?.operadora_nome_livre ?? '')
   const [valorTotal, setValorTotal] = useState(cotacaoExistente?.valor_total ?? '')
   const [validade, setValidade] = useState(cotacaoExistente?.validade ?? '')
+  const [catalogoSeguradoras, setCatalogoSeguradoras] = useState([])
+  const [cadastrandoNova, setCadastrandoNova] = useState(false)
+  const [nomeNovaSeguradora, setNomeNovaSeguradora] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
 
+  useEffect(() => {
+    listarCatalogoSeguradoras().then(setCatalogoSeguradoras).catch(() => {})
+  }, [])
+
+  function selecionarOperadora(id) {
+    setOperadoraId(id)
+    setSeguradoraNome(catalogoSeguradoras.find((s) => s.id === id)?.nome ?? '')
+  }
+
+  async function handleCadastrarNovaSeguradora() {
+    if (!nomeNovaSeguradora.trim()) return
+    try {
+      const nova = await criarSeguradora({ nome: nomeNovaSeguradora, categoriaSeguro: 'Lishield' })
+      const listaAtualizada = await listarCatalogoSeguradoras()
+      setCatalogoSeguradoras(listaAtualizada)
+      selecionarOperadora(nova.id)
+      setCadastrandoNova(false)
+      setNomeNovaSeguradora('')
+    } catch (err) {
+      setErro(err.message)
+    }
+  }
+
   async function handleSalvar() {
-    if (!seguradoraNome.trim() || !valorTotal) {
-      setErro('Informe ao menos a seguradora e o melhor preço.')
+    if (!operadoraId || !valorTotal) {
+      setErro('Selecione a seguradora do catálogo e informe o melhor preço.')
       return
     }
     setSalvando(true)
     setErro(null)
     try {
       const dados = {
+        operadora_id: operadoraId,
         operadora_nome_livre: seguradoraNome,
         valor_total: parseValorBR(valorTotal),
         validade: validade || null,
@@ -40,7 +78,15 @@ export default function CotacaoLishieldForm({ clienteProspectId, cotacaoExistent
       <div className="cotacao-form-linha">
         <div>
           <label>Seguradora</label>
-          <input value={seguradoraNome} onChange={(e) => setSeguradoraNome(e.target.value)} placeholder="Ex: Chubb, AXA XL, Fairfax..." />
+          <select value={operadoraId} onChange={(e) => selecionarOperadora(e.target.value)}>
+            <option value="">Selecione...</option>
+            {catalogoSeguradoras.map((s) => (
+              <option key={s.id} value={s.id}>{s.nome}</option>
+            ))}
+          </select>
+          <button className="ls-btn ls-btn-ghost" style={{ marginTop: '0.4rem', fontSize: '0.75rem' }} onClick={() => setCadastrandoNova(true)}>
+            + Seguradora não está na lista
+          </button>
         </div>
         <div>
           <label>Melhor preço (R$)</label>
@@ -51,6 +97,17 @@ export default function CotacaoLishieldForm({ clienteProspectId, cotacaoExistent
           <input type="date" value={validade ?? ''} onChange={(e) => setValidade(e.target.value)} />
         </div>
       </div>
+
+      {cadastrandoNova && (
+        <div className="ls-card" style={{ padding: '0.6rem', marginBottom: '0.6rem' }}>
+          <label>Nome da nova seguradora</label>
+          <input value={nomeNovaSeguradora} onChange={(e) => setNomeNovaSeguradora(e.target.value)} placeholder="Ex: Chubb, AXA XL, Fairfax..." />
+          <div className="ls-modal-acoes">
+            <button className="ls-btn ls-btn-ghost" onClick={() => { setCadastrandoNova(false); setNomeNovaSeguradora('') }}>Cancelar</button>
+            <button className="ls-btn ls-btn-primary" onClick={handleCadastrarNovaSeguradora}>Cadastrar e Selecionar</button>
+          </div>
+        </div>
+      )}
 
       {erro && <p className="ls-modal-erro">{erro}</p>}
 
