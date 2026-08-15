@@ -364,6 +364,51 @@ export async function ajustarComissaoSugeridaManualmente(comissaoSugeridaId, nov
 }
 
 /**
+ * Adiciona uma parcela/competência manualmente ao calendário de uma
+ * venda — pra casos que o motor não projeta sozinho (ex: renegociação,
+ * parcela extra, ajuste de cronograma que fugiu do previsto). Nasce já
+ * marcada como `ajustado_manualmente: true`, então o motor nunca
+ * sobrescreve nem remove — é permanente até o Gestor decidir o
+ * contrário (mesma trava que protege ajustes normais).
+ *
+ * Impede duplicar: se já existir uma linha pra essa venda+competência,
+ * usa `ajustarComissaoSugeridaManualmente` nela em vez de criar outra
+ * (evita 2 linhas concorrendo pelo mesmo mês).
+ */
+export async function adicionarParcelaManual({ vendaId, competenciaReferencia, valor, regraId, usuarioId }, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+  if (valor == null || Number(valor) < 0) throw new Error('Informe um valor válido (>= 0).')
+  const competencia = primeiroDiaDoMes(competenciaReferencia)
+
+  const { data: existente, error: erroExistente } = await db
+    .from('comissao_sugerida')
+    .select('id')
+    .eq('venda_id', vendaId)
+    .eq('competencia_referencia', competencia)
+    .maybeSingle()
+  if (erroExistente) throw new Error(`Erro ao verificar competência existente: ${erroExistente.message}`)
+  if (existente) return ajustarComissaoSugeridaManualmente(existente.id, valor, usuarioId, db)
+
+  const { data, error } = await db
+    .from('comissao_sugerida')
+    .insert({
+      venda_id: vendaId,
+      regra_comissao_id: regraId || null,
+      competencia_referencia: competencia,
+      valor_sugerido: valor,
+      valor_calculado_original: valor,
+      status_calculo: 'calculada',
+      ajustado_manualmente: true,
+      ajustado_por: usuarioId,
+      ajustado_em: new Date().toISOString(),
+    })
+    .select()
+    .single()
+  if (error) throw new Error(`Erro ao adicionar parcela manual: ${error.message}`)
+  return data
+}
+
+/**
  * VALIDAÇÃO (Etapa 4, Peça 1 — aprovado pelo Chief).
  *
  * Marca a expectativa daquela venda+competência como "cenário

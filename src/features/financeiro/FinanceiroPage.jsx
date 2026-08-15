@@ -27,6 +27,7 @@ import {
   ajustarComissaoSugeridaManualmente,
   validarComissaoSugerida,
   desvalidarComissaoSugerida,
+  adicionarParcelaManual,
 } from '../../lib/crm/regrasComissaoService'
 import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote, listarSeguradorasCatalogo, atribuirSeguradoraEReprocessar, reprocessarLote } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
@@ -241,6 +242,14 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
   const primeira = linhas[0]
   const totalEsperado = linhas.reduce((soma, l) => soma + (Number(l.valor_sugerido) || 0), 0)
   const totalLinhasValidadas = linhas.filter((l) => l.status_validacao === 'validado').length
+  const todasValidadas = linhas.length > 0 && totalLinhasValidadas === linhas.length
+
+  const [validandoTudo, setValidandoTudo] = useState(false)
+  const [erroValidacao, setErroValidacao] = useState('')
+  const [mostrarNovaParcela, setMostrarNovaParcela] = useState(false)
+  const [novaCompetencia, setNovaCompetencia] = useState('')
+  const [novoValorParcela, setNovoValorParcela] = useState('')
+  const [salvandoParcela, setSalvandoParcela] = useState(false)
 
   // Aviso explícito quando a regra pediria calendário (Cascata/Proporcional
   // + premio_sem_iof) mas a apólice não tem forma_pagamento_vezes — nunca
@@ -248,6 +257,56 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
   const modeloExigeCalendario = ['cascata', 'proporcional'].includes(primeira.regra?.modelo_recebimento)
   const semParcelasInformadas = !primeira.venda?.apolice?.forma_pagamento_vezes
   const semCronogramaProjetado = modeloExigeCalendario && primeira.regra?.base_calculo === 'premio_sem_iof' && semParcelasInformadas && linhas.length === 1
+
+  /**
+   * CORREÇÃO (pedido do Raphael, teste da Peça 1): validar mês a mês
+   * era redundante — os campos já são editáveis linha a linha pra
+   * correção, então a validação pode ser em lote. Um clique valida
+   * tudo que ainda estiver pendente; linhas já validadas não são
+   * tocadas de novo (idempotente).
+   */
+  async function handleValidarTudo() {
+    setValidandoTudo(true)
+    setErroValidacao('')
+    try {
+      const pendentes = linhas.filter((l) => l.status_validacao !== 'validado')
+      for (const l of pendentes) {
+        await validarComissaoSugerida(l.id, usuarioId)
+      }
+      onAtualizado()
+    } catch (e) {
+      setErroValidacao(e.message)
+    }
+    setValidandoTudo(false)
+  }
+
+  /**
+   * "+ Adicionar parcela" (pedido do Raphael): pra quando o calendário
+   * projetado não cobre um mês que precisa existir — renegociação,
+   * parcela extra, ajuste de cronograma fora do previsto. Nasce
+   * ajustada manualmente, então o motor nunca mexe nela depois.
+   */
+  async function handleAdicionarParcela() {
+    if (!novaCompetencia || novoValorParcela === '') return
+    setSalvandoParcela(true)
+    setErroValidacao('')
+    try {
+      await adicionarParcelaManual({
+        vendaId: primeira.venda_id,
+        competenciaReferencia: `${novaCompetencia}-01`,
+        valor: Number(novoValorParcela),
+        regraId: primeira.regra_comissao_id,
+        usuarioId,
+      })
+      setNovaCompetencia('')
+      setNovoValorParcela('')
+      setMostrarNovaParcela(false)
+      onAtualizado()
+    } catch (e) {
+      setErroValidacao(e.message)
+    }
+    setSalvandoParcela(false)
+  }
 
   return (
     <div className="ls-card" style={{ padding: '0.85rem', marginBottom: '0.85rem' }}>
@@ -264,6 +323,16 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
             </span>
           )}
         </div>
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarNovaParcela((v) => !v)}>
+            + Adicionar parcela
+          </button>
+          {!todasValidadas && (
+            <button className="cliente-tabela-btn" onClick={handleValidarTudo} disabled={validandoTudo}>
+              {validandoTudo ? 'Validando...' : 'Validar Cenário'}
+            </button>
+          )}
+        </div>
       </div>
 
       <p style={{ fontSize: '0.8rem', margin: '0.3rem 0 0.6rem', opacity: 0.85 }}>
@@ -272,10 +341,28 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
           ` — ${primeira.regra.modelo_recebimento === 'cascata' ? 'Cascata' : primeira.regra.modelo_recebimento === 'proporcional' ? 'Proporcional' : 'Desdobrada'}`}
       </p>
 
+      {erroValidacao && <p className="ls-modal-erro">{erroValidacao}</p>}
+
       {semCronogramaProjetado && (
         <p className="config-instrucao" style={{ borderLeft: '3px solid var(--ls-warning, #b8860b)', paddingLeft: '0.5rem' }}>
           ⚠️ Comissão total calculada — cronograma não projetado: quantidade de parcelas não informada na apólice.
         </p>
+      )}
+
+      {mostrarNovaParcela && (
+        <div className="cotacao-form-linha" style={{ marginBottom: '0.6rem', alignItems: 'flex-end' }}>
+          <div>
+            <label>Competência</label>
+            <input type="month" value={novaCompetencia} onChange={(e) => setNovaCompetencia(e.target.value)} />
+          </div>
+          <div>
+            <label>Valor esperado</label>
+            <input type="number" step="0.01" value={novoValorParcela} onChange={(e) => setNovoValorParcela(e.target.value)} placeholder="Ex: 100,00" />
+          </div>
+          <button className="cliente-tabela-btn" onClick={handleAdicionarParcela} disabled={salvandoParcela || !novaCompetencia || novoValorParcela === ''}>
+            {salvandoParcela ? 'Salvando...' : 'Adicionar'}
+          </button>
+        </div>
       )}
 
       <table className="cliente-tabela">
