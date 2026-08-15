@@ -1422,14 +1422,21 @@ function FormLancarRecebimento({ seguradoras, usuarioId, onSalvo, onCancelar }) 
 
       <div className="cotacao-form-linha">
         <div>
-          <label>Valor bruto *</label>
+          <label>Valor bruto (o que a seguradora informou no relatório) *</label>
           <input type="number" step="0.01" value={valorBruto} onChange={(e) => setValorBruto(e.target.value)} />
         </div>
         <div>
-          <label>Valor de descontos (IOF real etc.)</label>
+          <label>Valor a descontar do bruto (ex: retenção de IOF) — NÃO é o valor final, é só o quanto sai</label>
           <input type="number" step="0.01" value={valorDescontos} onChange={(e) => setValorDescontos(e.target.value)} />
         </div>
       </div>
+
+      {valorBruto !== '' && (
+        <p className="config-instrucao">
+          Valor líquido que será registrado: <strong>{formatarMoeda(Number(valorBruto) - Number(valorDescontos || 0))}</strong>
+          {' '}({formatarMoeda(Number(valorBruto))} bruto − {formatarMoeda(Number(valorDescontos || 0))} de desconto)
+        </p>
+      )}
 
       <div className="cotacao-form-linha">
         <div>
