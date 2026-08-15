@@ -1,7 +1,7 @@
 import { operacional } from '../supabaseSchemas'
 import { WORKSPACES } from '../../workspaces'
 import { registrarEventoComercial } from './eventosComerciaisService'
-import { criarComissaoSugerida } from './comissoesService'
+import { criarVendaSeElegivel } from './vendasService'
 
 /**
  * Commercial Lifecycle Engine (Sprint 009 — CLU-001, Blocos A/B).
@@ -20,6 +20,17 @@ import { criarComissaoSugerida } from './comissoesService'
  * genéricas por índice. `avancarEtapaCiclo` fica mantida (não removida)
  * só por segurança, caso algum componente ainda não migrado a chame —
  * mas não é mais usada por nenhuma função nova deste arquivo.
+ *
+ * ATUALIZADO (Sprint Vendas Central, aprovada pelo Chief): a criação
+ * automática de comissão sugerida legada (`criarComissaoSugerida`, em
+ * comissoesService.js) foi RETIRADA deste fluxo. `criarComissaoSugerida`
+ * e a tabela `comissoes` continuam existindo, intocadas, só não são mais
+ * chamadas automaticamente daqui — decisão de limpeza controlada fica
+ * pra depois. No lugar, `fecharCotacaoComDocumento` agora cria a Venda
+ * central (via `vendasService.criarVendaSeElegivel`), que passa a ser a
+ * entrada oficial do fluxo Venda → Regra de Comissão → Comissão
+ * Sugerida (DOC-COM-003), não mais o antigo caminho direto pra
+ * `comissoes`.
  */
 
 const MODULO_PARA_WORKSPACE_ID = {
@@ -135,32 +146,16 @@ export async function recusarSiblingsDoGrupo(cotacaoId, usuarioId) {
 }
 
 /**
- * Módulos cuja comissão sugerida já pode ser disparada centralizada por
- * este motor, sem risco de duplicidade.
+ * Módulos cuja operação, hoje, é elegível para gerar comissão quando
+ * fechada com uma Apólice (`apoliceId`).
  *
- * Lifsure/LiShield/Lifplan não têm hoje NENHUM mecanismo de comissão
- * próprio (confirmado por inspeção de lifsureService.js/
- * lishieldService.js/lifplanService.js, 11/08) — centralizar aqui é
- * puro ganho.
- *
- * Lifleet ('auto') também incluído (atualizado 11/08, após inspecionar
- * ApoliceAutoForm.jsx): o mecanismo que existe dentro de
- * `lifleetService.criarApoliceAuto` só dispara quando `origemVenda ===
- * 'venda_nova'` é passado explicitamente — e o único formulário real
- * que chama essa função (ApoliceAutoForm.jsx) NUNCA passa esse
- * parâmetro. Ou seja, esse caminho está morto na prática hoje. Sem
- * risco de duplicidade — pode centralizar.
- *
- * CORREÇÃO (11/08): `modulo` aqui já usa os mesmos valores de
- * `clientes_prospects.modulo` ('saude'/'auto'/'lifsure'/'lishield'/
- * 'lifplan') — confirmado por consulta direta que `comissoes.modulo`
- * usa EXATAMENTE essa mesma convenção (constraint real:
- * saude/auto/lifsure/lishield/lifplan). Não precisa de nenhuma
- * tradução — a suposição anterior (`auto→'lifleet'`) estava errada e
- * foi removida; era baseada no único registro legado existente
- * (lifleetService.criarApoliceAuto grava 'lifleet' hardcoded, valor
- * que na verdade NUNCA foi válido pra essa constraint — bug latente
- * separado, não tocado por decisão de escopo).
+ * MANTIDO EXATAMENTE COMO ANTES (Sprint Vendas Central não altera quem
+ * ganha comissão hoje — zero regressão). Lifcare ('saude', caminho de
+ * `contratoId`) permanece fora desta lista, como já estava: gap de
+ * schema conhecido (`comissoes` sem `contrato_id`), decisão de negócio
+ * pendente, fora do escopo desta entrega. A taxonomia de renovação,
+ * endosso, nomeação etc. também permanece fora de escopo — cada módulo
+ * define isso na sua própria homologação futura.
  */
 const MODULOS_COM_COMISSAO_CENTRALIZADA = ['auto', 'lifsure', 'lishield', 'lifplan']
 
@@ -201,12 +196,22 @@ export async function avancarParaEmissao(cotacaoId, usuarioId) {
  * vínculo (regra crítica travada pelo Chief no BMR-004: "emissão nunca
  * autogera documento com dado mínimo").
  *
- * Dispara a sugestão de comissão universal (RFC-001 destravada) para
- * os módulos em MODULOS_COM_COMISSAO_CENTRALIZADA. Para o Lifcare
- * (Contrato): comissão não é disparada aqui — `comissoes` só tem
- * `apolice_id`, sem `contrato_id` (achado estrutural, decisão de
- * schema pendente pro fechamento com o Chief, fora do escopo desta
- * Fase). Não é regressão: o Lifcare já não gerava comissão nenhuma.
+ * ATUALIZADO (Sprint Vendas Central): o ponto de decisão comercial
+ * `geraComissao` é calculado aqui, com o MESMO critério de antes
+ * (apólice + módulo em MODULOS_COM_COMISSAO_CENTRALIZADA — zero
+ * regressão). Quando `geraComissao` é true, cria a Venda central via
+ * `vendasService.criarVendaSeElegivel`, que passa a ser a entrada
+ * oficial pro Finance Center (Venda → Regra de Comissão → Comissão
+ * Sugerida). A chamada antiga a `criarComissaoSugerida` (comissoesService,
+ * tabela `comissoes`) foi retirada deste fluxo — a função e a tabela
+ * continuam existindo, só não são mais chamadas automaticamente daqui.
+ *
+ * ATENÇÃO — MUDANÇA NO FORMATO DO RETORNO: antes esta função devolvia
+ * `{ fechada, comissaoGerada, erroComissao }`. Agora devolve
+ * `{ fechada, vendaCriada, vendaId, erroVenda }`. Se algum componente de
+ * UI lê `resultado.comissaoGerada`, isso vai virar `undefined`
+ * silenciosamente — confirmar antes do deploy se algum ClienteDetail*Page
+ * depende desse campo.
  */
 export async function fecharCotacaoComDocumento(cotacaoId, usuarioId, { apoliceId = null, contratoId = null } = {}) {
   const { data: cotacao, error } = await operacional
@@ -238,36 +243,32 @@ export async function fecharCotacaoComDocumento(cotacaoId, usuarioId, { apoliceI
     usuarioId,
   })
 
-  if (apoliceId && MODULOS_COM_COMISSAO_CENTRALIZADA.includes(modulo)) {
-    const { data: apolice, error: erroApolice } = await operacional
-      .from('apolices')
-      .select('organizacao_id, corretor_id, premio')
-      .eq('id', apoliceId)
-      .single()
+  const geraComissao = Boolean(apoliceId) && MODULOS_COM_COMISSAO_CENTRALIZADA.includes(modulo)
+  let vendaCriada = null
 
-    if (!erroApolice && apolice) {
-      // CORREÇÃO (11/08): gerar a sugestão de comissão é um efeito
-      // colateral, não o fechamento em si — a cotação e a apólice já
-      // estão salvas de verdade nesse ponto. Uma falha aqui (schema
-      // divergente, constraint, etc.) NUNCA pode fazer parecer que o
-      // fechamento inteiro falhou; só registra o problema separado,
-      // sem interromper o retorno de sucesso.
-      try {
-        await criarComissaoSugerida({
-          organizacaoId: apolice.organizacao_id,
-          operadoraId: cotacao.operadora_id ?? null,
-          apoliceId,
-          corretorId: apolice.corretor_id,
-          modulo,
-          valorPremio: apolice.premio,
-        })
-      } catch (erroComissao) {
-        return { fechada: true, comissaoGerada: false, erroComissao: erroComissao.message }
-      }
+  if (apoliceId || contratoId) {
+    // Efeito colateral, não o fechamento em si — a cotação e o
+    // documento já estão salvos de verdade nesse ponto. Uma falha aqui
+    // (schema divergente, constraint, etc.) NUNCA pode fazer parecer
+    // que o fechamento inteiro falhou; só registra o problema separado,
+    // sem interromper o retorno de sucesso.
+    try {
+      const { data: organizacao } = await operacional.from('organizacoes').select('id').limit(1).single()
+
+      vendaCriada = await criarVendaSeElegivel({
+        organizacaoId: organizacao?.id,
+        clienteProspectId: cotacao.cliente_prospect_id,
+        apoliceId,
+        contratoId,
+        cotacaoId,
+        geraComissao,
+      })
+    } catch (erroVenda) {
+      return { fechada: true, vendaCriada: false, erroVenda: erroVenda.message }
     }
   }
 
-  return { fechada: true, comissaoGerada: apoliceId ? MODULOS_COM_COMISSAO_CENTRALIZADA.includes(modulo) : false }
+  return { fechada: true, vendaCriada: Boolean(vendaCriada), vendaId: vendaCriada?.id ?? null }
 }
 
 /**
