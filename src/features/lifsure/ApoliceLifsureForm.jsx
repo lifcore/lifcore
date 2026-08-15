@@ -8,7 +8,11 @@ import { listarProdutos } from '../../lib/crm/catalogoInstitucionalService'
 
 export default function ApoliceLifsureForm({ clienteProspectId, apoliceExistente, onSalvo, onCancelar }) {
   const { perfil } = useAuth()
-  const [produto, setProduto] = useState(apoliceExistente?.produto ?? '')
+  // produtoId é o vínculo real com institucional.produtos (Sprint Vendas
+  // Central, aprovada pelo Chief). `produto` (texto) continua existindo
+  // por compatibilidade com telas que só leem o nome — mas quem alimenta
+  // Venda → Regra de Comissão → Comissão Sugerida agora é o produtoId.
+  const [produtoId, setProdutoId] = useState(apoliceExistente?.produto_id ?? '')
   const [seguradoraNome, setSeguradoraNome] = useState(apoliceExistente?.operadora_nome_livre ?? '')
   const [numeroApolice, setNumeroApolice] = useState(apoliceExistente?.numero_apolice ?? '')
   const [premio, setPremio] = useState(apoliceExistente?.premio ?? '')
@@ -28,7 +32,7 @@ export default function ApoliceLifsureForm({ clienteProspectId, apoliceExistente
   }, [])
 
   async function handleSalvar() {
-    if (!produto) {
+    if (!produtoId) {
       setErro('Escolha o produto.')
       return
     }
@@ -39,8 +43,11 @@ export default function ApoliceLifsureForm({ clienteProspectId, apoliceExistente
     setSalvando(true)
     setErro(null)
     try {
+      const produtoSelecionado = produtos.find((p) => p.id === produtoId)
+
       const dados = {
-        produto,
+        produto: produtoSelecionado?.nome ?? null,
+        produto_id: produtoId,
         operadora_nome_livre: seguradoraNome,
         numero_apolice: numeroApolice || null,
         premio: parseValorBR(premio),
@@ -80,10 +87,10 @@ export default function ApoliceLifsureForm({ clienteProspectId, apoliceExistente
       </datalist>
 
       <label>Produto</label>
-      <select value={produto} onChange={(e) => setProduto(e.target.value)}>
+      <select value={produtoId} onChange={(e) => setProdutoId(e.target.value)}>
         <option value="">Selecione o produto...</option>
         {produtos.map((p) => (
-          <option key={p.id} value={p.nome}>{p.nome}</option>
+          <option key={p.id} value={p.id}>{p.nome}</option>
         ))}
       </select>
 

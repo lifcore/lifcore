@@ -20,12 +20,18 @@ import { operacional } from '../supabaseSchemas'
  * A checagem por SELECT abaixo evita o round-trip de erro no caso comum
  * (sem concorrência); quem garante de fato é o banco.
  *
- * CORREÇÃO (achada em teste real, apólice AZUL/01245 — Raphael):
- * versão anterior tentava gravar `organizacao_id`, coluna que não
- * existe em `vendas` (erro PGRST204), e não preenchia 4 colunas
- * obrigatórias da tabela real: `modulo`, `tipo`, `valor_base`, `status`.
- * Confirmadas via information_schema + constraints CHECK antes desta
- * correção — nada chutado.
+ * ATUALIZADO (correção obrigatória — vínculo Produto → Venda, aprovada
+ * pelo Chief): `vendas.produto_id` é lido diretamente de
+ * `apolices.produto_id`/`contratos.produto_id` (FK real pro catálogo
+ * `institucional.produtos`, adicionada nesta mesma entrega) — nunca por
+ * correspondência de texto. Se a apólice/contrato de origem não tiver
+ * produto_id preenchido (formulário ainda não migrado, ex: ApoliceForm
+ * genérico, ou registro histórico anterior a esta correção), a Venda
+ * ainda É criada — o fechamento comercial nunca pode ser bloqueado por
+ * isso — mas nasce com produto_id nulo, e o filtro já existente em
+ * `regrasComissaoService.listarVendasFechadasComProduto` naturalmente a
+ * exclui de "Gerar Sugestões" até alguém vincular o produto
+ * explicitamente (sem inferência automática).
  */
 export async function criarVendaSeElegivel({
   clienteProspectId,
@@ -53,22 +59,32 @@ export async function criarVendaSeElegivel({
   if (erroExistente) throw new Error(`Erro ao verificar venda existente: ${erroExistente.message}`)
   if (existente) return existente
 
-  // valor_base é obrigatório (NOT NULL) — busca o prêmio real da
-  // apólice. Caminho de contrato (Lifcare) fica com 0 por enquanto:
-  // `contratos` não tem coluna de valor único (valor vem de
-  // itens_contrato, por faixa etária) e este caminho hoje nunca chega
-  // aqui na prática, porque `geraComissao` já é sempre false para
-  // Lifcare (regra existente, não alterada nesta sprint). Pendência
-  // registrada, não resolvida — fora de escopo.
+  // valor_base (obrigatório) e produto_id vêm da apólice real.
+  // Caminho de contrato (Lifcare): `contratos` não tem coluna de valor
+  // único (valor vem de itens_contrato, por faixa etária) — valorBase
+  // fica 0 por enquanto. Não é problema prático hoje: `geraComissao` já
+  // é sempre false para Lifcare (regra existente, não alterada nesta
+  // sprint), então este ramo nunca chega a criar Venda de verdade ainda.
   let valorBase = 0
+  let produtoId = null
+
   if (apoliceId) {
     const { data: apolice, error: erroApolice } = await operacional
       .from('apolices')
-      .select('premio')
+      .select('premio, produto_id')
       .eq('id', apoliceId)
       .single()
-    if (erroApolice) throw new Error(`Erro ao buscar prêmio da apólice para a venda: ${erroApolice.message}`)
+    if (erroApolice) throw new Error(`Erro ao buscar dados da apólice para a venda: ${erroApolice.message}`)
     valorBase = apolice?.premio ?? 0
+    produtoId = apolice?.produto_id ?? null
+  } else if (contratoId) {
+    const { data: contrato, error: erroContrato } = await operacional
+      .from('contratos')
+      .select('produto_id')
+      .eq('id', contratoId)
+      .single()
+    if (erroContrato) throw new Error(`Erro ao buscar dados do contrato para a venda: ${erroContrato.message}`)
+    produtoId = contrato?.produto_id ?? null
   }
 
   const { data: venda, error } = await operacional
@@ -79,6 +95,7 @@ export async function criarVendaSeElegivel({
       contrato_id: contratoId || null,
       cotacao_id: cotacaoId || null,
       operadora_id: operadoraId || null,
+      produto_id: produtoId,
       modulo,
       tipo,
       valor_base: valorBase,

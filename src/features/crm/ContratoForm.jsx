@@ -38,7 +38,11 @@ function reconstruirBlocos(itensContrato) {
 }
 
 export default function ContratoForm({ clienteProspectId, contratoExistente, operadoraInicial, itensIniciais, onSalvo, onCancelar }) {
-  const [produto, setProduto] = useState(contratoExistente?.produto ?? '')
+  // produtoId é o vínculo real com institucional.produtos (Sprint Vendas
+  // Central, aprovada pelo Chief). `produto` (texto) continua existindo
+  // por compatibilidade com telas que só leem o nome — mas quem alimenta
+  // Venda → Regra de Comissão → Comissão Sugerida agora é o produtoId.
+  const [produtoId, setProdutoId] = useState(contratoExistente?.produto_id ?? '')
   const [operadoraNome, setOperadoraNome] = useState(contratoExistente?.operadora_nome_livre ?? operadoraInicial ?? '')
   const [modalidade, setModalidade] = useState(contratoExistente?.modalidade ?? '')
   const [numeroApolice, setNumeroApolice] = useState(contratoExistente?.numero_apolice ?? '')
@@ -116,7 +120,7 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
   }
 
   async function handleSalvar() {
-    if (!produto) {
+    if (!produtoId) {
       setErro('Selecione o produto (Saúde, Odonto ou Saúde e Odonto).')
       return
     }
@@ -147,8 +151,11 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
         return
       }
 
+      const produtoSelecionado = produtos.find((p) => p.id === produtoId)
+
       const dados = {
-        produto,
+        produto: produtoSelecionado?.nome ?? null,
+        produto_id: produtoId,
         operadora_nome_livre: operadoraNome,
         plano: blocosPlano.map((b) => b.plano).filter(Boolean).join(' + ') || null,
         modalidade: modalidade || null,
@@ -186,10 +193,10 @@ export default function ContratoForm({ clienteProspectId, contratoExistente, ope
       <div className="cotacao-form-linha">
         <div>
           <label>Produto</label>
-          <select value={produto} onChange={(e) => setProduto(e.target.value)}>
+          <select value={produtoId} onChange={(e) => setProdutoId(e.target.value)}>
             <option value="">Selecione...</option>
             {produtos.map((p) => (
-              <option key={p.id} value={p.nome}>{p.nome}</option>
+              <option key={p.id} value={p.id}>{p.nome}</option>
             ))}
           </select>
         </div>

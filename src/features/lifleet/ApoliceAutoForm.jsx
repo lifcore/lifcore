@@ -23,7 +23,11 @@ function novoVeiculo() {
 
 export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apoliceExistente, onSalvo, onCancelar }) {
   const { perfil } = useAuth()
-  const [produto, setProduto] = useState(apoliceExistente?.produto ?? '')
+  // produtoId é o vínculo real com institucional.produtos (Sprint Vendas
+  // Central, aprovada pelo Chief). `produto` (texto) continua existindo
+  // por compatibilidade com telas que só leem o nome — mas quem alimenta
+  // Venda → Regra de Comissão → Comissão Sugerida agora é o produtoId.
+  const [produtoId, setProdutoId] = useState(apoliceExistente?.produto_id ?? '')
   const [seguradoraNome, setSeguradoraNome] = useState(apoliceExistente?.operadora_nome_livre ?? '')
   const [numeroApolice, setNumeroApolice] = useState(apoliceExistente?.numero_apolice ?? '')
   const [premio, setPremio] = useState(apoliceExistente?.premio ?? '')
@@ -63,7 +67,7 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
   }
 
   async function handleSalvar() {
-    if (!produto) {
+    if (!produtoId) {
       setErro('Selecione o produto.')
       return
     }
@@ -84,8 +88,11 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
         ano_modelo: resto.ano_modelo ? parseInt(resto.ano_modelo, 10) : null,
       }))
 
+      const produtoSelecionado = produtos.find((p) => p.id === produtoId)
+
       const dados = {
-        produto,
+        produto: produtoSelecionado?.nome ?? null,
+        produto_id: produtoId,
         operadora_nome_livre: seguradoraNome,
         numero_apolice: numeroApolice || null,
         premio: parseValorBR(premio),
@@ -134,10 +141,10 @@ export default function ApoliceAutoForm({ clienteProspectId, tipoPessoa, apolice
       <div className="cotacao-form-linha">
         <div>
           <label>Produto</label>
-          <select value={produto} onChange={(e) => setProduto(e.target.value)}>
+          <select value={produtoId} onChange={(e) => setProdutoId(e.target.value)}>
             <option value="">Selecione...</option>
             {produtos.map((p) => (
-              <option key={p.id} value={p.nome}>{p.nome}</option>
+              <option key={p.id} value={p.id}>{p.nome}</option>
             ))}
           </select>
         </div>

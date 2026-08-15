@@ -7,7 +7,11 @@ import { listarProdutos } from '../../lib/crm/catalogoInstitucionalService'
 
 export default function ContratoLifplanForm({ clienteProspectId, contratoExistente, onSalvo, onCancelar }) {
   const { perfil } = useAuth()
-  const [produto, setProduto] = useState(contratoExistente?.produto ?? '')
+  // produtoId é o vínculo real com institucional.produtos (Sprint Vendas
+  // Central, aprovada pelo Chief). `produto` (texto) continua existindo
+  // por compatibilidade com telas que só leem o nome — mas quem alimenta
+  // Venda → Regra de Comissão → Comissão Sugerida agora é o produtoId.
+  const [produtoId, setProdutoId] = useState(contratoExistente?.produto_id ?? '')
   const [instituicao, setInstituicao] = useState(contratoExistente?.operadora_nome_livre ?? '')
   const [numeroContrato, setNumeroContrato] = useState(contratoExistente?.numero_apolice ?? '')
   const [valor, setValor] = useState(contratoExistente?.premio ?? '')
@@ -24,7 +28,7 @@ export default function ContratoLifplanForm({ clienteProspectId, contratoExisten
   }, [])
 
   async function handleSalvar() {
-    if (!produto) {
+    if (!produtoId) {
       setErro('Escolha o produto.')
       return
     }
@@ -35,8 +39,11 @@ export default function ContratoLifplanForm({ clienteProspectId, contratoExisten
     setSalvando(true)
     setErro(null)
     try {
+      const produtoSelecionado = produtos.find((p) => p.id === produtoId)
+
       const dados = {
-        produto,
+        produto: produtoSelecionado?.nome ?? null,
+        produto_id: produtoId,
         operadora_nome_livre: instituicao,
         numero_apolice: numeroContrato || null,
         premio: parseValorBR(valor),
@@ -69,10 +76,10 @@ export default function ContratoLifplanForm({ clienteProspectId, contratoExisten
   return (
     <div className="cotacao-form">
       <label>Produto</label>
-      <select value={produto} onChange={(e) => setProduto(e.target.value)}>
+      <select value={produtoId} onChange={(e) => setProdutoId(e.target.value)}>
         <option value="">Selecione o produto...</option>
         {produtos.map((p) => (
-          <option key={p.id} value={p.nome}>{p.nome}</option>
+          <option key={p.id} value={p.id}>{p.nome}</option>
         ))}
       </select>
 
