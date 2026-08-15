@@ -109,12 +109,36 @@ export async function conciliarRecebimento(recebimentoId, { vendaId, apoliceId, 
 
   const { data: recebimento, error: erroRecebimento } = await db
     .from('recebimentos_comissao')
-    .select('status')
+    .select('status, competencia_referencia')
     .eq('id', recebimentoId)
     .single()
   if (erroRecebimento) throw new Error(`Erro ao buscar recebimento: ${erroRecebimento.message}`)
   if (recebimento.status !== 'importado') {
     throw new Error('Só é possível conciliar um recebimento que esteja com status "importado".')
+  }
+
+  /**
+   * TRAVA DE DUPLICIDADE (achado do Raphael, 15/08 — confirmado:
+   * bloquear, não só avisar). Antes não existia nenhuma checagem: dava
+   * pra conciliar quantos recebimentos quisesse na mesma venda+
+   * competência, inflando o "Recebido" no confronto (foi exatamente o
+   * que gerou o R$1.133,32 absurdo — 4 recebimentos de teste
+   * empilhados na mesma competência). Bloqueia aqui, na origem, não só
+   * na tela.
+   */
+  if (recebimento.competencia_referencia) {
+    const { count: qtdJaConciliado, error: erroDuplicidade } = await db
+      .from('recebimentos_comissao')
+      .select('id', { count: 'exact', head: true })
+      .eq('venda_id', vendaId)
+      .eq('competencia_referencia', recebimento.competencia_referencia)
+      .in('status', ['conciliado', 'distribuido'])
+    if (erroDuplicidade) throw new Error(`Erro ao verificar conciliação duplicada: ${erroDuplicidade.message}`)
+    if (qtdJaConciliado > 0) {
+      throw new Error(
+        'Já existe um recebimento conciliado para esta Venda nesta competência. Não é possível conciliar em duplicidade — verifique se este recebimento não é um lançamento repetido.'
+      )
+    }
   }
 
   const { data: venda, error: erroVenda } = await db
@@ -240,6 +264,25 @@ export async function distribuirRecebimento(recebimentoId, usuarioId, cliente = 
  * — são leitura pura, exclusivas para alimentar a UI da fila de
  * conciliação. Nenhuma das 3 funções do motor foi alterada.
  */
+
+/**
+ * LEITURA — recebimentos já conciliados (vinculados a uma Venda), mas
+ * ainda não distribuídos. Corrige achado do Raphael (15/08): a lista
+ * "Conciliados nesta sessão" só existia em memória do navegador
+ * (useState) — atualizar a página perdia a visão inteira, mesmo o
+ * dado continuando salvo e correto no banco. Agora a tela busca isso
+ * do banco no carregamento, não depende mais de sessão.
+ */
+export async function listarRecebimentosConciliadosAguardandoDistribuicao(cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+  const { data, error } = await db
+    .from('recebimentos_comissao')
+    .select('*, venda:vendas(id, apolice_id, contrato_id, modulo)')
+    .eq('status', 'conciliado')
+    .order('conciliado_em', { ascending: false })
+  if (error) throw new Error(`Erro ao listar recebimentos conciliados aguardando distribuição: ${error.message}`)
+  return data ?? []
+}
 
 /**
  * LEITURA — Fila de Conciliação. Lista recebimentos aguardando vínculo

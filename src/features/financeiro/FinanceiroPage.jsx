@@ -15,6 +15,7 @@ import {
 } from '../../lib/crm/comissoesService'
 import {
   listarRecebimentosPendentesConciliacao,
+  listarRecebimentosConciliadosAguardandoDistribuicao,
   buscarVendasCandidatas,
   conciliarRecebimento,
   distribuirRecebimento,
@@ -127,6 +128,7 @@ function ComissoesSugeridasTab() {
   const [gerando, setGerando] = useState(false)
   const [erro, setErro] = useState('')
   const [resultadoGeracao, setResultadoGeracao] = useState(null)
+  const [mostrarValidadas, setMostrarValidadas] = useState(false)
 
   useEffect(() => {
     carregar()
@@ -178,6 +180,17 @@ function ComissoesSugeridasTab() {
     linhas.slice().sort((a, b) => (a.competencia_referencia < b.competencia_referencia ? -1 : 1))
   )
 
+  /**
+   * CORREÇÃO (item 1, achado do Raphael 15/08): depois de validado por
+   * completo, a venda não tem mais trabalho pendente nesta tela — fica
+   * escondida por padrão pra não poluir a lista de "o que falta fazer".
+   * O dado não é apagado nem alterado, só oculto — toggle reexibe pra
+   * auditoria/conferência quando precisar.
+   */
+  const grupoTotalmenteValidado = (linhas) => linhas.length > 0 && linhas.every((l) => l.status_validacao === 'validado')
+  const gruposExibidos = mostrarValidadas ? grupos : grupos.filter((linhas) => !grupoTotalmenteValidado(linhas))
+  const qtdEscondidosValidados = grupos.length - grupos.filter((linhas) => !grupoTotalmenteValidado(linhas)).length
+
   return (
     <div>
       <div className="cotacao-form-linha" style={{ alignItems: 'flex-end', marginBottom: '1rem' }}>
@@ -207,12 +220,23 @@ function ComissoesSugeridasTab() {
         <KpiCard label="Vendas com Cenário" valor={grupos.length} />
       </div>
 
+      <div className="cotacao-form-linha" style={{ alignItems: 'center', marginBottom: '1rem' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+          <input type="checkbox" checked={mostrarValidadas} onChange={(e) => setMostrarValidadas(e.target.checked)} />
+          Mostrar vendas já totalmente validadas ({qtdEscondidosValidados} escondida{qtdEscondidosValidados !== 1 ? 's' : ''})
+        </label>
+      </div>
+
       {carregando ? (
         <p className="cliente-carregando">Carregando...</p>
-      ) : grupos.length === 0 ? (
-        <p className="cliente-vazio">Nenhuma sugestão gerada ainda. Clique em "Gerar Sugestões" acima.</p>
+      ) : gruposExibidos.length === 0 ? (
+        <p className="cliente-vazio">
+          {grupos.length === 0
+            ? 'Nenhuma sugestão gerada ainda. Clique em "Gerar Sugestões" acima.'
+            : 'Todas as vendas com cenário já estão validadas — marque a caixa acima pra ver.'}
+        </p>
       ) : (
-        grupos.map((linhas) => (
+        gruposExibidos.map((linhas) => (
           <CardVendaCalendario key={linhas[0].venda_id} linhas={linhas} usuarioId={user?.id} onAtualizado={carregar} />
         ))
       )}
@@ -1247,6 +1271,7 @@ function ConciliacaoTab() {
 
   useEffect(() => {
     carregarFila()
+    carregarConciliadosAguardandoDistribuicao()
     listarCatalogoSeguradoras().then(setSeguradoras)
   }, [])
 
@@ -1262,15 +1287,31 @@ function ConciliacaoTab() {
     setCarregando(false)
   }
 
+  /**
+   * CORREÇÃO (item 3, achado do Raphael 15/08): "Conciliados nesta
+   * sessão" antes só existia em memória — atualizar a página perdia a
+   * lista inteira, mesmo o dado estando salvo certo no banco. Agora
+   * carrega do banco (`recebimentos_comissao` com status='conciliado',
+   * ainda não distribuído) assim que a tela abre.
+   */
+  async function carregarConciliadosAguardandoDistribuicao() {
+    try {
+      const dados = await listarRecebimentosConciliadosAguardandoDistribuicao()
+      setRecemConciliados(dados.map((r) => ({ recebimento: r, venda: r.venda, distribuido: false, linhas: null })))
+    } catch (e) {
+      setErro(e.message)
+    }
+  }
+
   function handleConciliado(recebimento, venda) {
     setFila((atual) => atual.filter((r) => r.id !== recebimento.id))
     setRecemConciliados((atual) => [...atual, { recebimento, venda, distribuido: false, linhas: null }])
   }
 
   function handleDistribuido(recebimentoId, linhas) {
-    setRecemConciliados((atual) =>
-      atual.map((item) => (item.recebimento.id === recebimentoId ? { ...item, distribuido: true, linhas } : item))
-    )
+    // Distribuído sai da lista de "aguardando distribuição" — já
+    // cumpriu seu papel aqui, o resultado fica visível em Repasses.
+    setRecemConciliados((atual) => atual.filter((item) => item.recebimento.id !== recebimentoId))
   }
 
   function handleRecebimentoLancado(novoRecebimento) {
@@ -1315,7 +1356,7 @@ function ConciliacaoTab() {
 
       {recemConciliados.length > 0 && (
         <>
-          <h3>Conciliados nesta sessão</h3>
+          <h3>Conciliados, aguardando distribuição</h3>
           {recemConciliados.map((item) => (
             <LinhaRecemConciliada
               key={item.recebimento.id}
