@@ -2,8 +2,9 @@ import { institucional, operacional } from '../supabaseSchemas'
 import { supabase } from '../supabaseClient'
 import { dataLocalISO } from '../utils/formatarData'
 import { registrarEventoComercial } from './eventosComerciaisService'
-import { criarApolice } from './apolicesService'
+import { criarApolice, excluirApolice } from './apolicesService'
 import { avancarEtapaCiclo, avancarParaEmissao, fecharCotacaoComDocumento, marcarCotacaoPerdida, marcarCotacaoExpirada } from './commercialLifecycleService'
+import { excluirVendasDoDocumento } from './vendasService'
 
 export { fecharCotacaoComDocumento, marcarCotacaoPerdida, marcarCotacaoExpirada }
 
@@ -150,35 +151,82 @@ export async function buscarClienteProspectCompleto(id) {
 }
 
 /**
- * Exclui um cliente/prospect e todo o histórico vinculado (contratos,
- * cotações, demandas/eventos).
+ * Exclui um cliente/prospect e todo o histórico vinculado (apólices,
+ * contratos, cotações, casos, demandas/eventos).
  *
  * ATENÇÃO — MODO ATUAL: FASE DE TESTES.
  * Por decisão explícita do Raphael (fase de validação do sistema),
- * esta função exclui de verdade, sem restrição, para permitir limpar
- * cadastros de teste sem acumular lixo na base.
+ * esta função exclui de verdade, para permitir limpar cadastros de
+ * teste sem acumular lixo na base — mas com uma trava financeira que
+ * NUNCA é desligada: se qualquer apólice/contrato do cliente tiver
+ * comissão real (ledger `comissoes` ou `recebimentos_comissao`) por
+ * trás, a exclusão inteira PARA, com erro apontando qual documento tem
+ * o impedimento. Isso vale tanto em teste quanto em produção — não é
+ * uma trava "provisória", é a régua definitiva (Bloco B, aprovado pelo
+ * Chief).
  *
- * ANTES DE IR PARA PRODUÇÃO REAL: reintroduzir a trava que impede
- * excluir clientes com histórico real (bloquear quando houver
- * contratos/cotações/casos, sugerindo "Marcar Inativo" em vez disso).
- * Isso preserva o princípio de rastreabilidade da Constituição.
+ * CORREÇÃO (Bloco B, 15/08): a versão anterior desta função ignorava o
+ * `error` de cada delete intermediário — uma falha de FK no meio
+ * (ex: uma cotação com Venda vinculada, que passou a existir só depois
+ * da Sprint Vendas Central) passava batido, silenciosa, e só estourava
+ * de forma confusa no delete final do cliente. Também nunca cobria
+ * `apolices`/`vendas` — apólices ficavam órfãs (cliente_prospect_id
+ * vira NULL sozinho, é `ON DELETE SET NULL` no banco), não removidas.
+ * Toda chamada abaixo agora checa erro explicitamente.
+ *
+ * LIMITAÇÃO CONHECIDA, não resolvida agora (fora do escopo desta
+ * correção): isto não roda dentro de uma transação real — se o cliente
+ * tiver 3 apólices e a 2ª bloquear por comissão real, a 1ª já foi
+ * excluída e a exclusão para aí. O cliente em si NUNCA é removido nesse
+ * cenário (a trava financeira impede), mas fica com histórico
+ * parcialmente limpo. Resolver isso de vez exigiria uma função de
+ * banco (RPC/transação real) — maior que o escopo pedido agora.
  */
 export async function excluirClienteProspect(id) {
-  // Ordem importa: cotações (e seus itens, via cascade) e casos (e seus
-  // eventos, via cascade) precisam sair antes do cliente, para não
-  // esbarrar em restrição de chave estrangeira.
-  await operacional.from('itens_cotacao').delete().in(
-    'cotacao_id',
-    (await operacional.from('cotacoes').select('id').eq('cliente_prospect_id', id)).data?.map((c) => c.id) ?? []
-  )
-  await operacional.from('cotacoes').delete().eq('cliente_prospect_id', id)
-  await operacional.from('eventos').delete().in(
-    'caso_id',
-    (await operacional.from('casos').select('id').eq('cliente_prospect_id', id)).data?.map((c) => c.id) ?? []
-  )
-  await operacional.from('casos').delete().eq('cliente_prospect_id', id)
-  await operacional.from('contratos').delete().eq('cliente_prospect_id', id)
-  await operacional.from('contatos').delete().eq('cliente_prospect_id', id)
+  const { data: apolicesDoCliente, error: erroBuscarApolices } = await operacional
+    .from('apolices')
+    .select('id')
+    .eq('cliente_prospect_id', id)
+  if (erroBuscarApolices) throw new Error(`Erro ao buscar apólices do cliente: ${erroBuscarApolices.message}`)
+  for (const a of apolicesDoCliente ?? []) {
+    await excluirApolice(a.id)
+  }
+
+  const { data: contratosDoCliente, error: erroBuscarContratos } = await operacional
+    .from('contratos')
+    .select('id')
+    .eq('cliente_prospect_id', id)
+  if (erroBuscarContratos) throw new Error(`Erro ao buscar contratos do cliente: ${erroBuscarContratos.message}`)
+  for (const c of contratosDoCliente ?? []) {
+    await excluirContrato(c.id)
+  }
+
+  // Cotações remanescentes — já desvinculadas de apólice/contrato pelos
+  // passos acima (ou nunca vinculadas). itens_cotacao sai sozinho via
+  // CASCADE do banco.
+  const { data: cotacoesDoCliente, error: erroBuscarCotacoes } = await operacional
+    .from('cotacoes')
+    .select('id')
+    .eq('cliente_prospect_id', id)
+  if (erroBuscarCotacoes) throw new Error(`Erro ao buscar cotações do cliente: ${erroBuscarCotacoes.message}`)
+  for (const cot of cotacoesDoCliente ?? []) {
+    await excluirCotacao(cot.id)
+  }
+
+  const { data: casosDoCliente, error: erroBuscarCasos } = await operacional
+    .from('casos')
+    .select('id')
+    .eq('cliente_prospect_id', id)
+  if (erroBuscarCasos) throw new Error(`Erro ao buscar casos do cliente: ${erroBuscarCasos.message}`)
+  const idsCasos = (casosDoCliente ?? []).map((c) => c.id)
+  if (idsCasos.length > 0) {
+    const { error: erroEventos } = await operacional.from('eventos').delete().in('caso_id', idsCasos)
+    if (erroEventos) throw new Error(`Erro ao excluir eventos dos casos: ${erroEventos.message}`)
+  }
+  const { error: erroCasos } = await operacional.from('casos').delete().eq('cliente_prospect_id', id)
+  if (erroCasos) throw new Error(`Erro ao excluir casos do cliente: ${erroCasos.message}`)
+
+  // contatos sai sozinho via CASCADE do banco.
 
   const { error } = await operacional.from('clientes_prospects').delete().eq('id', id)
   if (error) throw new Error(`Erro ao excluir: ${error.message}`)
@@ -333,10 +381,17 @@ export function parseValorBR(texto) {
  * apolicesService.js, fazem a mesma consulta. É um débito arquitetural já
  * conhecido (duas fontes de acesso ao mesmo catálogo) — registrado aqui,
  * não resolvido nesta Sprint para não ampliar o escopo. */
+/**
+ * CORREÇÃO (Sprint Vendas Central — vínculo Operadora, aprovada pelo
+ * Chief): adicionado `id` ao select. Antes só vinham `codigo, nome`,
+ * suficiente pro datalist mostrar sugestão, mas impossível de usar como
+ * vínculo real — os formulários que consomem isso (ContratoForm.jsx)
+ * nunca conseguiam gravar `operadora_id`, só o nome digitado.
+ */
 export async function listarCatalogoOperadoras() {
   const { data, error } = await institucional
     .from('operadoras')
-    .select('codigo, nome')
+    .select('id, codigo, nome')
     .eq('status', 'ativa')
     .order('nome')
   if (error) throw new Error(`Erro ao listar operadoras: ${error.message}`)
@@ -404,7 +459,59 @@ export async function atualizarContrato(contratoId, dados, itens = null) {
 }
 
 /** Exclui um contrato (sem histórico próprio vinculado além de beneficiários, que ficam órfãos — atenção) */
+/**
+ * Exclui um contrato e suas dependências seguras (Bloco B — exclusão
+ * em cascata, aprovado pelo Chief).
+ *
+ * Mesma régua da apólice: Vendas primeiro (bloqueia sozinho se tiver
+ * comissão/recebimento real); bloqueia também se existir
+ * `comissoes`/`recebimentos_comissao` ligados direto ao contrato
+ * (link legado) OU `casos` vinculados (histórico de
+ * atendimento/sinistro não é apagado silenciosamente); beneficiários
+ * saem junto (não é fato financeiro, é lista de dependentes do plano);
+ * cotações que apontavam pra este contrato são desvinculadas (não
+ * apagadas — voltam pro status "emissao"); `itens_contrato` saem
+ * sozinhos via CASCADE do banco.
+ */
 export async function excluirContrato(contratoId) {
+  await excluirVendasDoDocumento({ contratoId })
+
+  const { count: qtdComissoesLegado, error: erroContarComissoes } = await operacional
+    .from('comissoes')
+    .select('id', { count: 'exact', head: true })
+    .eq('contrato_id', contratoId)
+  if (erroContarComissoes) throw new Error(`Erro ao verificar comissões do contrato: ${erroContarComissoes.message}`)
+  if (qtdComissoesLegado > 0) {
+    throw new Error('Não é possível excluir: existe comissão (ledger) vinculada direto a este contrato.')
+  }
+
+  const { count: qtdRecebimentosLegado, error: erroContarRecebimentos } = await operacional
+    .from('recebimentos_comissao')
+    .select('id', { count: 'exact', head: true })
+    .eq('contrato_id', contratoId)
+  if (erroContarRecebimentos) throw new Error(`Erro ao verificar recebimentos do contrato: ${erroContarRecebimentos.message}`)
+  if (qtdRecebimentosLegado > 0) {
+    throw new Error('Não é possível excluir: existe recebimento vinculado direto a este contrato.')
+  }
+
+  const { count: qtdCasos, error: erroContarCasos } = await operacional
+    .from('casos')
+    .select('id', { count: 'exact', head: true })
+    .eq('contrato_id', contratoId)
+  if (erroContarCasos) throw new Error(`Erro ao verificar casos do contrato: ${erroContarCasos.message}`)
+  if (qtdCasos > 0) {
+    throw new Error('Não é possível excluir: existe(m) caso(s)/atendimento(s) vinculado(s) a este contrato.')
+  }
+
+  const { error: erroBeneficiarios } = await operacional.from('beneficiarios').delete().eq('contrato_id', contratoId)
+  if (erroBeneficiarios) throw new Error(`Erro ao excluir beneficiários do contrato: ${erroBeneficiarios.message}`)
+
+  const { error: erroCotacoes } = await operacional
+    .from('cotacoes')
+    .update({ contrato_id: null, status: 'emissao' })
+    .eq('contrato_id', contratoId)
+  if (erroCotacoes) throw new Error(`Erro ao desvincular cotações do contrato: ${erroCotacoes.message}`)
+
   const { error } = await operacional.from('contratos').delete().eq('id', contratoId)
   if (error) throw new Error(`Erro ao excluir contrato: ${error.message}`)
 }
@@ -505,8 +612,19 @@ export async function atualizarCotacao(cotacaoId, dados, itens = null) {
   }
 }
 
-/** Exclui uma cotação (e seus itens, via cascade) */
+/**
+ * Exclui uma cotação (Bloco B — exclusão em cascata, aprovado pelo
+ * Chief). Antes só apagava `itens_cotacao` (CASCADE automático do
+ * banco) — desde a Sprint Vendas Central, `vendas.cotacao_id` também
+ * aponta pra cá, e passou a bloquear silenciosamente (era essa a causa
+ * dos erros de FK vistos nos testes de 15/08). Agora exclui a(s)
+ * Venda(s) vinculada(s) primeiro, via `excluirVendasDoDocumento` — que
+ * bloqueia sozinho, com erro claro, se houver comissão/recebimento
+ * real por trás.
+ */
 export async function excluirCotacao(cotacaoId) {
+  await excluirVendasDoDocumento({ cotacaoId })
+
   const { error } = await operacional.from('cotacoes').delete().eq('id', cotacaoId)
   if (error) throw new Error(`Erro ao excluir cotação: ${error.message}`)
 }

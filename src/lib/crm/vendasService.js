@@ -123,3 +123,71 @@ export async function criarVendaSeElegivel({
 
   return venda
 }
+
+/**
+ * Exclui uma Venda e suas dependências pré-financeiras (Bloco B —
+ * exclusão em cascata, aprovado pelo Chief).
+ *
+ * NUNCA apaga fato financeiro real: bloqueia com erro claro se existir
+ * `comissoes` (ledger real, alimentado por `lancarComissaoRecebida`) ou
+ * `recebimentos_comissao` (qualquer status — mesmo 'importado' já é
+ * fato financeiro reconciliável: a própria constraint do banco exige
+ * `venda_id` preenchido pra qualquer status que não seja 'importado',
+ * e mesmo 'importado' pode já ter `venda_id`). Segue o princípio já
+ * registrado no projeto: "recebimento informado/conciliado é fato
+ * financeiro" — nunca inventado aqui, só aplicado.
+ *
+ * Só cascateia o que é pré-financeiro/metadado: `comissao_sugerida`
+ * (sugestão, não fato) e `venda_composicao` (composição de
+ * participantes/split, configuração, não dinheiro).
+ */
+export async function excluirVendaComDependencias(vendaId) {
+  const { count: qtdComissoes, error: erroContarComissoes } = await operacional
+    .from('comissoes')
+    .select('id', { count: 'exact', head: true })
+    .eq('venda_id', vendaId)
+  if (erroContarComissoes) throw new Error(`Erro ao verificar comissões da venda: ${erroContarComissoes.message}`)
+  if (qtdComissoes > 0) {
+    throw new Error('Não é possível excluir: existe comissão lançada (ledger real) vinculada a esta Venda.')
+  }
+
+  const { count: qtdRecebimentos, error: erroContarRecebimentos } = await operacional
+    .from('recebimentos_comissao')
+    .select('id', { count: 'exact', head: true })
+    .eq('venda_id', vendaId)
+  if (erroContarRecebimentos) throw new Error(`Erro ao verificar recebimentos da venda: ${erroContarRecebimentos.message}`)
+  if (qtdRecebimentos > 0) {
+    throw new Error('Não é possível excluir: existe recebimento (importado ou conciliado) vinculado a esta Venda.')
+  }
+
+  const { error: erroSugerida } = await operacional.from('comissao_sugerida').delete().eq('venda_id', vendaId)
+  if (erroSugerida) throw new Error(`Erro ao excluir comissão sugerida da venda: ${erroSugerida.message}`)
+
+  const { error: erroComposicao } = await operacional.from('venda_composicao').delete().eq('venda_id', vendaId)
+  if (erroComposicao) throw new Error(`Erro ao excluir composição da venda: ${erroComposicao.message}`)
+
+  const { error } = await operacional.from('vendas').delete().eq('id', vendaId)
+  if (error) throw new Error(`Erro ao excluir venda: ${error.message}`)
+}
+
+/**
+ * Exclui todas as vendas vinculadas a uma apólice, contrato ou cotação
+ * — usado antes de excluir o documento de origem em si. Propaga o
+ * bloqueio de `excluirVendaComDependencias` se qualquer venda tiver
+ * fato financeiro real por trás (para o processo inteiro, não decide
+ * nada sozinho).
+ */
+export async function excluirVendasDoDocumento({ apoliceId, contratoId, cotacaoId }) {
+  let query = operacional.from('vendas').select('id')
+  if (apoliceId) query = query.eq('apolice_id', apoliceId)
+  else if (contratoId) query = query.eq('contrato_id', contratoId)
+  else if (cotacaoId) query = query.eq('cotacao_id', cotacaoId)
+  else throw new Error('excluirVendasDoDocumento precisa de apoliceId, contratoId ou cotacaoId.')
+
+  const { data: vendas, error } = await query
+  if (error) throw new Error(`Erro ao buscar vendas do documento: ${error.message}`)
+
+  for (const v of vendas ?? []) {
+    await excluirVendaComDependencias(v.id)
+  }
+}

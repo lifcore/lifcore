@@ -1,5 +1,6 @@
 import { operacional, institucional } from '../supabaseSchemas'
 import { supabase } from '../supabaseClient'
+import { excluirVendasDoDocumento } from './vendasService'
 
 const PRODUTOS_APOLICE = ['Auto', 'Frota', 'RC', 'Residencial', 'Vida', 'Outro']
 
@@ -68,7 +69,50 @@ export async function criarApolice({ corretorId, organizacaoId, dados }) {
   return data
 }
 
+/**
+ * Exclui uma apólice e suas dependências seguras (Bloco B — exclusão
+ * em cascata, aprovado pelo Chief).
+ *
+ * Ordem:
+ * 1. Vendas vinculadas — via `excluirVendasDoDocumento`, que bloqueia
+ *    sozinho se alguma tiver comissão/recebimento real (nunca decide
+ *    isso aqui, só propaga).
+ * 2. Bloqueia se existir `comissoes`/`recebimentos_comissao` ligados
+ *    DIRETO à apólice — link legado, fora do caminho de vendas, mesma
+ *    régua: fato financeiro nunca some.
+ * 3. Desvincula (não apaga) cotações que apontavam pra esta apólice —
+ *    a cotação tem vida própria, volta pro status "emissao" pra poder
+ *    ser refeita com outro documento, em vez de desaparecer junto.
+ * 4. `veiculos` saem sozinhos via CASCADE do banco.
+ * 5. Apólice.
+ */
 export async function excluirApolice(id) {
+  await excluirVendasDoDocumento({ apoliceId: id })
+
+  const { count: qtdComissoesLegado, error: erroContarComissoes } = await operacional
+    .from('comissoes')
+    .select('id', { count: 'exact', head: true })
+    .eq('apolice_id', id)
+  if (erroContarComissoes) throw new Error(`Erro ao verificar comissões da apólice: ${erroContarComissoes.message}`)
+  if (qtdComissoesLegado > 0) {
+    throw new Error('Não é possível excluir: existe comissão (ledger) vinculada direto a esta apólice.')
+  }
+
+  const { count: qtdRecebimentosLegado, error: erroContarRecebimentos } = await operacional
+    .from('recebimentos_comissao')
+    .select('id', { count: 'exact', head: true })
+    .eq('apolice_id', id)
+  if (erroContarRecebimentos) throw new Error(`Erro ao verificar recebimentos da apólice: ${erroContarRecebimentos.message}`)
+  if (qtdRecebimentosLegado > 0) {
+    throw new Error('Não é possível excluir: existe recebimento vinculado direto a esta apólice.')
+  }
+
+  const { error: erroCotacoes } = await operacional
+    .from('cotacoes')
+    .update({ apolice_id: null, status: 'emissao' })
+    .eq('apolice_id', id)
+  if (erroCotacoes) throw new Error(`Erro ao desvincular cotações da apólice: ${erroCotacoes.message}`)
+
   const { error } = await operacional.from('apolices').delete().eq('id', id)
   if (error) throw new Error(`Erro ao excluir apólice: ${error.message}`)
 }
