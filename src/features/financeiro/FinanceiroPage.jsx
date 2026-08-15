@@ -30,6 +30,8 @@ import {
   adicionarParcelaManual,
   listarAjustesDaVenda,
   excluirAjusteEstorno,
+  lancarAjusteEstorno,
+  obterConfrontoDaVenda,
 } from '../../lib/crm/regrasComissaoService'
 import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote, listarSeguradorasCatalogo, atribuirSeguradoraEReprocessar, reprocessarLote } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
@@ -1559,6 +1561,171 @@ function LinhaRecebimentoPendente({ recebimento, usuarioId, onConciliado }) {
   )
 }
 
+/**
+ * CONFRONTO (Etapa 4, Peça 3 — Conciliação Individual, aprovado pelo
+ * Chief). Mostra o cenário esperado (validado, com ajustes já
+ * embutidos) × o que foi realmente conciliado pra essa venda,
+ * competência a competência. É aqui, e só aqui, que faz sentido lançar
+ * um estorno — antes disso não tem prova nenhuma de que algo divergiu
+ * (correção de posicionamento pedida pelo Raphael, ao testar a Peça 2
+ * antes da hora).
+ */
+function PainelConfrontoVenda({ vendaId, usuarioId }) {
+  const [confronto, setConfronto] = useState(null)
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState('')
+
+  const [mostrarNovoAjuste, setMostrarNovoAjuste] = useState(false)
+  const [tipoAjuste, setTipoAjuste] = useState('estorno')
+  const [valorAjuste, setValorAjuste] = useState('')
+  const [motivoAjuste, setMotivoAjuste] = useState('')
+  const [competenciaAjuste, setCompetenciaAjuste] = useState('')
+  const [salvandoAjuste, setSalvandoAjuste] = useState(false)
+
+  useEffect(() => {
+    carregar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendaId])
+
+  async function carregar() {
+    setCarregando(true)
+    setErro('')
+    try {
+      const dados = await obterConfrontoDaVenda(vendaId)
+      setConfronto(dados)
+    } catch (e) {
+      setErro(e.message)
+    }
+    setCarregando(false)
+  }
+
+  /**
+   * "Estorno" sempre reduz o esperado — força o sinal, não depende do
+   * Gestor lembrar do "-" (mesmo achado de antes, mesma correção).
+   */
+  async function handleLancarAjuste() {
+    if (valorAjuste === '' || !motivoAjuste.trim()) return
+    setSalvandoAjuste(true)
+    setErro('')
+    try {
+      const linhaSelecionada = competenciaAjuste
+        ? confronto.linhas.find((l) => l.competenciaReferencia === `${competenciaAjuste}-01`)
+        : null
+      const valorNumerico = Number(valorAjuste)
+      const valorFinal = tipoAjuste === 'estorno' ? -Math.abs(valorNumerico) : valorNumerico
+      await lancarAjusteEstorno({
+        vendaId,
+        comissaoSugeridaId: linhaSelecionada?.comissaoSugeridaId ?? null,
+        competenciaReferencia: competenciaAjuste ? `${competenciaAjuste}-01` : null,
+        tipo: tipoAjuste,
+        valor: valorFinal,
+        motivo: motivoAjuste,
+        usuarioId,
+      })
+      setValorAjuste('')
+      setMotivoAjuste('')
+      setCompetenciaAjuste('')
+      setMostrarNovoAjuste(false)
+      carregar()
+    } catch (e) {
+      setErro(e.message)
+    }
+    setSalvandoAjuste(false)
+  }
+
+  if (carregando) return <p style={{ fontSize: '0.8rem' }}>Carregando confronto...</p>
+  if (!confronto) return null
+
+  const CORES_STATUS = {
+    aguardando: undefined,
+    conciliado: 'var(--ls-success, #2f7a3d)',
+    divergente: 'var(--ls-danger, #b23b3b)',
+  }
+  const LABEL_STATUS = { aguardando: 'aguardando', conciliado: 'conciliado', divergente: 'DIVERGENTE' }
+
+  return (
+    <div className="ls-card" style={{ padding: '0.6rem', marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+      <div className="cotacao-form-linha" style={{ alignItems: 'center' }}>
+        <strong style={{ fontSize: '0.85rem' }}>Confronto — cenário esperado × recebido</strong>
+        <span className="ls-badge" style={{ background: CORES_STATUS[confronto.statusGeral] }}>
+          {LABEL_STATUS[confronto.statusGeral]}
+        </span>
+        <span style={{ fontSize: '0.8rem' }}>
+          Esperado líquido: {formatarMoeda(confronto.totalEsperadoLiquido)} · Recebido: {formatarMoeda(confronto.totalRecebido)}
+          {confronto.totalDivergencia !== 0 && ` · Diferença: ${formatarMoeda(confronto.totalDivergencia)}`}
+        </span>
+        <button className="ls-btn ls-btn-ghost" style={{ fontSize: '0.8rem' }} onClick={() => setMostrarNovoAjuste((v) => !v)}>
+          + Ajuste/Estorno
+        </button>
+      </div>
+
+      {erro && <p className="ls-modal-erro">{erro}</p>}
+
+      {mostrarNovoAjuste && (
+        <div className="ls-card" style={{ padding: '0.5rem', marginTop: '0.5rem' }}>
+          <div className="cotacao-form-linha" style={{ alignItems: 'flex-end' }}>
+            <div>
+              <label>Tipo</label>
+              <select value={tipoAjuste} onChange={(e) => setTipoAjuste(e.target.value)}>
+                <option value="estorno">Estorno</option>
+                <option value="ajuste">Ajuste</option>
+                <option value="correcao">Correção</option>
+              </select>
+            </div>
+            <div>
+              <label>Valor (positivo — o sistema aplica o sinal certo)</label>
+              <input type="number" step="0.01" value={valorAjuste} onChange={(e) => setValorAjuste(e.target.value)} placeholder="Ex: 400,00" />
+            </div>
+            <div>
+              <label>Competência (vazio = venda inteira)</label>
+              <select value={competenciaAjuste} onChange={(e) => setCompetenciaAjuste(e.target.value)}>
+                <option value="">Venda inteira</option>
+                {confronto.linhas.map((l) => (
+                  <option key={l.comissaoSugeridaId} value={l.competenciaReferencia.slice(0, 7)}>
+                    {new Date(l.competenciaReferencia).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' })}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div style={{ marginTop: '0.5rem' }}>
+            <label>Motivo (obrigatório)</label>
+            <textarea
+              value={motivoAjuste}
+              onChange={(e) => setMotivoAjuste(e.target.value)}
+              rows={2}
+              placeholder="Ex: Seguradora não pagou a parcela de outubro — apólice cancelada em 20/09."
+              style={{ width: '100%', padding: '0.5rem 0.65rem', border: '1px solid var(--ls-border)', borderRadius: 'var(--ls-radius-sm)', fontFamily: 'inherit' }}
+            />
+          </div>
+          <div className="ls-modal-acoes">
+            <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarNovoAjuste(false)}>Cancelar</button>
+            <button className="ls-btn ls-btn-primary" onClick={handleLancarAjuste} disabled={salvandoAjuste || valorAjuste === '' || !motivoAjuste.trim()}>
+              {salvandoAjuste ? 'Salvando...' : 'Lançar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {confronto.linhas.length > 0 && (
+        <table className="cliente-tabela" style={{ marginTop: '0.5rem' }}>
+          <thead><tr><th>Competência</th><th>Esperado</th><th>Recebido</th><th>Status</th></tr></thead>
+          <tbody>
+            {confronto.linhas.map((l) => (
+              <tr key={l.comissaoSugeridaId}>
+                <td>{new Date(l.competenciaReferencia).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' })}</td>
+                <td>{formatarMoeda(l.esperadoLiquido)}{!l.validado && ' (não validado)'}</td>
+                <td>{l.recebido > 0 ? formatarMoeda(l.recebido) : '—'}</td>
+                <td><span className="ls-badge" style={{ background: CORES_STATUS[l.statusConfronto] }}>{LABEL_STATUS[l.statusConfronto]}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 function LinhaRecemConciliada({ item, usuarioId, onDistribuido }) {
   const { recebimento, venda, distribuido, linhas } = item
   const [distribuindo, setDistribuindo] = useState(false)
@@ -1580,6 +1747,9 @@ function LinhaRecemConciliada({ item, usuarioId, onDistribuido }) {
     <div className="ls-card" style={{ padding: '0.75rem', marginBottom: '0.75rem' }}>
       <div><strong>Recebimento</strong> {recebimento.id} → <strong>Venda</strong> {venda?.id}</div>
       <div>Líquido: {formatarMoeda(recebimento.valor_liquido)}</div>
+
+      {venda?.id && <PainelConfrontoVenda vendaId={venda.id} usuarioId={usuarioId} />}
+
       {erro && <p style={{ color: '#b23b3b' }}>{erro}</p>}
       {!distribuido ? (
         <button className="cliente-tabela-btn" onClick={handleDistribuir} disabled={distribuindo}>

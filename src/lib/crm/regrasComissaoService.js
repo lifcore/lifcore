@@ -475,6 +475,94 @@ export async function excluirAjusteEstorno(ajusteId, cliente = null) {
   if (error) throw new Error(`Erro ao excluir ajuste/estorno: ${error.message}`)
 }
 
+// ============================================================
+// CONCILIAÇÃO INDIVIDUAL — CONFRONTO (Etapa 4, Peça 3 — aprovado pelo
+// Chief). Puramente leitura: nunca escreve, nunca corrige nada
+// automaticamente. Confronta o cenário esperado VALIDADO (já com
+// ajustes/estornos somados por cima, líquido) contra os recebimentos
+// reais já conciliados daquela venda, competência a competência.
+// Divergência fica só exposta — decisão de lançar estorno continua
+// manual, do Gestor, na Peça 2 (agora chamada daqui).
+// ============================================================
+
+export async function obterConfrontoDaVenda(vendaId, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+
+  const { data: linhasSugeridas, error: erroSugeridas } = await db
+    .from('comissao_sugerida')
+    .select('id, competencia_referencia, valor_sugerido, status_validacao')
+    .eq('venda_id', vendaId)
+    .order('competencia_referencia', { ascending: true })
+  if (erroSugeridas) throw new Error(`Erro ao buscar cenário esperado: ${erroSugeridas.message}`)
+
+  const { data: ajustes, error: erroAjustes } = await db
+    .from('ajustes_comissao_sugerida')
+    .select('comissao_sugerida_id, competencia_referencia, valor')
+    .eq('venda_id', vendaId)
+  if (erroAjustes) throw new Error(`Erro ao buscar ajustes/estornos: ${erroAjustes.message}`)
+
+  const { data: recebimentos, error: erroRecebimentos } = await db
+    .from('recebimentos_comissao')
+    .select('id, competencia_referencia, valor_liquido, status')
+    .eq('venda_id', vendaId)
+    .in('status', ['conciliado', 'distribuido'])
+    .order('competencia_referencia', { ascending: true })
+  if (erroRecebimentos) throw new Error(`Erro ao buscar recebimentos conciliados: ${erroRecebimentos.message}`)
+
+  // Ajustes soltos na venda inteira (sem competência nem linha
+  // específica) entram só no total geral, não em nenhuma linha —
+  // igual já mostrado na tela de Comissão Sugerida.
+  const ajustesGerais = (ajustes ?? []).filter((a) => !a.comissao_sugerida_id && !a.competencia_referencia)
+  const totalAjustesGerais = ajustesGerais.reduce((soma, a) => soma + Number(a.valor), 0)
+
+  const linhas = (linhasSugeridas ?? []).map((l) => {
+    const ajustesDaLinha = (ajustes ?? []).filter(
+      (a) => a.comissao_sugerida_id === l.id || (!a.comissao_sugerida_id && a.competencia_referencia === l.competencia_referencia)
+    )
+    const totalAjustesDaLinha = ajustesDaLinha.reduce((soma, a) => soma + Number(a.valor), 0)
+    const esperadoLiquido = Number((Number(l.valor_sugerido) + totalAjustesDaLinha).toFixed(2))
+
+    const recebidosDaLinha = (recebimentos ?? []).filter((r) => r.competencia_referencia === l.competencia_referencia)
+    const totalRecebido = Number(recebidosDaLinha.reduce((soma, r) => soma + Number(r.valor_liquido), 0).toFixed(2))
+
+    const diferenca = Number((totalRecebido - esperadoLiquido).toFixed(2))
+    let statusConfronto
+    if (totalRecebido === 0) statusConfronto = 'aguardando'
+    else if (Math.abs(diferenca) < 0.01) statusConfronto = 'conciliado'
+    else statusConfronto = 'divergente'
+
+    return {
+      comissaoSugeridaId: l.id,
+      competenciaReferencia: l.competencia_referencia,
+      validado: l.status_validacao === 'validado',
+      esperadoOriginal: Number(l.valor_sugerido),
+      ajustes: totalAjustesDaLinha,
+      esperadoLiquido,
+      recebido: totalRecebido,
+      diferenca,
+      statusConfronto,
+    }
+  })
+
+  const totalEsperadoLiquido = Number((linhas.reduce((soma, l) => soma + l.esperadoLiquido, 0) + totalAjustesGerais).toFixed(2))
+  const totalRecebido = Number((recebimentos ?? []).reduce((soma, r) => soma + Number(r.valor_liquido), 0).toFixed(2))
+  const totalDivergencia = Number((totalRecebido - totalEsperadoLiquido).toFixed(2))
+
+  let statusGeral
+  if (totalRecebido === 0) statusGeral = 'aguardando'
+  else if (Math.abs(totalDivergencia) < 0.01) statusGeral = 'conciliado'
+  else statusGeral = 'divergente'
+
+  return {
+    linhas,
+    ajustesGerais: totalAjustesGerais,
+    totalEsperadoLiquido,
+    totalRecebido,
+    totalDivergencia,
+    statusGeral,
+  }
+}
+
 /**
  * VALIDAÇÃO (Etapa 4, Peça 1 — aprovado pelo Chief).
  *
