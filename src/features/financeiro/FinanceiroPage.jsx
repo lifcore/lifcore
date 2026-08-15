@@ -21,6 +21,8 @@ import {
   distribuirRecebimento,
   lancarComissaoRecebida,
   TIPOS_RECEBIMENTO_VALIDOS,
+  conciliarFechamentoAgregado,
+  listarFechamentosAgregados,
 } from '../../lib/crm/comissionamentoService'
 import {
   listarComissoesSugeridasDetalhado,
@@ -33,6 +35,7 @@ import {
   excluirAjusteEstorno,
   lancarAjusteEstorno,
   obterConfrontoDaVenda,
+  confrontarFechamentoAgregado,
 } from '../../lib/crm/regrasComissaoService'
 import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote, listarSeguradorasCatalogo, atribuirSeguradoraEReprocessar, reprocessarLote } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
@@ -1265,6 +1268,7 @@ function ConciliacaoTab() {
   const [fila, setFila] = useState(null)
   const [carregando, setCarregando] = useState(true)
   const [recemConciliados, setRecemConciliados] = useState([])
+  const [fechamentosAgregados, setFechamentosAgregados] = useState([])
   const [erro, setErro] = useState('')
   const [seguradoras, setSeguradoras] = useState([])
   const [mostrarFormLancamento, setMostrarFormLancamento] = useState(false)
@@ -1272,6 +1276,7 @@ function ConciliacaoTab() {
   useEffect(() => {
     carregarFila()
     carregarConciliadosAguardandoDistribuicao()
+    carregarFechamentosAgregados()
     listarCatalogoSeguradoras().then(setSeguradoras)
   }, [])
 
@@ -1306,6 +1311,25 @@ function ConciliacaoTab() {
   function handleConciliado(recebimento, venda) {
     setFila((atual) => atual.filter((r) => r.id !== recebimento.id))
     setRecemConciliados((atual) => [...atual, { recebimento, venda, distribuido: false, linhas: null }])
+  }
+
+  /**
+   * CONCILIAÇÃO AGREGADA (Etapa 4, Peça 4). Sai da fila igual à
+   * individual, mas vai pra uma lista própria — não tem "Distribuir"
+   * (não existe venda pra distribuir pra ninguém), só confronto.
+   */
+  async function carregarFechamentosAgregados() {
+    try {
+      const dados = await listarFechamentosAgregados()
+      setFechamentosAgregados(dados)
+    } catch (e) {
+      setErro(e.message)
+    }
+  }
+
+  function handleConciliadoAgregado(recebimento) {
+    setFila((atual) => atual.filter((r) => r.id !== recebimento.id))
+    carregarFechamentosAgregados()
   }
 
   function handleDistribuido(recebimentoId, linhas) {
@@ -1349,7 +1373,9 @@ function ConciliacaoTab() {
             key={recebimento.id}
             recebimento={recebimento}
             usuarioId={user?.id}
+            seguradoras={seguradoras}
             onConciliado={handleConciliado}
+            onConciliadoAgregado={handleConciliadoAgregado}
           />
         ))
       )}
@@ -1364,6 +1390,15 @@ function ConciliacaoTab() {
               usuarioId={user?.id}
               onDistribuido={handleDistribuido}
             />
+          ))}
+        </>
+      )}
+
+      {fechamentosAgregados.length > 0 && (
+        <>
+          <h3>Fechamentos Agregados (Nível B — sem apólice identificável)</h3>
+          {fechamentosAgregados.map((recebimento) => (
+            <LinhaFechamentoAgregado key={recebimento.id} recebimento={recebimento} />
           ))}
         </>
       )}
@@ -1506,7 +1541,7 @@ function FormLancarRecebimento({ seguradoras, usuarioId, onSalvo, onCancelar }) 
   )
 }
 
-function LinhaRecebimentoPendente({ recebimento, usuarioId, onConciliado }) {
+function LinhaRecebimentoPendente({ recebimento, usuarioId, seguradoras, onConciliado, onConciliadoAgregado }) {
   const [expandido, setExpandido] = useState(false)
   const [termo, setTermo] = useState('')
   const [buscando, setBuscando] = useState(false)
@@ -1514,6 +1549,31 @@ function LinhaRecebimentoPendente({ recebimento, usuarioId, onConciliado }) {
   const [vendaSelecionadaId, setVendaSelecionadaId] = useState(null)
   const [conciliando, setConciliando] = useState(false)
   const [erro, setErro] = useState('')
+
+  // CONCILIAÇÃO AGREGADA (Etapa 4, Peça 4) — caminho alternativo, pra
+  // quando não dá pra identificar a apólice (relatório só traz total
+  // por seguradora/competência). Nunca inventa vínculo de venda.
+  const [modoAgregado, setModoAgregado] = useState(false)
+  const [operadoraAgregado, setOperadoraAgregado] = useState('')
+  const [competenciaAgregado, setCompetenciaAgregado] = useState('')
+  const [conciliandoAgregado, setConciliandoAgregado] = useState(false)
+
+  async function handleConciliarAgregado() {
+    if (!operadoraAgregado || !competenciaAgregado) return
+    setConciliandoAgregado(true)
+    setErro('')
+    try {
+      await conciliarFechamentoAgregado(
+        recebimento.id,
+        { operadoraId: operadoraAgregado, competenciaReferencia: `${competenciaAgregado}-01` },
+        usuarioId
+      )
+      onConciliadoAgregado(recebimento)
+    } catch (e) {
+      setErro(e.message)
+    }
+    setConciliandoAgregado(false)
+  }
 
   async function handleBuscar() {
     setBuscando(true)
@@ -1553,8 +1613,45 @@ function LinhaRecebimentoPendente({ recebimento, usuarioId, onConciliado }) {
         {recebimento.tipo_recebimento && <span className="ls-badge">{recebimento.tipo_recebimento}</span>}
       </div>
 
-      {!expandido ? (
-        <button className="cliente-tabela-btn" onClick={() => setExpandido(true)}>Conciliar</button>
+      {!expandido && !modoAgregado ? (
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="cliente-tabela-btn" onClick={() => setExpandido(true)}>Conciliar (venda específica)</button>
+          <button className="ls-btn ls-btn-ghost" onClick={() => setModoAgregado(true)}>
+            Não sei a apólice — é fechamento agregado
+          </button>
+        </div>
+      ) : modoAgregado ? (
+        <div style={{ marginTop: '0.75rem' }}>
+          {erro && <p style={{ color: '#b23b3b' }}>{erro}</p>}
+          <p className="config-instrucao">
+            Confronta o total deste recebimento contra a soma do cenário validado dessa seguradora nessa competência — sem tentar adivinhar qual apólice específica é.
+          </p>
+          <div className="cotacao-form-linha">
+            <div>
+              <label>Seguradora</label>
+              <select value={operadoraAgregado} onChange={(e) => setOperadoraAgregado(e.target.value)}>
+                <option value="">Selecione</option>
+                {seguradoras.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+              </select>
+            </div>
+            <div>
+              <label>Competência</label>
+              <input type="month" value={competenciaAgregado} onChange={(e) => setCompetenciaAgregado(e.target.value)} />
+            </div>
+          </div>
+          <div style={{ marginTop: '0.5rem' }}>
+            <button
+              className="cliente-tabela-btn"
+              onClick={handleConciliarAgregado}
+              disabled={!operadoraAgregado || !competenciaAgregado || conciliandoAgregado}
+            >
+              {conciliandoAgregado ? 'Conciliando...' : 'Confirmar Fechamento Agregado'}
+            </button>
+            <button className="cliente-tabela-btn" onClick={() => setModoAgregado(false)} style={{ marginLeft: '0.5rem' }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
       ) : (
         <div style={{ marginTop: '0.75rem' }}>
           {erro && <p style={{ color: '#b23b3b' }}>{erro}</p>}
@@ -1769,6 +1866,61 @@ function PainelConfrontoVenda({ vendaId, usuarioId }) {
             ))}
           </tbody>
         </table>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Fechamento Agregado (Etapa 4, Peça 4). Mostra o confronto Nível B —
+ * total informado × soma do cenário validado daquela seguradora +
+ * competência. Sem "Distribuir": não existe venda pra dividir entre
+ * participantes, é só confronto de auditoria.
+ */
+function LinhaFechamentoAgregado({ recebimento }) {
+  const [confronto, setConfronto] = useState(null)
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState('')
+
+  useEffect(() => {
+    setCarregando(true)
+    confrontarFechamentoAgregado({
+      operadoraId: recebimento.operadora_id,
+      competenciaReferencia: recebimento.competencia_referencia,
+    })
+      .then(setConfronto)
+      .catch((e) => setErro(e.message))
+      .finally(() => setCarregando(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recebimento.id])
+
+  if (carregando) return <p style={{ fontSize: '0.8rem' }}>Carregando confronto agregado...</p>
+  if (erro) return <p className="ls-modal-erro">{erro}</p>
+  if (!confronto) return null
+
+  const diferenca = Number((Number(recebimento.valor_liquido) - confronto.totalEsperadoLiquido).toFixed(2))
+  const statusGeral = Math.abs(diferenca) < 0.01 ? 'conciliado' : 'divergente'
+  const CORES_STATUS = { conciliado: 'var(--ls-success, #2f7a3d)', divergente: 'var(--ls-danger, #b23b3b)' }
+
+  return (
+    <div className="ls-card" style={{ padding: '0.75rem', marginBottom: '0.75rem' }}>
+      <div className="cotacao-form-linha" style={{ alignItems: 'center' }}>
+        <div><strong>Recebimento</strong> {recebimento.id}</div>
+        <div>Competência: {new Date(recebimento.competencia_referencia).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' })}</div>
+        <div>Informado: {formatarMoeda(recebimento.valor_liquido)}</div>
+        <span className="ls-badge" style={{ background: CORES_STATUS[statusGeral] }}>
+          {statusGeral === 'conciliado' ? 'CONCILIADO' : 'DIVERGENTE'}
+        </span>
+      </div>
+      <p style={{ fontSize: '0.8rem', marginTop: '0.4rem' }}>
+        {confronto.quantidadeVendasValidadas} venda(s) validada(s) somam {formatarMoeda(confronto.totalEsperadoLiquido)}
+        {confronto.totalAjustes !== 0 && ` (inclui ${formatarMoeda(confronto.totalAjustes)} de ajustes)`}
+        {' '}— diferença: {formatarMoeda(diferenca)}
+      </p>
+      {statusGeral === 'divergente' && (
+        <p className="config-instrucao" style={{ borderLeft: '3px solid var(--ls-danger, #b23b3b)', paddingLeft: '0.5rem' }}>
+          Divergência registrada para análise — o sistema não tenta adivinhar qual venda específica é a responsável.
+        </p>
       )}
     </div>
   )

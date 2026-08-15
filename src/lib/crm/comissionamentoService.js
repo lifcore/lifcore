@@ -273,6 +273,67 @@ export async function distribuirRecebimento(recebimentoId, usuarioId, cliente = 
  * conciliação. Nenhuma das 3 funções do motor foi alterada.
  */
 
+// ============================================================
+// CONCILIAÇÃO AGREGADA — Nível B (Etapa 4, Peça 4 — aprovado pelo
+// Chief). Pra relatório sem apólice identificável: confronta o total
+// informado contra a soma do cenário validado daquela seguradora +
+// competência, sem tentar inventar qual venda específica é a
+// responsável pela diferença. Exige migration prévia (novo status
+// 'conciliado_agregado', liberado a existir sem venda_id).
+// ============================================================
+
+/**
+ * Concilia um recebimento como FECHAMENTO AGREGADO — nunca vincula a
+ * uma Venda específica (`venda_id`/`apolice_id`/`contrato_id` ficam
+ * nulos, de propósito: não existe apólice identificável nesse
+ * relatório, e o sistema não inventa isso). Grava só `operadora_id` e
+ * `competencia_referencia`, que é o nível de granularidade que o
+ * documento realmente tem.
+ */
+export async function conciliarFechamentoAgregado(recebimentoId, { operadoraId, competenciaReferencia }, usuarioId, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+  if (!operadoraId) throw new Error('Informe a seguradora do fechamento agregado.')
+  if (!competenciaReferencia) throw new Error('Informe a competência do fechamento agregado.')
+
+  const { data: recebimento, error: erroRecebimento } = await db
+    .from('recebimentos_comissao')
+    .select('status')
+    .eq('id', recebimentoId)
+    .single()
+  if (erroRecebimento) throw new Error(`Erro ao buscar recebimento: ${erroRecebimento.message}`)
+  if (recebimento.status !== 'importado') {
+    throw new Error('Só é possível conciliar (agregado) um recebimento que esteja com status "importado".')
+  }
+
+  const { error } = await db
+    .from('recebimentos_comissao')
+    .update({
+      operadora_id: operadoraId,
+      competencia_referencia: competenciaReferencia,
+      status: 'conciliado_agregado',
+      conciliado_por: usuarioId,
+      conciliado_em: new Date().toISOString(),
+    })
+    .eq('id', recebimentoId)
+
+  if (error?.code === '23514') {
+    // check_violation — a migration do status novo ainda não rodou no banco
+    throw new Error('O banco ainda não reconhece o status "conciliado_agregado" — confirme se a migration desta Peça já foi aplicada.')
+  }
+  if (error) throw new Error(`Erro ao conciliar fechamento agregado: ${error.message}`)
+}
+
+/** LEITURA — fechamentos agregados já conciliados, mais recentes primeiro. */
+export async function listarFechamentosAgregados(cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+  const { data, error } = await db
+    .from('recebimentos_comissao')
+    .select('*')
+    .eq('status', 'conciliado_agregado')
+    .order('conciliado_em', { ascending: false })
+  if (error) throw new Error(`Erro ao listar fechamentos agregados: ${error.message}`)
+  return data ?? []
+}
 /**
  * LEITURA — recebimentos já conciliados (vinculados a uma Venda), mas
  * ainda não distribuídos. Corrige achado do Raphael (15/08): a lista

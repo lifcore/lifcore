@@ -563,6 +563,66 @@ export async function obterConfrontoDaVenda(vendaId, cliente = null) {
   }
 }
 
+// ============================================================
+// CONCILIAÇÃO AGREGADA — CONFRONTO (Etapa 4, Peça 4 — aprovado pelo
+// Chief). Puramente leitura, mesmo princípio da Peça 3: nunca inventa
+// vínculo de venda. Soma o cenário validado de TODAS as vendas daquela
+// seguradora+competência, confronta contra o total informado no
+// recebimento agregado. Se divergir, fica só exposto — nunca tenta
+// adivinhar qual venda específica é a responsável pela diferença.
+// ============================================================
+
+export async function confrontarFechamentoAgregado({ operadoraId, competenciaReferencia }, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+  const competencia = primeiroDiaDoMes(competenciaReferencia)
+
+  const { data: linhasValidadas, error: erroLinhas } = await db
+    .from('comissao_sugerida')
+    .select('id, valor_sugerido, venda:vendas!inner(id, operadora_id)')
+    .eq('competencia_referencia', competencia)
+    .eq('status_validacao', 'validado')
+    .eq('venda.operadora_id', operadoraId)
+  if (erroLinhas) throw new Error(`Erro ao buscar cenário validado: ${erroLinhas.message}`)
+
+  const idsLinhas = (linhasValidadas ?? []).map((l) => l.id)
+  const totalValidado = (linhasValidadas ?? []).reduce((soma, l) => soma + Number(l.valor_sugerido), 0)
+
+  // Ajustes presos a linhas específicas dentro deste agregado (ex:
+  // uma apólice já identificada por engano/coincidência de valor).
+  let totalAjustesLinhas = 0
+  if (idsLinhas.length > 0) {
+    const { data: ajustesLinhas, error: erroAjustesLinhas } = await db
+      .from('ajustes_comissao_sugerida')
+      .select('valor')
+      .in('comissao_sugerida_id', idsLinhas)
+    if (erroAjustesLinhas) throw new Error(`Erro ao buscar ajustes das linhas: ${erroAjustesLinhas.message}`)
+    totalAjustesLinhas = (ajustesLinhas ?? []).reduce((soma, a) => soma + Number(a.valor), 0)
+  }
+
+  // Ajustes soltos direto no agregado (operadora+competência, sem
+  // nenhuma venda) — é o caso central do Chief: "Tokio Marine, agosto,
+  // diferença de R$1.500, sem saber qual apólice, vai pra análise".
+  const { data: ajustesAgregados, error: erroAjustesAgregados } = await db
+    .from('ajustes_comissao_sugerida')
+    .select('valor')
+    .eq('operadora_id', operadoraId)
+    .eq('competencia_referencia', competencia)
+    .is('venda_id', null)
+  if (erroAjustesAgregados) throw new Error(`Erro ao buscar ajustes agregados: ${erroAjustesAgregados.message}`)
+  const totalAjustesAgregados = (ajustesAgregados ?? []).reduce((soma, a) => soma + Number(a.valor), 0)
+
+  const totalEsperadoLiquido = Number((totalValidado + totalAjustesLinhas + totalAjustesAgregados).toFixed(2))
+
+  return {
+    operadoraId,
+    competenciaReferencia: competencia,
+    quantidadeVendasValidadas: linhasValidadas?.length ?? 0,
+    totalValidado: Number(totalValidado.toFixed(2)),
+    totalAjustes: Number((totalAjustesLinhas + totalAjustesAgregados).toFixed(2)),
+    totalEsperadoLiquido,
+  }
+}
+
 /**
  * VALIDAÇÃO (Etapa 4, Peça 1 — aprovado pelo Chief).
  *
