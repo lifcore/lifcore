@@ -255,8 +255,8 @@ function PropostasLifplanTab({ clienteId, cotacoes, onAtualizado, perfil }) {
       const resultado = await fecharCotacaoComDocumento(propostaFormalizando.id, perfil?.id, { apoliceId: contrato.id })
       setPropostaFormalizando(null)
       onAtualizado()
-      if (resultado?.erroComissao) {
-        setErroWorkflow(`Proposta fechada e contrato gerado normalmente — mas a sugestão de comissão não pôde ser criada (${resultado.erroComissao}). Avise o Claude pra corrigir isso; a comissão pode ser lançada manualmente no Financeiro por enquanto.`)
+      if (resultado?.erroVenda) {
+        setErroWorkflow(`Proposta fechada e contrato gerado normalmente — mas a Venda central não pôde ser criada (${resultado.erroVenda}). Avise o Claude pra corrigir isso; a comissão pode ser lançada manualmente no Financeiro por enquanto.`)
       }
     } catch (err) {
       setErroWorkflow(err.message)
@@ -326,6 +326,8 @@ function PropostasLifplanTab({ clienteId, cotacoes, onAtualizado, perfil }) {
           </p>
           <ContratoLifplanForm
             clienteProspectId={clienteId}
+            operadoraIdInicial={propostaFormalizando.operadora_id ?? propostaFormalizando.operadora?.id ?? null}
+            operadoraNomeInicial={propostaFormalizando.operadora?.nome ?? propostaFormalizando.operadora_nome_livre ?? ''}
             onSalvo={handleContratoFormalizado}
             onCancelar={() => setPropostaFormalizando(null)}
           />

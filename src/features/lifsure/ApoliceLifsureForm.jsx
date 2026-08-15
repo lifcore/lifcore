@@ -6,16 +6,22 @@ import { criarApoliceLifsure, atualizarApoliceLifsure } from '../../lib/crm/lifs
 import { listarCatalogoSeguradoras, criarSeguradora } from '../../lib/crm/apolicesService'
 import { listarProdutos } from '../../lib/crm/catalogoInstitucionalService'
 
-export default function ApoliceLifsureForm({ clienteProspectId, apoliceExistente, onSalvo, onCancelar }) {
+export default function ApoliceLifsureForm({ clienteProspectId, apoliceExistente, operadoraIdInicial, operadoraNomeInicial, onSalvo, onCancelar }) {
   const { perfil } = useAuth()
   // produtoId e operadoraId são os vínculos reais com institucional.produtos
   // e institucional.operadoras (Sprint Vendas Central, aprovada pelo
   // Chief). `produto`/`operadora_nome_livre` (texto) continuam existindo
   // por compatibilidade — quem alimenta Venda → Regra de Comissão →
   // Comissão Sugerida agora são os IDs reais.
+  //
+  // CORREÇÃO (mesmo achado do Lifleet, replicado — 15/08): quando este
+  // form abre a partir de "Formalizar Apólice" de uma cotação já
+  // fechada com seguradora escolhida, `operadoraIdInicial`/
+  // `operadoraNomeInicial` pré-preenchem o campo — editável, mas não
+  // parte mais do zero.
   const [produtoId, setProdutoId] = useState(apoliceExistente?.produto_id ?? '')
-  const [operadoraId, setOperadoraId] = useState(apoliceExistente?.operadora_id ?? '')
-  const [seguradoraNome, setSeguradoraNome] = useState(apoliceExistente?.operadora_nome_livre ?? '')
+  const [operadoraId, setOperadoraId] = useState(apoliceExistente?.operadora_id ?? operadoraIdInicial ?? '')
+  const [seguradoraNome, setSeguradoraNome] = useState(apoliceExistente?.operadora_nome_livre ?? operadoraNomeInicial ?? '')
   const [numeroApolice, setNumeroApolice] = useState(apoliceExistente?.numero_apolice ?? '')
   const [premio, setPremio] = useState(apoliceExistente?.premio ?? '')
   const [formaPagamentoVezes, setFormaPagamentoVezes] = useState(apoliceExistente?.forma_pagamento_vezes ?? '1')

@@ -15,11 +15,16 @@ import { listarProdutos } from '../../lib/crm/catalogoInstitucionalService'
  * Comissão. Cadastro rápido disponível (mesmo padrão de ApoliceForm.jsx)
  * pra instituições ainda não cadastradas.
  */
-export default function ContratoLifplanForm({ clienteProspectId, contratoExistente, onSalvo, onCancelar }) {
+export default function ContratoLifplanForm({ clienteProspectId, contratoExistente, operadoraIdInicial, operadoraNomeInicial, onSalvo, onCancelar }) {
   const { perfil } = useAuth()
+  // CORREÇÃO (mesmo achado do Lifleet, replicado — 15/08): quando este
+  // form abre a partir de "Formalizar Contrato" de uma proposta já
+  // fechada com instituição escolhida, `operadoraIdInicial`/
+  // `operadoraNomeInicial` pré-preenchem o campo — editável, mas não
+  // parte mais do zero.
   const [produtoId, setProdutoId] = useState(contratoExistente?.produto_id ?? '')
-  const [operadoraId, setOperadoraId] = useState(contratoExistente?.operadora_id ?? '')
-  const [instituicao, setInstituicao] = useState(contratoExistente?.operadora_nome_livre ?? '')
+  const [operadoraId, setOperadoraId] = useState(contratoExistente?.operadora_id ?? operadoraIdInicial ?? '')
+  const [instituicao, setInstituicao] = useState(contratoExistente?.operadora_nome_livre ?? operadoraNomeInicial ?? '')
   const [numeroContrato, setNumeroContrato] = useState(contratoExistente?.numero_apolice ?? '')
   const [valor, setValor] = useState(contratoExistente?.premio ?? '')
   const [formaPagamentoVezes, setFormaPagamentoVezes] = useState(contratoExistente?.forma_pagamento_vezes ?? '1')
