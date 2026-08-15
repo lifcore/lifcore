@@ -126,13 +126,13 @@ function ComissoesSugeridasTab() {
   useEffect(() => {
     carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [competencia])
+  }, [])
 
   async function carregar() {
     setCarregando(true)
     setErro('')
     try {
-      const lista = await listarComissoesSugeridasDetalhado(`${competencia}-01`)
+      const lista = await listarComissoesSugeridasDetalhado()
       setDados(lista)
     } catch (e) {
       setErro(e.message)
@@ -159,15 +159,29 @@ function ComissoesSugeridasTab() {
   const ajustesManuais = dados.filter((d) => d.ajustado_manualmente).length
   const semRegraOuSemValor = dados.filter((d) => d.status_calculo === 'nao_definida').length
 
+  // Agrupamento por venda (Etapa 4, Peça 1 revisada) — o Gestor precisa
+  // ver o calendário inteiro de cada venda de uma vez, não competência
+  // solta. Ordenado por competência dentro do grupo (já vem ordenado
+  // do service, mas garante aqui também).
+  const gruposPorVenda = {}
+  for (const d of dados) {
+    const chave = d.venda_id
+    if (!gruposPorVenda[chave]) gruposPorVenda[chave] = []
+    gruposPorVenda[chave].push(d)
+  }
+  const grupos = Object.values(gruposPorVenda).map((linhas) =>
+    linhas.slice().sort((a, b) => (a.competencia_referencia < b.competencia_referencia ? -1 : 1))
+  )
+
   return (
     <div>
       <div className="cotacao-form-linha" style={{ alignItems: 'flex-end', marginBottom: '1rem' }}>
         <div>
-          <label>Competência</label>
+          <label>Competência (pra "Gerar Sugestões" de vendas sem calendário projetado)</label>
           <input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} />
         </div>
         <button className="ls-btn ls-btn-primary" onClick={handleGerar} disabled={gerando}>
-          {gerando ? 'Gerando...' : 'Gerar / Atualizar Sugestões desta Competência'}
+          {gerando ? 'Gerando...' : 'Gerar / Atualizar Sugestões'}
         </button>
       </div>
 
@@ -185,26 +199,17 @@ function ComissoesSugeridasTab() {
         <KpiCard label="Sugestões Geradas" valor={sugestoesGeradas} />
         <KpiCard label="Ajustes Manuais" valor={ajustesManuais} />
         <KpiCard label="Sem Regra / Sem Sugestão" valor={semRegraOuSemValor} />
-        <KpiCard label="Competência" valor={new Date(`${competencia}-01`).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' })} />
+        <KpiCard label="Vendas com Cenário" valor={grupos.length} />
       </div>
 
       {carregando ? (
         <p className="cliente-carregando">Carregando...</p>
-      ) : dados.length === 0 ? (
-        <p className="cliente-vazio">Nenhuma sugestão gerada ainda pra essa competência. Clique em "Gerar Sugestões" acima.</p>
+      ) : grupos.length === 0 ? (
+        <p className="cliente-vazio">Nenhuma sugestão gerada ainda. Clique em "Gerar Sugestões" acima.</p>
       ) : (
-        <table className="cliente-tabela">
-          <thead>
-            <tr>
-              <th>Apólice</th><th>Cliente</th><th>Operadora</th><th>Produto</th><th>Regra</th><th>Sugestão</th><th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dados.map((d) => (
-              <LinhaComissaoSugerida key={d.id} item={d} usuarioId={user?.id} onAtualizado={carregar} />
-            ))}
-          </tbody>
-        </table>
+        grupos.map((linhas) => (
+          <CardVendaCalendario key={linhas[0].venda_id} linhas={linhas} usuarioId={user?.id} onAtualizado={carregar} />
+        ))
       )}
     </div>
   )
@@ -221,7 +226,73 @@ function rotuloBaseCalculo(baseCalculo) {
   return ROTULOS_BASE_CALCULO[baseCalculo] ?? baseCalculo ?? '—'
 }
 
-function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
+/**
+ * CORREÇÃO (Etapa 4, Peça 1 revisada — aprovado pelo Chief): antes
+ * cada linha de `comissao_sugerida` virava uma linha de tabela solta.
+ * Com o calendário completo sendo projetado de uma vez (Cascata/
+ * Proporcional), isso mostraria a mesma venda espalhada em várias
+ * linhas sem contexto. Agora um card por venda mostra o cabeçalho
+ * (apólice/cliente/operadora/produto/regra + total esperado) uma vez,
+ * e uma sub-tabela lista o calendário — cada competência com seu
+ * próprio ajuste/validação, sem perder a granularidade que o Chief
+ * pediu ("cada competência precisa poder ser validada individualmente").
+ */
+function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
+  const primeira = linhas[0]
+  const totalEsperado = linhas.reduce((soma, l) => soma + (Number(l.valor_sugerido) || 0), 0)
+  const totalLinhasValidadas = linhas.filter((l) => l.status_validacao === 'validado').length
+
+  // Aviso explícito quando a regra pediria calendário (Cascata/Proporcional
+  // + premio_sem_iof) mas a apólice não tem forma_pagamento_vezes — nunca
+  // esconde do Gestor que ele está vendo só o total, não o cronograma.
+  const modeloExigeCalendario = ['cascata', 'proporcional'].includes(primeira.regra?.modelo_recebimento)
+  const semParcelasInformadas = !primeira.venda?.apolice?.forma_pagamento_vezes
+  const semCronogramaProjetado = modeloExigeCalendario && primeira.regra?.base_calculo === 'premio_sem_iof' && semParcelasInformadas && linhas.length === 1
+
+  return (
+    <div className="ls-card" style={{ padding: '0.85rem', marginBottom: '0.85rem' }}>
+      <div className="cotacao-form-linha" style={{ alignItems: 'center' }}>
+        <div>
+          <strong>{primeira.numeroApolice}</strong> — {primeira.nomeCliente}
+        </div>
+        <div>{primeira.nomeOperadora} · {primeira.nomeProduto}</div>
+        <div>
+          <strong>Total esperado: {formatarMoeda(totalEsperado)}</strong>
+          {linhas.length > 1 && (
+            <span style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }}>
+              ({totalLinhasValidadas}/{linhas.length} validada{linhas.length > 1 ? 's' : ''})
+            </span>
+          )}
+        </div>
+      </div>
+
+      <p style={{ fontSize: '0.8rem', margin: '0.3rem 0 0.6rem', opacity: 0.85 }}>
+        Regra: {primeira.regra?.descricao ?? '—'}
+        {primeira.regra?.modelo_recebimento &&
+          ` — ${primeira.regra.modelo_recebimento === 'cascata' ? 'Cascata' : primeira.regra.modelo_recebimento === 'proporcional' ? 'Proporcional' : 'Desdobrada'}`}
+      </p>
+
+      {semCronogramaProjetado && (
+        <p className="config-instrucao" style={{ borderLeft: '3px solid var(--ls-warning, #b8860b)', paddingLeft: '0.5rem' }}>
+          ⚠️ Comissão total calculada — cronograma não projetado: quantidade de parcelas não informada na apólice.
+        </p>
+      )}
+
+      <table className="cliente-tabela">
+        <thead>
+          <tr><th>Competência</th><th>Esperado</th><th>Status</th><th>Ações</th></tr>
+        </thead>
+        <tbody>
+          {linhas.map((item) => (
+            <LinhaCompetenciaCalendario key={item.id} item={item} usuarioId={usuarioId} onAtualizado={onAtualizado} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function LinhaCompetenciaCalendario({ item, usuarioId, onAtualizado }) {
   const [expandido, setExpandido] = useState(false)
   const [novoValor, setNovoValor] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -259,7 +330,7 @@ function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
   }
 
   async function handleDesvalidar() {
-    if (!window.confirm('Desfazer a validação? Esta linha volta a poder ser recalculada por "Gerar Sugestões".')) return
+    if (!window.confirm('Desfazer a validação desta competência? Ela volta a poder ser recalculada por "Gerar Sugestões".')) return
     setSalvando(true)
     setErro('')
     try {
@@ -271,14 +342,16 @@ function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
     setSalvando(false)
   }
 
+  const competenciaLabel = new Date(item.competencia_referencia).toLocaleDateString('pt-BR', {
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+
   return (
     <>
       <tr onClick={() => setExpandido(!expandido)} style={{ cursor: 'pointer' }}>
-        <td>{item.numeroApolice}</td>
-        <td>{item.nomeCliente}</td>
-        <td>{item.nomeOperadora}</td>
-        <td>{item.nomeProduto}</td>
-        <td>{item.regra?.descricao ?? '—'}</td>
+        <td>{competenciaLabel}</td>
         <td>{item.valor_sugerido != null ? formatarMoeda(item.valor_sugerido) : '—'}</td>
         <td>
           {item.ajustado_manualmente && <span className="ls-badge">ajustado</span>}
@@ -289,10 +362,11 @@ function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
           )}
           {!item.ajustado_manualmente && item.status_validacao !== 'validado' && '—'}
         </td>
+        <td>{item.status_validacao === 'validado' ? 'Desfazer / detalhes' : 'Validar / ajustar'}</td>
       </tr>
       {expandido && (
         <tr>
-          <td colSpan={7}>
+          <td colSpan={4}>
             <div className="ls-card" style={{ padding: '0.75rem' }}>
               {erro && <p className="ls-modal-erro">{erro}</p>}
 
@@ -314,12 +388,6 @@ function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
                     </ul>
                   </>
                 ) : (
-                  // CORREÇÃO (Bloco E, 15/08): Cascata/Proporcional nunca têm
-                  // "componentes" (isso só existe no modelo Desdobrada) — a
-                  // checagem antiga (`componentes?.length > 0`) mostrava
-                  // "Nenhuma regra aplicada" mesmo quando o valor já tinha
-                  // calculado certo. Corrigido pra usar status_calculo, que é
-                  // o dado real do que aconteceu.
                   <p className="config-instrucao">
                     Regra aplicada: <strong>{item.regra?.descricao ?? '—'}</strong> —{' '}
                     {item.regra?.modelo_recebimento === 'cascata' ? 'Cascata' : 'Proporcional'}, {item.regra?.percentual}% sobre {rotuloBaseCalculo(item.regra?.base_calculo)}.
@@ -327,10 +395,8 @@ function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
                 )
               ) : item.status_calculo === 'pendente_parametro' ? (
                 item.regra?.base_calculo === 'manual' ? (
-                  // Bloco D: base "Manual" é terminal por definição — o motor
-                  // nunca calcula sozinho aqui, o Gestor sempre informa.
                   <p className="config-instrucao">
-                    Esta regra usa base de cálculo <strong>Manual</strong> — informe o valor da comissão desta apólice no campo "Ajuste manual" abaixo.
+                    Esta regra usa base de cálculo <strong>Manual</strong> — informe o valor da comissão desta competência no campo "Ajuste manual" abaixo.
                   </p>
                 ) : item.regra?.origem_percentual === 'informado_por_apolice' ? (
                   <p className="config-instrucao">
@@ -342,7 +408,7 @@ function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
                   </p>
                 )
               ) : (
-                <p className="config-instrucao">Nenhuma regra cadastrada para este produto/seguradora nessa competência, ou venda ainda fora do período de todos os componentes.</p>
+                <p className="config-instrucao">Nenhuma regra cadastrada para este produto/seguradora nessa competência.</p>
               )}
 
               <div className="cotacao-form-linha">
@@ -383,7 +449,7 @@ function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
                 ) : (
                   <>
                     <p className="config-instrucao" style={{ margin: 0 }}>
-                      Confirme este valor como o cenário esperado — ele passa a ser a referência da Conciliação e não é mais recalculado automaticamente.
+                      Confirme este valor como o cenário esperado desta competência — ele passa a ser a referência da Conciliação e não é mais recalculado automaticamente.
                     </p>
                     <button className="cliente-tabela-btn" onClick={handleValidar} disabled={salvando}>
                       {salvando ? 'Salvando...' : 'Validar'}

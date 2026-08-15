@@ -586,6 +586,193 @@ function calcularMesRelativo(vigenciaInicio, competenciaReferencia) {
   return (comp.getUTCFullYear() - vig.getUTCFullYear()) * 12 + (comp.getUTCMonth() - vig.getUTCMonth()) + 1
 }
 
+/**
+ * Soma N meses (mesRelativo, começando em 1 = o próprio mês de
+ * vigência) a partir de uma data base, sempre devolvendo o dia 1 do
+ * mês resultante — mesma convenção de `primeiroDiaDoMes`.
+ */
+function somarMesesRelativo(dataBaseISO, mesRelativo) {
+  const d = new Date(dataBaseISO)
+  const resultado = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + (mesRelativo - 1), 1))
+  return resultado.toISOString().slice(0, 10)
+}
+
+// ============================================================
+// PROJEÇÃO DE CALENDÁRIO (Etapa 4, Peça 1 revisada — aprovado pelo
+// Chief, corrigido 2x antes de codificar: idempotência por
+// venda+competência, critério de elegibilidade por dado+regra, nunca
+// por módulo/FK).
+// ============================================================
+
+/**
+ * Elegibilidade pra projeção de calendário completo. Só roda quando
+ * TUDO bate: base_calculo = 'premio_sem_iof', modelo_recebimento em
+ * ('cascata','proporcional'), e o documento de origem da venda tem
+ * premio + forma_pagamento_vezes preenchidos (>0).
+ *
+ * Critério é por DADO e por REGRA — nunca por módulo ou por
+ * apolice_id/contrato_id como atalho de negócio escondido (correção
+ * explícita do Chief). Na prática, hoje só `apolices` tem essas duas
+ * colunas — `contratos` (Lifcare) ainda não. Não é hardcode: no dia em
+ * que `contratos` ganhar as mesmas colunas, basta adicionar a mesma
+ * consulta abaixo pra essa tabela — nenhuma outra peça do motor muda.
+ */
+async function buscarDadosParaProjecao(db, venda) {
+  if (!venda.apolice_id) return null
+  const { data: apolice, error } = await db
+    .from('apolices')
+    .select('premio, forma_pagamento_vezes, vigencia_inicio, comissionamento_percentual')
+    .eq('id', venda.apolice_id)
+    .maybeSingle()
+  if (error) throw new Error(`Erro ao buscar apólice para projeção de calendário: ${error.message}`)
+  if (!apolice?.premio || !apolice?.forma_pagamento_vezes || Number(apolice.forma_pagamento_vezes) <= 0) return null
+  if (!apolice?.vigencia_inicio) return null
+  return apolice
+}
+
+/**
+ * Gera as linhas do calendário — puramente matemático, sem tocar
+ * banco. Mecânica validada numericamente pelo Chief em 3 exemplos
+ * (R$2.000/12x/20%, R$1.500/10%, R$5.000 mensalidade):
+ *
+ * Cascata: `passo` (premio ÷ parcelas) é o LIMITE de comissão
+ * consumido por competência, abatendo do saldo total da comissão
+ * (premio × percentual / 100) até zerar — não é o passo multiplicado
+ * pelo percentual de novo, é o próprio passo usado como teto de
+ * consumo do saldo já calculado. Para antes das N parcelas se a
+ * comissão total esgotar primeiro (é o comportamento correto e
+ * esperado, não um bug).
+ *
+ * Proporcional: percorre as N parcelas inteiras, cada uma recebendo
+ * `passo × percentual / 100` — nunca esgota antes do fim. Última
+ * parcela fecha o residual exato, evitando erro de arredondamento.
+ */
+function projetarLinhasCalendario({ premio, percentual, parcelas, modeloRecebimento }) {
+  const totalComissao = Number(((Number(premio) * Number(percentual)) / 100).toFixed(2))
+  const passo = Number(premio) / Number(parcelas)
+  const linhas = []
+
+  if (modeloRecebimento === 'cascata') {
+    let saldo = totalComissao
+    for (let mes = 1; mes <= Number(parcelas) && saldo > 0.004; mes++) {
+      const valor = Number(Math.min(passo, saldo).toFixed(2))
+      linhas.push({ mesRelativo: mes, valor })
+      saldo = Number((saldo - valor).toFixed(2))
+    }
+  } else {
+    // proporcional
+    let somaParcial = 0
+    for (let mes = 1; mes <= Number(parcelas); mes++) {
+      const ehUltima = mes === Number(parcelas)
+      const valor = ehUltima
+        ? Number((totalComissao - somaParcial).toFixed(2))
+        : Number(((passo * Number(percentual)) / 100).toFixed(2))
+      somaParcial += valor
+      linhas.push({ mesRelativo: mes, valor })
+    }
+  }
+
+  return linhas
+}
+
+/**
+ * Escrita idempotente por (venda_id, competencia) — correção do
+ * Chief ao ponto 3: nunca "se existe qualquer linha, pula a venda
+ * inteira" (isso deixaria calendário incompleto parecer completo se
+ * uma execução anterior falhasse no meio). A regra é por LINHA:
+ * não existe → cria; existe pendente (nem ajustada, nem validada) →
+ * recompõe; existe ajustada OU validada → nunca sobrescreve.
+ */
+async function upsertLinhaCalendario(db, { vendaId, competencia, regraId, valor }) {
+  const { data: existente, error: erroExistente } = await db
+    .from('comissao_sugerida')
+    .select('id, ajustado_manualmente, status_validacao')
+    .eq('venda_id', vendaId)
+    .eq('competencia_referencia', competencia)
+    .maybeSingle()
+  if (erroExistente) throw new Error(`Erro ao verificar linha existente do calendário: ${erroExistente.message}`)
+
+  if (existente?.ajustado_manualmente || existente?.status_validacao === 'validado') {
+    return 'preservada'
+  }
+
+  const { error } = await db.from('comissao_sugerida').upsert(
+    {
+      venda_id: vendaId,
+      regra_comissao_id: regraId,
+      competencia_referencia: competencia,
+      valor_sugerido: valor,
+      status_calculo: 'calculada',
+      atualizado_em: new Date().toISOString(),
+    },
+    { onConflict: 'venda_id,competencia_referencia' }
+  )
+  if (error) throw new Error(`Erro ao gravar linha do calendário: ${error.message}`)
+
+  return existente ? 'atualizada' : 'criada'
+}
+
+/**
+ * Ponto de entrada da projeção — chamado por `gerarSugestoesCompetencia`
+ * ANTES do caminho antigo (calcularComissaoSugerida, mês a mês). Se a
+ * venda não for elegível (falta prêmio/parcelas, base diferente de
+ * premio_sem_iof, ou modelo Desdobrada), devolve `elegivel: false` e
+ * quem chamou cai automaticamente no comportamento antigo — nada
+ * quebra pra quem não usa esta mecânica nova.
+ */
+export async function projetarCalendarioSeElegivel({ vendaId }, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+
+  const { data: venda, error: erroVenda } = await db
+    .from('vendas')
+    .select('id, produto_id, operadora_id, apolice_id, contrato_id')
+    .eq('id', vendaId)
+    .single()
+  if (erroVenda) throw new Error(`Erro ao buscar venda: ${erroVenda.message}`)
+  if (!venda.produto_id) return { elegivel: false }
+
+  const apolice = await buscarDadosParaProjecao(db, venda)
+  if (!apolice) return { elegivel: false }
+
+  const competenciaAncora = primeiroDiaDoMes(apolice.vigencia_inicio)
+  const regra = await buscarRegraVigente(venda.produto_id, venda.operadora_id, competenciaAncora, db)
+  if (!regra) return { elegivel: false }
+  if (regra.base_calculo !== 'premio_sem_iof') return { elegivel: false }
+  if (!['cascata', 'proporcional'].includes(regra.modelo_recebimento)) return { elegivel: false }
+
+  let percentualAplicavel = regra.percentual
+  if (regra.origem_percentual === 'informado_por_apolice') {
+    if (!apolice.comissionamento_percentual) return { elegivel: false } // cai no caminho antigo (pendente_parametro)
+    percentualAplicavel = Number(apolice.comissionamento_percentual)
+  }
+
+  const linhas = projetarLinhasCalendario({
+    premio: apolice.premio,
+    percentual: percentualAplicavel,
+    parcelas: apolice.forma_pagamento_vezes,
+    modeloRecebimento: regra.modelo_recebimento,
+  })
+
+  let criadas = 0
+  let atualizadas = 0
+  let preservadas = 0
+
+  for (const linha of linhas) {
+    const competencia = somarMesesRelativo(apolice.vigencia_inicio, linha.mesRelativo)
+    const resultado = await upsertLinhaCalendario(db, {
+      vendaId,
+      competencia,
+      regraId: regra.id,
+      valor: linha.valor,
+    })
+    if (resultado === 'criada') criadas++
+    else if (resultado === 'atualizada') atualizadas++
+    else preservadas++
+  }
+
+  return { elegivel: true, totalLinhas: linhas.length, criadas, atualizadas, preservadas }
+}
+
 async function upsertSugestao(db, { vendaId, competencia, regraId, valor, status }) {
   // Nunca sobrescreve exceção manual já registrada (Seção 17) NEM
   // cenário já validado pelo Gestor (Etapa 4, Peça 1) — validação é
@@ -654,7 +841,15 @@ export async function gerarSugestoesCompetencia(competenciaReferencia, cliente =
   const erros = []
   for (const v of vendas) {
     try {
-      await calcularComissaoSugerida({ vendaId: v.id, competenciaReferencia }, db)
+      // Etapa 4, Peça 1 revisada: tenta projetar o calendário completo
+      // primeiro (Cascata/Proporcional com premio_sem_iof). Se a venda
+      // não for elegível, cai no caminho antigo (calcula só a
+      // competência selecionada) — comportamento idêntico ao de antes
+      // pra qualquer venda que não use essa mecânica nova.
+      const resultadoProjecao = await projetarCalendarioSeElegivel({ vendaId: v.id }, db)
+      if (!resultadoProjecao.elegivel) {
+        await calcularComissaoSugerida({ vendaId: v.id, competenciaReferencia }, db)
+      }
       processadas++
     } catch (e) {
       erros.push({ vendaId: v.id, erro: e.message })
@@ -670,21 +865,31 @@ export async function gerarSugestoesCompetencia(competenciaReferencia, cliente =
  * produto/operadora vêm de institucional à parte (schemas diferentes
  * não dão join direto num único select) e são mesclados aqui.
  */
-export async function listarComissoesSugeridasDetalhado(competenciaReferencia, cliente = null) {
+/**
+ * CORREÇÃO (Etapa 4, Peça 1 revisada — aprovado pelo Chief): deixou de
+ * filtrar por uma única competência. Com o calendário completo sendo
+ * projetado de uma vez (Cascata/Proporcional), filtrar por mês
+ * escondia o resto do cronograma da mesma venda — o Gestor precisa ver
+ * tudo simultaneamente pra validar o cenário inteiro, não mês a mês.
+ * A tela agora agrupa por `venda_id` e ordena por competência dentro
+ * de cada grupo. `forma_pagamento_vezes` foi adicionado ao select da
+ * apólice pra tela conseguir avisar quando o calendário não foi
+ * projetado por falta desse dado (sem esconder isso do Gestor).
+ */
+export async function listarComissoesSugeridasDetalhado(cliente = null) {
   const db = cliente || (await obterClientePadrao())
-  const competencia = primeiroDiaDoMes(competenciaReferencia)
 
   const { data: linhas, error } = await db
     .from('comissao_sugerida')
     .select(
       `*,
        venda:vendas(id, produto_id, operadora_id, valor_base, apolice_id, contrato_id,
-         apolice:apolices(numero_apolice, nome_cliente),
+         apolice:apolices(numero_apolice, nome_cliente, forma_pagamento_vezes),
          contrato:contratos(numero_apolice)),
        regra:regras_comissao(id, descricao, base_calculo, modelo_recebimento, percentual, origem_percentual, componentes:regra_comissao_componentes(*))`
     )
-    .eq('competencia_referencia', competencia)
-    .order('criado_em', { ascending: false })
+    .order('venda_id', { ascending: true })
+    .order('competencia_referencia', { ascending: true })
   if (error) throw new Error(`Erro ao listar comissões sugeridas: ${error.message}`)
 
   const produtoIds = [...new Set((linhas ?? []).map((l) => l.venda?.produto_id).filter(Boolean))]
