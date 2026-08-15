@@ -160,6 +160,14 @@ export async function conciliarRecebimento(recebimentoId, { vendaId, apoliceId, 
     })
     .eq('id', recebimentoId)
 
+  // 23505 = unique_violation — reforço no banco (índice único real,
+  // ver migration), além da checagem em JS acima. Cobre qualquer
+  // brecha que a checagem em aplicação sozinha deixasse passar (deploy
+  // defasado, corrida entre 2 requisições simultâneas, etc.) — mesmo
+  // padrão já usado em `vendasService.criarVendaSeElegivel`.
+  if (error?.code === '23505') {
+    throw new Error('Já existe um recebimento conciliado para esta Venda nesta competência (bloqueado pelo banco). Não é possível conciliar em duplicidade.')
+  }
   if (error) throw new Error(`Erro ao conciliar recebimento: ${error.message}`)
 }
 
