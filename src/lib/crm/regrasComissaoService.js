@@ -408,6 +408,73 @@ export async function adicionarParcelaManual({ vendaId, competenciaReferencia, v
   return data
 }
 
+// ============================================================
+// AJUSTES / ESTORNOS PRÉ-DISTRIBUIÇÃO (Etapa 4, Peça 2 — aprovado pelo
+// Chief). Tabela própria (`ajustes_comissao_sugerida`), separada de
+// `comissao_ajustes` (essa é do ledger pós-distribuição, incompatível
+// — confirmado por inspeção antes de criar isso). NUNCA altera
+// `comissao_sugerida` — só soma por cima, auditável, sem apagar a
+// expectativa original.
+// ============================================================
+
+const TIPOS_AJUSTE_VALIDOS = ['ajuste', 'estorno', 'correcao']
+
+/**
+ * Lança um ajuste/estorno/correção pré-distribuição. Pode ser:
+ * - Preso a uma competência específica (`comissaoSugeridaId` informado)
+ *   — ex: "cancelamento da parcela de outubro".
+ * - Solto na venda inteira, sem competência (`comissaoSugeridaId` nulo)
+ *   — ex: "apólice cancelada, estorna a expectativa toda".
+ * Motivo é sempre obrigatório — nunca lança sem justificativa.
+ */
+export async function lancarAjusteEstorno(
+  { vendaId, comissaoSugeridaId, recebimentoComissaoId, operadoraId, competenciaReferencia, tipo, valor, motivo, usuarioId },
+  cliente = null
+) {
+  const db = cliente || (await obterClientePadrao())
+  if (!vendaId) throw new Error('Ajuste/estorno precisa estar vinculado a uma Venda.')
+  if (!TIPOS_AJUSTE_VALIDOS.includes(tipo)) throw new Error(`Tipo de ajuste inválido: ${tipo}`)
+  if (valor === undefined || valor === null || Number.isNaN(Number(valor))) throw new Error('Informe um valor numérico para o ajuste.')
+  if (!motivo?.trim()) throw new Error('Motivo é obrigatório — nunca lançar ajuste/estorno sem justificativa.')
+
+  const { data, error } = await db
+    .from('ajustes_comissao_sugerida')
+    .insert({
+      venda_id: vendaId,
+      comissao_sugerida_id: comissaoSugeridaId || null,
+      recebimento_comissao_id: recebimentoComissaoId || null,
+      operadora_id: operadoraId || null,
+      competencia_referencia: competenciaReferencia ? primeiroDiaDoMes(competenciaReferencia) : null,
+      tipo,
+      valor: Number(valor),
+      motivo: motivo.trim(),
+      criado_por: usuarioId || null,
+    })
+    .select()
+    .single()
+  if (error) throw new Error(`Erro ao lançar ajuste/estorno: ${error.message}`)
+  return data
+}
+
+/** Histórico completo de ajustes/estornos de uma venda — mais recente primeiro. */
+export async function listarAjustesDaVenda(vendaId, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+  const { data, error } = await db
+    .from('ajustes_comissao_sugerida')
+    .select('*')
+    .eq('venda_id', vendaId)
+    .order('criado_em', { ascending: false })
+  if (error) throw new Error(`Erro ao listar ajustes/estornos da venda: ${error.message}`)
+  return data ?? []
+}
+
+/** Exclui um lançamento de ajuste/estorno — erro de digitação do Gestor, não fato financeiro (nunca teve efeito fora deste registro). */
+export async function excluirAjusteEstorno(ajusteId, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+  const { error } = await db.from('ajustes_comissao_sugerida').delete().eq('id', ajusteId)
+  if (error) throw new Error(`Erro ao excluir ajuste/estorno: ${error.message}`)
+}
+
 /**
  * VALIDAÇÃO (Etapa 4, Peça 1 — aprovado pelo Chief).
  *

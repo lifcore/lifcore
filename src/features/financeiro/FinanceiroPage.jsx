@@ -28,6 +28,9 @@ import {
   validarComissaoSugerida,
   desvalidarComissaoSugerida,
   adicionarParcelaManual,
+  lancarAjusteEstorno,
+  listarAjustesDaVenda,
+  excluirAjusteEstorno,
 } from '../../lib/crm/regrasComissaoService'
 import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote, listarSeguradorasCatalogo, atribuirSeguradoraEReprocessar, reprocessarLote } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
@@ -251,6 +254,25 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
   const [novoValorParcela, setNovoValorParcela] = useState('')
   const [salvandoParcela, setSalvandoParcela] = useState(false)
 
+  // AJUSTES/ESTORNOS (Etapa 4, Peça 2). Carregados por venda, não vêm
+  // na consulta principal pra não pesar toda listagem — é histórico
+  // consultado sob demanda, cada card busca o seu.
+  const [ajustes, setAjustes] = useState([])
+  const [mostrarNovoAjuste, setMostrarNovoAjuste] = useState(false)
+  const [tipoAjuste, setTipoAjuste] = useState('estorno')
+  const [valorAjuste, setValorAjuste] = useState('')
+  const [motivoAjuste, setMotivoAjuste] = useState('')
+  const [competenciaAjuste, setCompetenciaAjuste] = useState('') // '' = venda inteira, sem competência específica
+  const [salvandoAjuste, setSalvandoAjuste] = useState(false)
+
+  useEffect(() => {
+    listarAjustesDaVenda(primeira.venda_id).then(setAjustes).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primeira.venda_id])
+
+  const totalAjustes = ajustes.reduce((soma, a) => soma + Number(a.valor), 0)
+  const totalLiquido = totalEsperado + totalAjustes
+
   // Aviso explícito quando a regra pediria calendário (Cascata/Proporcional
   // + premio_sem_iof) mas a apólice não tem forma_pagamento_vezes — nunca
   // esconde do Gestor que ele está vendo só o total, não o cronograma.
@@ -308,6 +330,50 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
     setSalvandoParcela(false)
   }
 
+  /**
+   * "+ Ajuste/Estorno" (Etapa 4, Peça 2). Não mexe em `comissao_sugerida`
+   * — soma por cima, auditável. Se uma competência específica for
+   * escolhida no seletor, o ajuste fica preso a ela (ex: "cancelamento
+   * da parcela de outubro"); se ficar em branco, é um ajuste solto na
+   * venda inteira (ex: "apólice cancelada, estorna tudo").
+   */
+  async function handleLancarAjuste() {
+    if (valorAjuste === '' || !motivoAjuste.trim()) return
+    setSalvandoAjuste(true)
+    setErroValidacao('')
+    try {
+      const linhaSelecionada = competenciaAjuste ? linhas.find((l) => l.competencia_referencia === `${competenciaAjuste}-01`) : null
+      await lancarAjusteEstorno({
+        vendaId: primeira.venda_id,
+        comissaoSugeridaId: linhaSelecionada?.id ?? null,
+        operadoraId: primeira.venda?.operadora_id ?? null,
+        competenciaReferencia: competenciaAjuste ? `${competenciaAjuste}-01` : null,
+        tipo: tipoAjuste,
+        valor: Number(valorAjuste),
+        motivo: motivoAjuste,
+        usuarioId,
+      })
+      setValorAjuste('')
+      setMotivoAjuste('')
+      setCompetenciaAjuste('')
+      setMostrarNovoAjuste(false)
+      listarAjustesDaVenda(primeira.venda_id).then(setAjustes).catch(() => {})
+    } catch (e) {
+      setErroValidacao(e.message)
+    }
+    setSalvandoAjuste(false)
+  }
+
+  async function handleExcluirAjuste(ajusteId) {
+    if (!window.confirm('Excluir este lançamento de ajuste/estorno?')) return
+    try {
+      await excluirAjusteEstorno(ajusteId)
+      listarAjustesDaVenda(primeira.venda_id).then(setAjustes).catch(() => {})
+    } catch (e) {
+      setErroValidacao(e.message)
+    }
+  }
+
   return (
     <div className="ls-card" style={{ padding: '0.85rem', marginBottom: '0.85rem' }}>
       <div className="cotacao-form-linha" style={{ alignItems: 'center' }}>
@@ -317,6 +383,11 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
         <div>{primeira.nomeOperadora} · {primeira.nomeProduto}</div>
         <div>
           <strong>Total esperado: {formatarMoeda(totalEsperado)}</strong>
+          {ajustes.length > 0 && (
+            <span style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }}>
+              (ajustes: {formatarMoeda(totalAjustes)} → líquido: {formatarMoeda(totalLiquido)})
+            </span>
+          )}
           {linhas.length > 1 && (
             <span style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }}>
               ({totalLinhasValidadas}/{linhas.length} validada{linhas.length > 1 ? 's' : ''})
@@ -326,6 +397,9 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
         <div style={{ display: 'flex', gap: '0.4rem' }}>
           <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarNovaParcela((v) => !v)}>
             + Adicionar parcela
+          </button>
+          <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarNovoAjuste((v) => !v)}>
+            + Ajuste/Estorno
           </button>
           {!todasValidadas && (
             <button className="cliente-tabela-btn" onClick={handleValidarTudo} disabled={validandoTudo}>
@@ -362,6 +436,75 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
           <button className="cliente-tabela-btn" onClick={handleAdicionarParcela} disabled={salvandoParcela || !novaCompetencia || novoValorParcela === ''}>
             {salvandoParcela ? 'Salvando...' : 'Adicionar'}
           </button>
+        </div>
+      )}
+
+      {mostrarNovoAjuste && (
+        <div className="ls-card" style={{ padding: '0.6rem', marginBottom: '0.6rem' }}>
+          <div className="cotacao-form-linha" style={{ alignItems: 'flex-end' }}>
+            <div>
+              <label>Tipo</label>
+              <select value={tipoAjuste} onChange={(e) => setTipoAjuste(e.target.value)}>
+                <option value="estorno">Estorno</option>
+                <option value="ajuste">Ajuste</option>
+                <option value="correcao">Correção</option>
+              </select>
+            </div>
+            <div>
+              <label>Valor (negativo pra estornar)</label>
+              <input type="number" step="0.01" value={valorAjuste} onChange={(e) => setValorAjuste(e.target.value)} placeholder="Ex: -400,00" />
+            </div>
+            <div>
+              <label>Competência (opcional — vazio = venda inteira)</label>
+              <select value={competenciaAjuste} onChange={(e) => setCompetenciaAjuste(e.target.value)}>
+                <option value="">Venda inteira</option>
+                {linhas.map((l) => (
+                  <option key={l.id} value={l.competencia_referencia.slice(0, 7)}>
+                    {new Date(l.competencia_referencia).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' })}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div style={{ marginTop: '0.5rem' }}>
+            <label>Motivo (obrigatório)</label>
+            <textarea
+              value={motivoAjuste}
+              onChange={(e) => setMotivoAjuste(e.target.value)}
+              rows={2}
+              placeholder="Ex: Apólice cancelada pelo cliente em 15/09 — estorno da expectativa restante."
+              style={{ width: '100%', padding: '0.5rem 0.65rem', border: '1px solid var(--ls-border)', borderRadius: 'var(--ls-radius-sm)', fontFamily: 'inherit' }}
+            />
+          </div>
+          <div className="ls-modal-acoes">
+            <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarNovoAjuste(false)}>Cancelar</button>
+            <button className="ls-btn ls-btn-primary" onClick={handleLancarAjuste} disabled={salvandoAjuste || valorAjuste === '' || !motivoAjuste.trim()}>
+              {salvandoAjuste ? 'Salvando...' : 'Lançar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {ajustes.length > 0 && (
+        <div style={{ marginBottom: '0.6rem' }}>
+          <strong style={{ fontSize: '0.8rem' }}>Ajustes/Estornos lançados</strong>
+          <table className="cliente-tabela" style={{ marginTop: '0.3rem' }}>
+            <thead><tr><th>Tipo</th><th>Valor</th><th>Competência</th><th>Motivo</th><th>Data</th><th></th></tr></thead>
+            <tbody>
+              {ajustes.map((a) => (
+                <tr key={a.id}>
+                  <td><span className="ls-badge">{a.tipo}</span></td>
+                  <td>{formatarMoeda(a.valor)}</td>
+                  <td>{a.competencia_referencia ? new Date(a.competencia_referencia).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' }) : 'Venda inteira'}</td>
+                  <td style={{ fontSize: '0.8rem' }}>{a.motivo}</td>
+                  <td style={{ fontSize: '0.8rem' }}>{new Date(a.criado_em).toLocaleDateString('pt-BR')}</td>
+                  <td>
+                    <button className="ls-btn ls-btn-ghost" style={{ fontSize: '0.75rem' }} onClick={() => handleExcluirAjuste(a.id)}>Excluir</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
