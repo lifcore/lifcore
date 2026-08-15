@@ -483,6 +483,18 @@ async function calcularSugestaoDesdobrada(db, { vendaId, competencia, venda, reg
  * LIMITE HONESTO (já registrado antes): só calculo com segurança
  * quando base_calculo = 'premio_sem_iof' — é o único valor confirmado
  * em vendas.valor_base. Outras bases ficam pendente_parametro.
+ *
+ * ATUALIZADO (Bloco D, aprovado pelo Chief — 15/08): quando
+ * base_calculo = 'manual', cair em pendente_parametro é o
+ * comportamento CORRETO e definitivo, não um gap a fechar depois — por
+ * definição, "Manual" significa que o Gestor informa o valor da
+ * comissão daquela apólice, sem o motor tentar calcular nada (sem
+ * inventar percentual, sem inferência). O mecanismo que já existia,
+ * `ajustarComissaoSugeridaManualmente` (Seção 17, "Exceção individual"
+ * acima), é exatamente esse caminho — não foi preciso criar nada novo,
+ * só conectar a tela (FinanceiroPage.jsx) pra orientar o Gestor a usar
+ * o campo "Ajuste manual" quando a base for 'manual', em vez de mostrar
+ * mensagem genérica de "sem regra".
  */
 async function calcularSugestaoCascataOuProporcional(db, { vendaId, competencia, venda, regra }) {
   let percentualAplicavel = regra.percentual
@@ -606,7 +618,7 @@ export async function listarComissoesSugeridasDetalhado(competenciaReferencia, c
        venda:vendas(id, produto_id, operadora_id, valor_base, apolice_id, contrato_id,
          apolice:apolices(numero_apolice, nome_cliente),
          contrato:contratos(numero_apolice)),
-       regra:regras_comissao(id, descricao, componentes:regra_comissao_componentes(*))`
+       regra:regras_comissao(id, descricao, base_calculo, modelo_recebimento, percentual, origem_percentual, componentes:regra_comissao_componentes(*))`
     )
     .eq('competencia_referencia', competencia)
     .order('criado_em', { ascending: false })

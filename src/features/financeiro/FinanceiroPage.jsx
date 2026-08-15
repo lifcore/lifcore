@@ -207,6 +207,17 @@ function ComissoesSugeridasTab() {
   )
 }
 
+/** Mesmo rótulo já usado na tela de Regras de Comissão (Configurações) — não inventa texto novo. */
+const ROTULOS_BASE_CALCULO = {
+  premio_sem_iof: 'Prêmio/valor total sem IOF',
+  mensalidade: 'Mensalidade',
+  parcela_recebida: 'Parcela recebida',
+  manual: 'Manual',
+}
+function rotuloBaseCalculo(baseCalculo) {
+  return ROTULOS_BASE_CALCULO[baseCalculo] ?? baseCalculo ?? '—'
+}
+
 function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
   const [expandido, setExpandido] = useState(false)
   const [novoValor, setNovoValor] = useState('')
@@ -244,24 +255,53 @@ function LinhaComissaoSugerida({ item, usuarioId, onAtualizado }) {
             <div className="ls-card" style={{ padding: '0.75rem' }}>
               {erro && <p className="ls-modal-erro">{erro}</p>}
 
-              {item.regra?.componentes?.length > 0 ? (
-                <>
-                  <strong style={{ fontSize: '0.85rem' }}>Regra aplicada</strong>
-                  <ul style={{ marginTop: '0.4rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
-                    {item.regra.componentes
-                      .slice()
-                      .sort((a, b) => a.ordem - b.ordem)
-                      .map((c) => (
-                        <li key={c.id}>
-                          Mês {c.periodo_inicio}{c.periodo_fim ? `–${c.periodo_fim}` : '+'} — {c.tipo_valor === 'valor_fixo' ? formatarMoeda(c.valor) : `${c.valor}%`}
-                          {c.recorrencia_tipo === 'vitalicio' && ' (vitalício)'}
-                          {c.recorrencia_tipo === 'recorrente' && ' (recorrente)'}
-                        </li>
-                      ))}
-                  </ul>
-                </>
+              {item.status_calculo === 'calculada' ? (
+                item.regra?.componentes?.length > 0 ? (
+                  <>
+                    <strong style={{ fontSize: '0.85rem' }}>Regra aplicada</strong>
+                    <ul style={{ marginTop: '0.4rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+                      {item.regra.componentes
+                        .slice()
+                        .sort((a, b) => a.ordem - b.ordem)
+                        .map((c) => (
+                          <li key={c.id}>
+                            Mês {c.periodo_inicio}{c.periodo_fim ? `–${c.periodo_fim}` : '+'} — {c.tipo_valor === 'valor_fixo' ? formatarMoeda(c.valor) : `${c.valor}%`}
+                            {c.recorrencia_tipo === 'vitalicio' && ' (vitalício)'}
+                            {c.recorrencia_tipo === 'recorrente' && ' (recorrente)'}
+                          </li>
+                        ))}
+                    </ul>
+                  </>
+                ) : (
+                  // CORREÇÃO (Bloco E, 15/08): Cascata/Proporcional nunca têm
+                  // "componentes" (isso só existe no modelo Desdobrada) — a
+                  // checagem antiga (`componentes?.length > 0`) mostrava
+                  // "Nenhuma regra aplicada" mesmo quando o valor já tinha
+                  // calculado certo. Corrigido pra usar status_calculo, que é
+                  // o dado real do que aconteceu.
+                  <p className="config-instrucao">
+                    Regra aplicada: <strong>{item.regra?.descricao ?? '—'}</strong> —{' '}
+                    {item.regra?.modelo_recebimento === 'cascata' ? 'Cascata' : 'Proporcional'}, {item.regra?.percentual}% sobre {rotuloBaseCalculo(item.regra?.base_calculo)}.
+                  </p>
+                )
+              ) : item.status_calculo === 'pendente_parametro' ? (
+                item.regra?.base_calculo === 'manual' ? (
+                  // Bloco D: base "Manual" é terminal por definição — o motor
+                  // nunca calcula sozinho aqui, o Gestor sempre informa.
+                  <p className="config-instrucao">
+                    Esta regra usa base de cálculo <strong>Manual</strong> — informe o valor da comissão desta apólice no campo "Ajuste manual" abaixo.
+                  </p>
+                ) : item.regra?.origem_percentual === 'informado_por_apolice' ? (
+                  <p className="config-instrucao">
+                    Regra encontrada, mas a apólice não tem percentual de comissionamento informado — preencha esse campo na apólice, ou informe manualmente abaixo.
+                  </p>
+                ) : (
+                  <p className="config-instrucao">
+                    Regra encontrada ({item.regra?.descricao ?? '—'}), mas a base de cálculo "{rotuloBaseCalculo(item.regra?.base_calculo)}" ainda não é suportada pelo motor automático — informe manualmente abaixo.
+                  </p>
+                )
               ) : (
-                <p className="config-instrucao">Nenhuma regra aplicada — produto sem regra cadastrada pra essa competência, ou venda ainda fora do período de todos os componentes.</p>
+                <p className="config-instrucao">Nenhuma regra cadastrada para este produto/seguradora nessa competência, ou venda ainda fora do período de todos os componentes.</p>
               )}
 
               <div className="cotacao-form-linha">
