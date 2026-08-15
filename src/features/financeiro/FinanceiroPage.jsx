@@ -336,6 +336,11 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
    * escolhida no seletor, o ajuste fica preso a ela (ex: "cancelamento
    * da parcela de outubro"); se ficar em branco, é um ajuste solto na
    * venda inteira (ex: "apólice cancelada, estorna tudo").
+   *
+   * CORREÇÃO (achado do Raphael, teste real): "Estorno" sempre reduz o
+   * esperado — não pode depender do Gestor lembrar de digitar o sinal
+   * de menos. Se o tipo for "estorno", o valor é forçado negativo aqui,
+   * não importa o que foi digitado (positivo ou negativo).
    */
   async function handleLancarAjuste() {
     if (valorAjuste === '' || !motivoAjuste.trim()) return
@@ -343,13 +348,15 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
     setErroValidacao('')
     try {
       const linhaSelecionada = competenciaAjuste ? linhas.find((l) => l.competencia_referencia === `${competenciaAjuste}-01`) : null
+      const valorNumerico = Number(valorAjuste)
+      const valorFinal = tipoAjuste === 'estorno' ? -Math.abs(valorNumerico) : valorNumerico
       await lancarAjusteEstorno({
         vendaId: primeira.venda_id,
         comissaoSugeridaId: linhaSelecionada?.id ?? null,
         operadoraId: primeira.venda?.operadora_id ?? null,
         competenciaReferencia: competenciaAjuste ? `${competenciaAjuste}-01` : null,
         tipo: tipoAjuste,
-        valor: Number(valorAjuste),
+        valor: valorFinal,
         motivo: motivoAjuste,
         usuarioId,
       })
@@ -451,7 +458,7 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
               </select>
             </div>
             <div>
-              <label>Valor (negativo pra estornar)</label>
+              <label>Valor (positivo — o sistema aplica o sinal certo conforme o Tipo)</label>
               <input type="number" step="0.01" value={valorAjuste} onChange={(e) => setValorAjuste(e.target.value)} placeholder="Ex: -400,00" />
             </div>
             <div>
