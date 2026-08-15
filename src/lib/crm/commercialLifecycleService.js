@@ -31,6 +31,15 @@ import { criarVendaSeElegivel } from './vendasService'
  * entrada oficial do fluxo Venda → Regra de Comissão → Comissão
  * Sugerida (DOC-COM-003), não mais o antigo caminho direto pra
  * `comissoes`.
+ *
+ * CORREÇÃO (teste real, apólice AZUL/01245 — Raphael, 15/08): a
+ * primeira versão desta integração falhava silenciosamente (erro
+ * engolido pelo try/catch, sem aparecer em lugar nenhum da UI) porque
+ * `vendasService` tentava gravar `organizacao_id` — coluna que não
+ * existe em `vendas` — e não preenchia `modulo`/`tipo`/`valor_base`/
+ * `status`, todas obrigatórias na tabela real. Corrigido: esta função
+ * agora passa `modulo`, `usuarioId` e `operadoraId` pro vendasService,
+ * que busca o resto (prêmio da apólice) internamente.
  */
 
 const MODULO_PARA_WORKSPACE_ID = {
@@ -253,14 +262,14 @@ export async function fecharCotacaoComDocumento(cotacaoId, usuarioId, { apoliceI
     // que o fechamento inteiro falhou; só registra o problema separado,
     // sem interromper o retorno de sucesso.
     try {
-      const { data: organizacao } = await operacional.from('organizacoes').select('id').limit(1).single()
-
       vendaCriada = await criarVendaSeElegivel({
-        organizacaoId: organizacao?.id,
         clienteProspectId: cotacao.cliente_prospect_id,
         apoliceId,
         contratoId,
         cotacaoId,
+        modulo,
+        operadoraId: cotacao.operadora_id ?? null,
+        usuarioId,
         geraComissao,
       })
     } catch (erroVenda) {
