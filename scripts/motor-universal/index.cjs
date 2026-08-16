@@ -35,7 +35,15 @@ async function identificarSeguradoraPorCatalogo(linhas, institucionalDb) {
 
   const textoCompleto = linhas.join(' ').toUpperCase()
   for (const op of operadoras ?? []) {
-    if (textoCompleto.includes(op.nome.toUpperCase())) {
+    const nomeOperadora = op.nome.toUpperCase().trim()
+    if (textoCompleto.includes(nomeOperadora)) {
+      return { id: op.id, nome: op.nome }
+    }
+    // Também tenta pela primeira palavra significativa do nome
+    // cadastrado (ex: "HDI" de "HDI Seguros S.A.") — resolve o caso
+    // do documento não repetir a razão social completa cadastrada.
+    const primeiraPalavra = nomeOperadora.split(/\s+/)[0]
+    if (primeiraPalavra.length >= 3 && textoCompleto.includes(primeiraPalavra)) {
       return { id: op.id, nome: op.nome }
     }
   }
@@ -77,9 +85,20 @@ function classificar(valorBruto) {
  * banco — devolve um resultado estruturado; quem chama decide o que
  * gravar (mantém este módulo testável sem depender de conexão real).
  */
-async function processarDocumento({ linhas, tipoDocumento = 'comissoes', operacionalDb, institucionalDb }) {
+async function processarDocumento({ linhas, tipoDocumento = 'comissoes', operacionalDb, institucionalDb, seguradoraIdForcada = null }) {
   const assinatura = calcularAssinaturaEstrutural(linhas)
-  const seguradora = await identificarSeguradoraPorCatalogo(linhas, institucionalDb)
+
+  // Se o Gestor já escolheu a seguradora no upload, respeita essa
+  // escolha — não tenta adivinhar de novo por conteúdo. Só cai na
+  // identificação automática quando ninguém informou nada.
+  let seguradora = null
+  if (seguradoraIdForcada) {
+    const { data, error } = await institucionalDb.from('operadoras').select('id, nome').eq('id', seguradoraIdForcada).single()
+    if (error) throw new Error(`Seguradora informada no upload não encontrada no catálogo: ${error.message}`)
+    seguradora = data
+  } else {
+    seguradora = await identificarSeguradoraPorCatalogo(linhas, institucionalDb)
+  }
 
   const formatoHomologado = await buscarFormatoHomologado(seguradora?.id, tipoDocumento, operacionalDb)
   const { alterado } = detectarAlteracao(formatoHomologado, assinatura)

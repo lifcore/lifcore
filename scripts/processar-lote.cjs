@@ -50,7 +50,7 @@ async function main() {
   const pdf = await pdfParse(buffer)
   const linhas = pdf.text.split('\n').map((l) => l.trim()).filter((l) => l.length > 0)
 
-  const resultado = await processarDocumento({ linhas, operacionalDb, institucionalDb })
+  const resultado = await processarDocumento({ linhas, operacionalDb, institucionalDb, seguradoraIdForcada: lote.seguradora_id })
 
   console.log(`Seguradora identificada: ${resultado.seguradora?.nome ?? 'NÃO IDENTIFICADA'}`)
   console.log(`Origem da extração: ${resultado.origemExtracao}`)

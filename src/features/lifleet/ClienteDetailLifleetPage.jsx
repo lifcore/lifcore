@@ -242,8 +242,8 @@ function CotacoesAutoTab({ clienteId, tipoPessoa, cotacoes, onAtualizado, perfil
       const resultado = await fecharCotacaoComDocumento(cotacaoFormalizando.id, perfil?.id, { apoliceId: apolice.id })
       setCotacaoFormalizando(null)
       onAtualizado()
-      if (resultado?.erroComissao) {
-        setErroWorkflow(`Cotação fechada e apólice gerada normalmente — mas a sugestão de comissão não pôde ser criada (${resultado.erroComissao}). Avise o Claude pra corrigir isso; a comissão pode ser lançada manualmente no Financeiro por enquanto.`)
+      if (resultado?.erroVenda) {
+        setErroWorkflow(`Cotação fechada e apólice gerada normalmente — mas a Venda central não pôde ser criada (${resultado.erroVenda}). Avise o Claude pra corrigir isso; a comissão pode ser lançada manualmente no Financeiro por enquanto.`)
       }
     } catch (err) {
       setErroWorkflow(err.message)
@@ -334,6 +334,8 @@ function CotacoesAutoTab({ clienteId, tipoPessoa, cotacoes, onAtualizado, perfil
           <ApoliceAutoForm
             clienteProspectId={clienteId}
             tipoPessoa={tipoPessoa}
+            operadoraIdInicial={cotacaoFormalizando.operadora_id ?? cotacaoFormalizando.operadora?.id ?? null}
+            operadoraNomeInicial={cotacaoFormalizando.operadora?.nome ?? cotacaoFormalizando.operadora_nome_livre ?? ''}
             onSalvo={handleApoliceFormalizada}
             onCancelar={() => setCotacaoFormalizando(null)}
           />
