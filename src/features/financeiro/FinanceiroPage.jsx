@@ -41,7 +41,7 @@ import {
 import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote, listarSeguradorasCatalogo, atribuirSeguradoraEReprocessar, reprocessarLote } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
-import { vendaTemComposicao, definirComposicaoManual } from '../../lib/crm/vendasService'
+import { vendaTemComposicao, definirComposicaoManual, criarComposicaoAutomaticaSeElegivel } from '../../lib/crm/vendasService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 import { operacional } from '../../lib/supabaseSchemas'
 import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
@@ -1257,14 +1257,23 @@ function RepassesTab() {
 
 /**
  * Recebimento já conciliado (Peça 3), aguardando virar repasse de
- * verdade (Etapa 4, Peça 6). Dois caminhos:
- * - Composição já existe (automática, via % padrão do corretor) →
- *   só mostra "Distribuir".
- * - Composição não existe → "Incluir Participante", cadastro manual
- *   com trava de 100% antes de liberar a distribuição.
+ * verdade (Etapa 4, Peça 6).
+ *
+ * CORREÇÃO (achado do Raphael, teste real 15/08): antes, se a
+ * composição não existisse por qualquer motivo (ex: auto-preenchimento
+ * na criação da venda falhou por login trocado no momento de fechar a
+ * apólice), a tela já mostrava o formulário manual aberto, pedindo
+ * digitação — mesmo quando o corretor JÁ tinha % padrão cadastrado.
+ * Agora, antes de mostrar qualquer formulário, tenta de novo o
+ * caminho automático (mesma função usada na criação da venda,
+ * idempotente — não duplica nada). Só mostra "Adicionar Participantes"
+ * — um botão discreto, fechado por padrão — quando realmente não
+ * existe % cadastrado pra esse corretor nesse módulo. O caminho
+ * primário é sempre o automático; o manual é exceção de verdade.
  */
 function LinhaAguardandoDistribuicao({ recebimento, venda, corretores, usuarioId, onDistribuido }) {
   const [temComposicao, setTemComposicao] = useState(null)
+  const [mostrarManual, setMostrarManual] = useState(false)
   const [participantes, setParticipantes] = useState([{ tipo: 'corretor', corretorId: '', percentual: '' }])
   const [salvandoComposicao, setSalvandoComposicao] = useState(false)
   const [distribuindo, setDistribuindo] = useState(false)
@@ -1272,8 +1281,30 @@ function LinhaAguardandoDistribuicao({ recebimento, venda, corretores, usuarioId
 
   useEffect(() => {
     if (!venda?.id) return
-    vendaTemComposicao(venda.id).then(setTemComposicao).catch((e) => setErro(e.message))
+    verificarOuAutoAplicar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [venda?.id])
+
+  async function verificarOuAutoAplicar() {
+    setErro('')
+    try {
+      const jaTem = await vendaTemComposicao(venda.id)
+      if (jaTem) {
+        setTemComposicao(true)
+        return
+      }
+      // Reaplica o caminho automático (idempotente) antes de admitir
+      // que precisa de digitação manual.
+      const resultado = await criarComposicaoAutomaticaSeElegivel({
+        vendaId: venda.id,
+        corretorId: venda.corretor_id ?? null,
+        modulo: venda.modulo,
+      })
+      setTemComposicao(Boolean(resultado.criada))
+    } catch (e) {
+      setErro(e.message)
+    }
+  }
 
   const somaPercentual = participantes.reduce((soma, p) => soma + (Number(p.percentual) || 0), 0)
 
@@ -1302,6 +1333,7 @@ function LinhaAguardandoDistribuicao({ recebimento, venda, corretores, usuarioId
         })),
       })
       setTemComposicao(true)
+      setMostrarManual(false)
     } catch (e) {
       setErro(e.message)
     }
@@ -1333,11 +1365,15 @@ function LinhaAguardandoDistribuicao({ recebimento, venda, corretores, usuarioId
         <button className="cliente-tabela-btn" onClick={handleDistribuir} disabled={distribuindo} style={{ marginTop: '0.5rem' }}>
           {distribuindo ? 'Distribuindo...' : 'Distribuir'}
         </button>
+      ) : !mostrarManual ? (
+        <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <span style={{ fontSize: '0.8rem', opacity: 0.85 }}>Corretor sem % padrão cadastrado para este módulo.</span>
+          <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarManual(true)}>
+            Adicionar Participantes e Redistribuir
+          </button>
+        </div>
       ) : (
         <div style={{ marginTop: '0.5rem' }}>
-          <p className="config-instrucao">
-            Esta venda não tem composição (o corretor não tem % padrão cadastrado, ou é um caso de divisão entre participantes). Defina abaixo — a soma precisa fechar exatamente 100%.
-          </p>
           {participantes.map((p, i) => (
             <div className="cotacao-form-linha" key={i} style={{ alignItems: 'flex-end', marginBottom: '0.4rem' }}>
               <div>
@@ -1372,14 +1408,16 @@ function LinhaAguardandoDistribuicao({ recebimento, venda, corretores, usuarioId
               Soma: <strong style={{ color: Math.abs(somaPercentual - 100) < 0.01 ? 'var(--ls-success, #2f7a3d)' : 'var(--ls-danger, #b23b3b)' }}>{somaPercentual.toFixed(2)}%</strong>
             </span>
           </div>
-          <button
-            className="cliente-tabela-btn"
-            style={{ marginTop: '0.5rem' }}
-            onClick={handleConfirmarComposicao}
-            disabled={salvandoComposicao || Math.abs(somaPercentual - 100) > 0.01}
-          >
-            {salvandoComposicao ? 'Salvando...' : 'Confirmar Composição'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <button
+              className="cliente-tabela-btn"
+              onClick={handleConfirmarComposicao}
+              disabled={salvandoComposicao || Math.abs(somaPercentual - 100) > 0.01}
+            >
+              {salvandoComposicao ? 'Salvando...' : 'Confirmar Composição'}
+            </button>
+            <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarManual(false)}>Cancelar</button>
+          </div>
         </div>
       )}
     </div>
