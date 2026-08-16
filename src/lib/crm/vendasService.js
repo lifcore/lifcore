@@ -233,80 +233,56 @@ export async function vendaTemComposicao(vendaId) {
 }
 
 /**
- * LIMPEZA FORÇADA DE TESTE — MASTER ONLY (achado do Raphael, 16/08).
+ * EXCLUSÃO FORÇADA DE VENDA — MASTER ONLY (achado do Raphael, 16/08 —
+ * revisado 2x depois de tentativas de UI erradas: não é aba própria,
+ * não é seção em Buscar — é um botão direto em cada card da venda,
+ * dentro de Comissão Sugerida / Conciliação / Repasses).
  *
  * Diferente de `excluirVendaComDependencias`: essa função NUNCA
  * bloqueia por existir fato financeiro — apaga `comissoes`,
- * `recebimentos_comissao`, `comissao_sugerida`, `ajustes_comissao_sugerida`
- * e `venda_composicao` de todas as vendas ligadas à apólice/contrato,
- * sem exceção. É intencional: existe pra permitir zerar dado de teste
- * durante a fase de validação do sistema, exatamente o caso previsto
- * na Constituição do LifCore (seção 4.1, papel do Master —
- * "saneamento de dados... exclusões definitivas... nenhuma dessas
- * intervenções constitui quebra de governança, desde que autenticada,
- * rastreável e auditada").
+ * `recebimentos_comissao`, `ajustes_comissao_sugerida`,
+ * `comissao_sugerida`, `venda_composicao` e a própria Venda, sem
+ * exceção de status. Existe pra zerar dado de teste durante a
+ * validação do sistema — exatamente o caso previsto na Constituição
+ * do LifCore (seção 4.1, papel do Master: "saneamento de dados...
+ * exclusões definitivas... desde que autenticada, rastreável e
+ * auditada").
  *
- * NÃO EXPOR pra nenhum papel além de Master na tela — a restrição de
- * acesso é feita na UI (mesmo padrão já usado em `excluirComissao`,
- * Financeiro → Buscar), não dentro desta função. Depois de limpar o
- * histórico financeiro, quem chamar ainda precisa chamar
- * `excluirApolice`/`excluirContrato` separadamente pra remover o
- * documento em si — esta função só desobstrui o caminho.
+ * NÃO toca em `apolices`/`contratos`/`clientes_prospect` — o
+ * documento e o cliente continuam existindo intactos, prontos pra uma
+ * Venda nova nascer do zero (índice único em `vendas.apolice_id`
+ * permite isso assim que a Venda antiga for removida).
+ *
+ * A restrição de acesso é só na UI (mesmo padrão de sempre) — esta
+ * função em si não checa papel.
  */
-export async function limparHistoricoFinanceiroDeTeste({ apoliceId, contratoId }, usuarioId) {
-  if (!apoliceId && !contratoId) throw new Error('Informe apoliceId ou contratoId.')
-  const filtroDocumento = apoliceId ? { apolice_id: apoliceId } : { contrato_id: contratoId }
+export async function excluirVendaEHistoricoForcado(vendaId, usuarioId) {
+  if (!vendaId) throw new Error('vendaId é obrigatório.')
 
-  const { data: vendas, error: erroVendas } = await operacional.from('vendas').select('id').match(filtroDocumento)
-  if (erroVendas) throw new Error(`Erro ao buscar vendas do documento: ${erroVendas.message}`)
-  const idsVendas = (vendas ?? []).map((v) => v.id)
+  const resumo = { comissoesRemovidas: 0, recebimentosRemovidos: 0, sugestoesRemovidas: 0, ajustesRemovidos: 0, composicoesRemovidas: 0 }
 
-  const resumo = { vendasEncontradas: idsVendas.length, comissoesRemovidas: 0, recebimentosRemovidos: 0, sugestoesRemovidas: 0, ajustesRemovidos: 0, composicoesRemovidas: 0 }
+  const { count: qtdComissoes, error: erroComissoes } = await operacional.from('comissoes').delete({ count: 'exact' }).eq('venda_id', vendaId)
+  if (erroComissoes) throw new Error(`Erro ao limpar comissões: ${erroComissoes.message}`)
+  resumo.comissoesRemovidas = qtdComissoes ?? 0
 
-  // 1. Ledger (comissoes) — por venda_id (se houver vendas) E direto por apolice_id/contrato_id (link legado)
-  if (idsVendas.length > 0) {
-    const { count, error } = await operacional.from('comissoes').delete({ count: 'exact' }).in('venda_id', idsVendas)
-    if (error) throw new Error(`Erro ao limpar comissões (por venda): ${error.message}`)
-    resumo.comissoesRemovidas += count ?? 0
-  }
-  {
-    const { count, error } = await operacional.from('comissoes').delete({ count: 'exact' }).match(filtroDocumento)
-    if (error) throw new Error(`Erro ao limpar comissões (direto): ${error.message}`)
-    resumo.comissoesRemovidas += count ?? 0
-  }
+  const { count: qtdRecebimentos, error: erroRecebimentos } = await operacional.from('recebimentos_comissao').delete({ count: 'exact' }).eq('venda_id', vendaId)
+  if (erroRecebimentos) throw new Error(`Erro ao limpar recebimentos: ${erroRecebimentos.message}`)
+  resumo.recebimentosRemovidos = qtdRecebimentos ?? 0
 
-  // 2. Recebimentos — mesma dupla checagem (venda_id e direto)
-  if (idsVendas.length > 0) {
-    const { count, error } = await operacional.from('recebimentos_comissao').delete({ count: 'exact' }).in('venda_id', idsVendas)
-    if (error) throw new Error(`Erro ao limpar recebimentos (por venda): ${error.message}`)
-    resumo.recebimentosRemovidos += count ?? 0
-  }
-  {
-    const { count, error } = await operacional.from('recebimentos_comissao').delete({ count: 'exact' }).match(filtroDocumento)
-    if (error) throw new Error(`Erro ao limpar recebimentos (direto): ${error.message}`)
-    resumo.recebimentosRemovidos += count ?? 0
-  }
+  const { count: qtdAjustes, error: erroAjustes } = await operacional.from('ajustes_comissao_sugerida').delete({ count: 'exact' }).eq('venda_id', vendaId)
+  if (erroAjustes) throw new Error(`Erro ao limpar ajustes: ${erroAjustes.message}`)
+  resumo.ajustesRemovidos = qtdAjustes ?? 0
 
-  if (idsVendas.length > 0) {
-    // 3. Ajustes/estornos
-    const { count: qtdAjustes, error: erroAjustes } = await operacional.from('ajustes_comissao_sugerida').delete({ count: 'exact' }).in('venda_id', idsVendas)
-    if (erroAjustes) throw new Error(`Erro ao limpar ajustes: ${erroAjustes.message}`)
-    resumo.ajustesRemovidos = qtdAjustes ?? 0
+  const { count: qtdSugestoes, error: erroSugestoes } = await operacional.from('comissao_sugerida').delete({ count: 'exact' }).eq('venda_id', vendaId)
+  if (erroSugestoes) throw new Error(`Erro ao limpar comissão sugerida: ${erroSugestoes.message}`)
+  resumo.sugestoesRemovidas = qtdSugestoes ?? 0
 
-    // 4. Comissão sugerida (calendário)
-    const { count: qtdSugestoes, error: erroSugestoes } = await operacional.from('comissao_sugerida').delete({ count: 'exact' }).in('venda_id', idsVendas)
-    if (erroSugestoes) throw new Error(`Erro ao limpar comissões sugeridas: ${erroSugestoes.message}`)
-    resumo.sugestoesRemovidas = qtdSugestoes ?? 0
+  const { count: qtdComposicao, error: erroComposicao } = await operacional.from('venda_composicao').delete({ count: 'exact' }).eq('venda_id', vendaId)
+  if (erroComposicao) throw new Error(`Erro ao limpar composição: ${erroComposicao.message}`)
+  resumo.composicoesRemovidas = qtdComposicao ?? 0
 
-    // 5. Composição
-    const { count: qtdComposicao, error: erroComposicao } = await operacional.from('venda_composicao').delete({ count: 'exact' }).in('venda_id', idsVendas)
-    if (erroComposicao) throw new Error(`Erro ao limpar composição: ${erroComposicao.message}`)
-    resumo.composicoesRemovidas = qtdComposicao ?? 0
-
-    // 6. Vendas em si
-    const { error: erroVendasDelete } = await operacional.from('vendas').delete().in('id', idsVendas)
-    if (erroVendasDelete) throw new Error(`Erro ao limpar vendas: ${erroVendasDelete.message}`)
-  }
+  const { error: erroVenda } = await operacional.from('vendas').delete().eq('id', vendaId)
+  if (erroVenda) throw new Error(`Erro ao excluir venda: ${erroVenda.message}`)
 
   return resumo
 }

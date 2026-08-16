@@ -40,10 +40,8 @@ import {
 } from '../../lib/crm/regrasComissaoService'
 import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote, listarSeguradorasCatalogo, atribuirSeguradoraEReprocessar, reprocessarLote } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
-import { listarCatalogoSeguradoras, listarApolices, listarCorretores, buscarDocumentoPorNumero } from '../../lib/crm/apolicesService'
-import { vendaTemComposicao, definirComposicaoManual, criarComposicaoAutomaticaSeElegivel, limparHistoricoFinanceiroDeTeste } from '../../lib/crm/vendasService'
-import { excluirApolice } from '../../lib/crm/apolicesService'
-import { excluirContrato } from '../../lib/crm/clientesService'
+import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
+import { vendaTemComposicao, definirComposicaoManual, criarComposicaoAutomaticaSeElegivel, excluirVendaEHistoricoForcado } from '../../lib/crm/vendasService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 import { operacional } from '../../lib/supabaseSchemas'
 import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
@@ -274,10 +272,25 @@ function rotuloBaseCalculo(baseCalculo) {
  * pediu ("cada competência precisa poder ser validada individualmente").
  */
 function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
+  const { perfil } = useAuth()
+  const ehMaster = perfil?.papel === 'master'
   const primeira = linhas[0]
   const totalEsperado = linhas.reduce((soma, l) => soma + (Number(l.valor_sugerido) || 0), 0)
   const totalLinhasValidadas = linhas.filter((l) => l.status_validacao === 'validado').length
   const todasValidadas = linhas.length > 0 && totalLinhasValidadas === linhas.length
+  const [excluindoVenda, setExcluindoVenda] = useState(false)
+
+  async function handleExcluirVenda() {
+    if (!window.confirm(`Excluir PERMANENTEMENTE a venda ${primeira.numeroApolice} e todo o histórico financeiro dela (sugestão, recebimentos, ajustes, composição)? A apólice continua existindo — só a venda e o financeiro somem. Não é reversível.`)) return
+    setExcluindoVenda(true)
+    try {
+      await excluirVendaEHistoricoForcado(primeira.venda_id, usuarioId)
+      onAtualizado()
+    } catch (e) {
+      window.alert(e.message)
+    }
+    setExcluindoVenda(false)
+  }
 
   const [validandoTudo, setValidandoTudo] = useState(false)
   const [erroValidacao, setErroValidacao] = useState('')
@@ -400,6 +413,11 @@ function CardVendaCalendario({ linhas, usuarioId, onAtualizado }) {
           {!todasValidadas && (
             <button className="cliente-tabela-btn" onClick={handleValidarTudo} disabled={validandoTudo}>
               {validandoTudo ? 'Validando...' : 'Validar Cenário'}
+            </button>
+          )}
+          {ehMaster && (
+            <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleExcluirVenda} disabled={excluindoVenda}>
+              {excluindoVenda ? 'Excluindo...' : '🗑️ Excluir (Master)'}
             </button>
           )}
         </div>
@@ -722,19 +740,6 @@ function BuscaGlobalTab() {
   const [excluindo, setExcluindo] = useState(null)
   const [erroExclusao, setErroExclusao] = useState('')
 
-  // LIMPEZA DE TESTE (achado do Raphael, 16/08 — corrigido de "aba
-  // própria" pra "seção fechada, dentro da tela que já existe").
-  // NUNCA bloqueia por fato financeiro — existe exatamente pra zerar
-  // dado de teste. Fechada por padrão, só quem clicar vê.
-  const { user } = useAuth()
-  const [mostrarLimpeza, setMostrarLimpeza] = useState(false)
-  const [termoLimpeza, setTermoLimpeza] = useState('')
-  const [buscandoLimpeza, setBuscandoLimpeza] = useState(false)
-  const [resultadosLimpeza, setResultadosLimpeza] = useState([])
-  const [erroLimpeza, setErroLimpeza] = useState('')
-  const [processandoLimpezaId, setProcessandoLimpezaId] = useState(null)
-  const [resumoLimpeza, setResumoLimpeza] = useState(null)
-
   useEffect(() => {
     listarCorretores().then(setCorretores)
     listarCatalogoSeguradoras().then(setSeguradoras)
@@ -781,102 +786,8 @@ function BuscaGlobalTab() {
     }
   }
 
-  async function handleBuscarLimpeza() {
-    setBuscandoLimpeza(true)
-    setErroLimpeza('')
-    setResumoLimpeza(null)
-    try {
-      const dados = await buscarDocumentoPorNumero(termoLimpeza)
-      setResultadosLimpeza(dados)
-    } catch (e) {
-      setErroLimpeza(e.message)
-    }
-    setBuscandoLimpeza(false)
-  }
-
-  async function handleLimparEExcluir(doc) {
-    const confirmacao1 = window.confirm(
-      `Isso vai APAGAR PERMANENTEMENTE todo o histórico financeiro (comissões, recebimentos, ajustes, composição) ligado à apólice/contrato "${doc.numero_apolice}", e depois excluir o próprio documento. Não é reversível. Confirma que é dado de TESTE?`
-    )
-    if (!confirmacao1) return
-    const confirmacao2 = window.confirm('Tem certeza mesmo? Essa é a última confirmação — não tem como desfazer depois.')
-    if (!confirmacao2) return
-
-    setProcessandoLimpezaId(doc.id)
-    setErroLimpeza('')
-    try {
-      const filtro = doc.tipoDocumento === 'apolice' ? { apoliceId: doc.id } : { contratoId: doc.id }
-      const resumo = await limparHistoricoFinanceiroDeTeste(filtro, user?.id)
-
-      if (doc.tipoDocumento === 'apolice') {
-        await excluirApolice(doc.id)
-      } else {
-        await excluirContrato(doc.id)
-      }
-
-      setResumoLimpeza({ ...resumo, numeroApolice: doc.numero_apolice })
-      setResultadosLimpeza((atual) => atual.filter((r) => r.id !== doc.id))
-    } catch (e) {
-      setErroLimpeza(e.message)
-    }
-    setProcessandoLimpezaId(null)
-  }
-
   return (
     <div>
-      {ehMaster && (
-        <div className="ls-card" style={{ marginBottom: '1rem', padding: '0.75rem' }}>
-          <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarLimpeza((v) => !v)} style={{ color: 'var(--ls-danger, #b23b3b)' }}>
-            🧹 {mostrarLimpeza ? 'Fechar' : 'Limpar dado de teste (apaga tudo, mesmo já conciliado)'}
-          </button>
-
-          {mostrarLimpeza && (
-            <div style={{ marginTop: '0.6rem' }}>
-              <div className="cotacao-form-linha" style={{ alignItems: 'flex-end' }}>
-                <div>
-                  <label>Número da apólice/contrato</label>
-                  <input value={termoLimpeza} onChange={(e) => setTermoLimpeza(e.target.value)} placeholder="Ex: 0001" />
-                </div>
-                <button className="cliente-tabela-btn" onClick={handleBuscarLimpeza} disabled={buscandoLimpeza || !termoLimpeza.trim()}>
-                  {buscandoLimpeza ? 'Buscando...' : 'Buscar'}
-                </button>
-              </div>
-
-              {erroLimpeza && <p className="ls-modal-erro">{erroLimpeza}</p>}
-              {resumoLimpeza && (
-                <p className="config-sucesso">
-                  {resumoLimpeza.numeroApolice} removido. Limpo: {resumoLimpeza.vendasEncontradas} venda(s), {resumoLimpeza.comissoesRemovidas} comissão(ões), {resumoLimpeza.recebimentosRemovidos} recebimento(s), {resumoLimpeza.sugestoesRemovidas} sugestão(ões), {resumoLimpeza.ajustesRemovidos} ajuste(s), {resumoLimpeza.composicoesRemovidas} composição(ões).
-                </p>
-              )}
-
-              {resultadosLimpeza.length > 0 && (
-                <table className="cliente-tabela" style={{ marginTop: '0.5rem' }}>
-                  <thead><tr><th>Número</th><th>Tipo</th><th>Cliente</th><th>Ações</th></tr></thead>
-                  <tbody>
-                    {resultadosLimpeza.map((doc) => (
-                      <tr key={doc.id}>
-                        <td>{doc.numero_apolice}</td>
-                        <td>{doc.tipoDocumento === 'apolice' ? 'Apólice' : 'Contrato'}</td>
-                        <td>{doc.nome_cliente ?? '—'}</td>
-                        <td>
-                          <button
-                            className="cliente-tabela-btn cliente-tabela-btn-perigo"
-                            onClick={() => handleLimparEExcluir(doc)}
-                            disabled={processandoLimpezaId === doc.id}
-                          >
-                            {processandoLimpezaId === doc.id ? 'Limpando...' : 'Limpar tudo e excluir'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="ls-card" style={{ marginBottom: '1rem' }}>
         <div className="cotacao-form-linha">
           <div>
@@ -1381,12 +1292,27 @@ function RepassesTab() {
  * primário é sempre o automático; o manual é exceção de verdade.
  */
 function LinhaAguardandoDistribuicao({ recebimento, venda, corretores, usuarioId, onDistribuido }) {
+  const { perfil } = useAuth()
+  const ehMaster = perfil?.papel === 'master'
   const [temComposicao, setTemComposicao] = useState(null)
   const [mostrarManual, setMostrarManual] = useState(false)
   const [participantes, setParticipantes] = useState([{ tipo: 'corretor', corretorId: '', percentual: '' }])
   const [salvandoComposicao, setSalvandoComposicao] = useState(false)
   const [distribuindo, setDistribuindo] = useState(false)
+  const [excluindoVenda, setExcluindoVenda] = useState(false)
   const [erro, setErro] = useState('')
+
+  async function handleExcluirVenda() {
+    if (!window.confirm('Excluir PERMANENTEMENTE esta venda e todo o histórico financeiro dela? A apólice continua existindo. Não é reversível.')) return
+    setExcluindoVenda(true)
+    try {
+      await excluirVendaEHistoricoForcado(venda.id, usuarioId)
+      onDistribuido(recebimento.id, [])
+    } catch (e) {
+      setErro(e.message)
+    }
+    setExcluindoVenda(false)
+  }
 
   useEffect(() => {
     if (!venda?.id) return
@@ -1468,6 +1394,17 @@ function LinhaAguardandoDistribuicao({ recebimento, venda, corretores, usuarioId
 
       {erro && <p className="ls-modal-erro">{erro}</p>}
 
+      {ehMaster && (
+        <button
+          className="cliente-tabela-btn cliente-tabela-btn-perigo"
+          style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}
+          onClick={handleExcluirVenda}
+          disabled={excluindoVenda}
+        >
+          {excluindoVenda ? 'Excluindo...' : '🗑️ Excluir venda (Master)'}
+        </button>
+      )}
+
       {temComposicao === null ? (
         <p style={{ fontSize: '0.8rem' }}>Verificando composição...</p>
       ) : temComposicao ? (
@@ -1534,9 +1471,29 @@ function LinhaAguardandoDistribuicao({ recebimento, venda, corretores, usuarioId
 }
 
 function LinhaRepasse({ linha, nomeCorretor, onAtualizado }) {
+  const { perfil, user } = useAuth()
+  const ehMaster = perfil?.papel === 'master'
+  const [excluindoVenda, setExcluindoVenda] = useState(false)
+
   async function handleMarcarPago() {
     await marcarRepasseComoPago(linha.id)
     onAtualizado()
+  }
+
+  async function handleExcluirVenda() {
+    if (!linha.venda_id) {
+      window.alert('Este repasse não tem venda_id vinculado — não é possível excluir por aqui.')
+      return
+    }
+    if (!window.confirm('Excluir PERMANENTEMENTE a venda e todo o histórico financeiro dela (inclui este repasse já calculado)? A apólice continua existindo. Não é reversível.')) return
+    setExcluindoVenda(true)
+    try {
+      await excluirVendaEHistoricoForcado(linha.venda_id, user?.id)
+      onAtualizado()
+    } catch (e) {
+      window.alert(e.message)
+    }
+    setExcluindoVenda(false)
   }
 
   return (
@@ -1557,6 +1514,11 @@ function LinhaRepasse({ linha, nomeCorretor, onAtualizado }) {
       </td>
       <td className="cliente-tabela-acoes">
         <button className="cliente-tabela-btn" onClick={handleMarcarPago}>Marcar repasse pago</button>
+        {ehMaster && (
+          <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={handleExcluirVenda} disabled={excluindoVenda}>
+            {excluindoVenda ? 'Excluindo...' : '🗑️ Excluir (Master)'}
+          </button>
+        )}
       </td>
     </tr>
   )
@@ -2028,10 +1990,25 @@ function LinhaRecebimentoPendente({ recebimento, usuarioId, seguradoras, onConci
  * (correção de posicionamento pedida pelo Raphael, ao testar a Peça 2
  * antes da hora).
  */
-function PainelConfrontoVenda({ vendaId, usuarioId }) {
+function PainelConfrontoVenda({ vendaId, usuarioId, onVendaExcluida }) {
+  const { perfil } = useAuth()
+  const ehMaster = perfil?.papel === 'master'
   const [confronto, setConfronto] = useState(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [excluindoVenda, setExcluindoVenda] = useState(false)
+
+  async function handleExcluirVenda() {
+    if (!window.confirm('Excluir PERMANENTEMENTE esta venda e todo o histórico financeiro dela (sugestão, recebimentos, ajustes, composição)? A apólice continua existindo. Não é reversível.')) return
+    setExcluindoVenda(true)
+    try {
+      await excluirVendaEHistoricoForcado(vendaId, usuarioId)
+      onVendaExcluida?.()
+    } catch (e) {
+      window.alert(e.message)
+    }
+    setExcluindoVenda(false)
+  }
 
   const [mostrarNovoAjuste, setMostrarNovoAjuste] = useState(false)
   const [tipoAjuste, setTipoAjuste] = useState('estorno')
@@ -2138,6 +2115,11 @@ function PainelConfrontoVenda({ vendaId, usuarioId }) {
         <button className="ls-btn ls-btn-ghost" style={{ fontSize: '0.8rem' }} onClick={() => setMostrarNovoAjuste((v) => !v)}>
           + Ajuste/Estorno
         </button>
+        {ehMaster && (
+          <button className="cliente-tabela-btn cliente-tabela-btn-perigo" style={{ fontSize: '0.8rem' }} onClick={handleExcluirVenda} disabled={excluindoVenda}>
+            {excluindoVenda ? 'Excluindo...' : '🗑️ Excluir venda (Master)'}
+          </button>
+        )}
       </div>
 
       {erro && <p className="ls-modal-erro">{erro}</p>}
@@ -2284,7 +2266,13 @@ function LinhaRecemConciliada({ item, usuarioId, onDistribuido }) {
       <div><strong>Recebimento</strong> {recebimento.id} → <strong>Venda</strong> {venda?.id}</div>
       <div>Líquido: {formatarMoeda(recebimento.valor_liquido)}</div>
 
-      {venda?.id && <PainelConfrontoVenda vendaId={venda.id} usuarioId={usuarioId} />}
+      {venda?.id && (
+        <PainelConfrontoVenda
+          vendaId={venda.id}
+          usuarioId={usuarioId}
+          onVendaExcluida={() => onDistribuido(recebimento.id, [])}
+        />
+      )}
 
       {erro && <p style={{ color: '#b23b3b' }}>{erro}</p>}
       {!distribuido ? (
