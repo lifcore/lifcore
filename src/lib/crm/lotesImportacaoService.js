@@ -21,20 +21,35 @@ async function obterClientePadrao() {
 
 const BUCKET = 'anexos' // já existente, reaproveitado — nenhum bucket novo criado
 
+/**
+ * CORREÇÃO (15/08 — Raphael/Claude, causa raiz do problema de
+ * CSV/Excel/TXT nunca terem sido processados de verdade): esse mapa
+ * já classificava o tipo certo desde sempre, mas a Edge Function nunca
+ * lia esse dado — sempre tentava ler tudo como PDF. Corrigido junto
+ * (ver `supabase/functions/processar-lote/index.ts`).
+ *
+ * `txt` adicionado (mesmo tratamento de `csv` — texto puro, sem
+ * biblioteca nenhuma, é o formato mais simples e confiável de todos).
+ *
+ * `png`/`jpg`/`jpeg` REMOVIDOS de propósito (decisão do Raphael): o
+ * Motor Universal nunca teve OCR de verdade implementado, e mesmo se
+ * tivesse, o risco de má leitura por distorção/qualidade de imagem
+ * não compensa — melhor recusar com mensagem clara do que arriscar
+ * extrair errado silenciosamente. Se alguém tentar subir uma imagem,
+ * `inferirTipoDocumento` abaixo já rejeita antes de qualquer upload.
+ */
 const EXTENSOES_TIPO = {
   pdf: 'pdf_textual', // provisório — extração futura corrige pra pdf_imagem se detectar que é raster
-  png: 'imagem',
-  jpg: 'imagem',
-  jpeg: 'imagem',
   xlsx: 'excel',
   xls: 'excel',
   csv: 'csv',
+  txt: 'texto',
 }
 
 function inferirTipoDocumento(nomeArquivo) {
   const ext = nomeArquivo.split('.').pop()?.toLowerCase()
   const tipo = EXTENSOES_TIPO[ext]
-  if (!tipo) throw new Error(`Tipo de arquivo não suportado: .${ext}. Use PDF, imagem (PNG/JPG), Excel ou CSV.`)
+  if (!tipo) throw new Error(`Tipo de arquivo não suportado: .${ext}. Use PDF, Excel, CSV ou TXT.`)
   return tipo
 }
 

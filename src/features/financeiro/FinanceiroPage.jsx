@@ -917,13 +917,13 @@ function RecebimentosTab() {
     <div>
       <div className="ls-card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
         <h4 style={{ marginTop: 0 }}>Enviar Relatório Real</h4>
-        <p className="config-instrucao">PDF, imagem (PNG/JPG), Excel ou CSV. O processamento roda automaticamente após o envio — a prévia fica pronta pra conferência em seguida.</p>
+        <p className="config-instrucao">PDF, Excel, CSV ou TXT. O processamento roda automaticamente após o envio — a prévia fica pronta pra conferência em seguida.</p>
 
         {erro && <p className="ls-modal-erro">{erro}</p>}
         {sucesso && <p className="config-sucesso">{sucesso}</p>}
 
         <div className="cotacao-form-linha" style={{ alignItems: 'center' }}>
-          <input key={chaveInput} type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
+          <input key={chaveInput} type="file" accept=".pdf,.xlsx,.xls,.csv,.txt" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
           <button className="ls-btn ls-btn-primary" onClick={handleUpload} disabled={!arquivo || enviando}>
             {enviando ? 'Enviando e processando...' : 'Enviar'}
           </button>
