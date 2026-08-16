@@ -7,7 +7,6 @@ import { useSearchParams } from 'react-router-dom'
 import {
   marcarRepasseComoPago,
   obterFluxoCaixaPrevisto,
-  resumirPorFaixaAtraso,
   listarRepassesAPagar,
   obterCentralPendencias,
   buscarComissoesGlobal,
@@ -664,13 +663,6 @@ function LinhaCompetenciaCalendario({ item, usuarioId, onAtualizado }) {
   )
 }
 
-const FAIXAS_LABEL = {
-  '0-30': '0–30 dias',
-  '31-60': '31–60 dias',
-  '61-90': '61–90 dias',
-  '90+': 'Acima de 90 dias',
-}
-
 function PendenciasTab({ setAbaAtiva }) {
   const [dados, setDados] = useState(null)
   const [carregando, setCarregando] = useState(true)
@@ -901,6 +893,7 @@ function RecebimentosTab() {
   const [chaveInput, setChaveInput] = useState(0)
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
+  const [mostrarFormLancamento, setMostrarFormLancamento] = useState(false)
 
   useEffect(() => {
     carregar()
@@ -949,6 +942,30 @@ function RecebimentosTab() {
             {enviando ? 'Enviando e processando...' : 'Enviar'}
           </button>
         </div>
+      </div>
+
+      <div className="ls-card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
+        <h4 style={{ marginTop: 0 }}>Lançar Recebimento Manual</h4>
+        <p className="config-instrucao">
+          Pra quando não tem relatório pra subir — digita o recebimento direto. As duas entradas (upload e manual) unificadas nesta aba (achado do Raphael, 16/08).
+        </p>
+        <button className="cliente-tabela-btn" onClick={() => setMostrarFormLancamento((v) => !v)}>
+          {mostrarFormLancamento ? 'Fechar formulário' : '+ Lançar Recebimento'}
+        </button>
+
+        {mostrarFormLancamento && (
+          <div style={{ marginTop: '0.75rem' }}>
+            <FormLancarRecebimento
+              seguradoras={seguradoras}
+              usuarioId={user?.id}
+              onSalvo={() => {
+                setMostrarFormLancamento(false)
+                setSucesso('Recebimento lançado — já está esperando conciliação em Financeiro → Conciliação.')
+              }}
+              onCancelar={() => setMostrarFormLancamento(false)}
+            />
+          </div>
+        )}
       </div>
 
       <h4>Lotes Recebidos</h4>
@@ -1165,7 +1182,6 @@ function RepassesTab() {
   const { user } = useAuth()
   const [linhas, setLinhas] = useState(null)
   const [corretores, setCorretores] = useState([])
-  const [filtroFaixa, setFiltroFaixa] = useState('')
   const [carregando, setCarregando] = useState(true)
   const [aguardandoDistribuicao, setAguardandoDistribuicao] = useState([])
 
@@ -1201,8 +1217,6 @@ function RepassesTab() {
   const nomesPorId = Object.fromEntries(corretores.map((c) => [c.id, c.nome_completo]))
   const acionaveis = linhas.filter((l) => !l.aguardandoRecebimento)
   const aguardando = linhas.filter((l) => l.aguardandoRecebimento)
-  const resumo = resumirPorFaixaAtraso(acionaveis, 'valor_repasse_corretor')
-  const linhasFiltradas = filtroFaixa ? acionaveis.filter((l) => l.faixaAtraso === filtroFaixa) : acionaveis
 
   return (
     <div>
@@ -1224,28 +1238,18 @@ function RepassesTab() {
       )}
 
       <div className="kpi-grid">
-        {Object.entries(resumo.porFaixa).map(([faixa, dados]) => (
-          <KpiCard
-            key={faixa}
-            label={FAIXAS_LABEL[faixa]}
-            valor={formatarMoeda(dados.total)}
-            trendTexto={`${dados.quantidade} repasse(s)`}
-            trendTipo={faixa !== '0-30' ? 'negativo' : 'neutro'}
-            destacado={filtroFaixa === faixa}
-            onClick={() => setFiltroFaixa(filtroFaixa === faixa ? '' : faixa)}
-          />
-        ))}
+        <KpiCard label="Total a repassar" valor={formatarMoeda(acionaveis.reduce((soma, l) => soma + Number(l.valor_repasse_corretor || 0), 0))} trendTexto={`${acionaveis.length} repasse(s)`} />
       </div>
 
-      {linhasFiltradas.length === 0 ? (
-        <p className="cliente-vazio">Nenhum repasse liberado pra pagamento {filtroFaixa ? 'nessa faixa' : ''}.</p>
+      {acionaveis.length === 0 ? (
+        <p className="cliente-vazio">Nenhum repasse liberado pra pagamento.</p>
       ) : (
         <table className="cliente-tabela">
           <thead>
             <tr><th>Corretor</th><th>Seguradora</th><th>Módulo</th><th>Valor</th><th>Recebido em</th><th>Situação</th><th>Ações</th></tr>
           </thead>
           <tbody>
-            {linhasFiltradas.map((l) => (
+            {acionaveis.map((l) => (
               <LinhaRepasse key={l.id} linha={l} nomeCorretor={nomesPorId[l.corretor_id]} onAtualizado={carregar} />
             ))}
           </tbody>
@@ -1547,7 +1551,6 @@ function ConciliacaoTab() {
   const [fechamentosAgregados, setFechamentosAgregados] = useState([])
   const [erro, setErro] = useState('')
   const [seguradoras, setSeguradoras] = useState([])
-  const [mostrarFormLancamento, setMostrarFormLancamento] = useState(false)
 
   useEffect(() => {
     carregarFila()
@@ -1614,31 +1617,11 @@ function ConciliacaoTab() {
     setRecemConciliados((atual) => atual.filter((item) => item.recebimento.id !== recebimentoId))
   }
 
-  function handleRecebimentoLancado(novoRecebimento) {
-    setFila((atual) => [...(atual ?? []), novoRecebimento])
-    setMostrarFormLancamento(false)
-  }
-
   if (carregando) return <p className="cliente-carregando">Carregando fila de conciliação...</p>
 
   return (
     <div>
       {erro && <p className="cliente-vazio" style={{ color: '#b23b3b' }}>{erro}</p>}
-
-      <div style={{ marginBottom: '1rem' }}>
-        <button className="cliente-tabela-btn" onClick={() => setMostrarFormLancamento(!mostrarFormLancamento)}>
-          {mostrarFormLancamento ? 'Fechar formulário' : '+ Lançar Recebimento'}
-        </button>
-      </div>
-
-      {mostrarFormLancamento && (
-        <FormLancarRecebimento
-          seguradoras={seguradoras}
-          usuarioId={user?.id}
-          onSalvo={handleRecebimentoLancado}
-          onCancelar={() => setMostrarFormLancamento(false)}
-        />
-      )}
 
       <h3 style={{ marginTop: 0 }}>Aguardando conciliação</h3>
       {fila.length === 0 ? (
