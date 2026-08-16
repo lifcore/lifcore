@@ -145,6 +145,37 @@ export async function listarApolices({ corretorId, produto, seguradoraId, mesRef
   return data ?? []
 }
 
+/**
+ * Busca uma apólice OU contrato pelo número, pra tela de Limpeza de
+ * Teste (Master only). Procura nos dois documentos porque o Gestor
+ * não necessariamente sabe se aquele número é apólice (seguro) ou
+ * contrato (Lifcare/Lifplan) — devolve os dois catálogos, cada
+ * resultado já marcado com `tipoDocumento`.
+ */
+export async function buscarDocumentoPorNumero(numero) {
+  if (!numero?.trim()) return []
+  const termo = numero.trim()
+
+  const { data: apolices, error: erroApolices } = await operacional
+    .from('apolices')
+    .select('id, numero_apolice, nome_cliente, corretor_id, operadora_id')
+    .ilike('numero_apolice', `%${termo}%`)
+    .limit(10)
+  if (erroApolices) throw new Error(`Erro ao buscar apólices: ${erroApolices.message}`)
+
+  const { data: contratos, error: erroContratos } = await operacional
+    .from('contratos')
+    .select('id, numero_apolice')
+    .ilike('numero_apolice', `%${termo}%`)
+    .limit(10)
+  if (erroContratos) throw new Error(`Erro ao buscar contratos: ${erroContratos.message}`)
+
+  return [
+    ...(apolices ?? []).map((a) => ({ ...a, tipoDocumento: 'apolice' })),
+    ...(contratos ?? []).map((c) => ({ ...c, tipoDocumento: 'contrato' })),
+  ]
+}
+
 /** Lista todos os corretores cadastrados (para o filtro do Painel Master) */
 export async function listarCorretores() {
   const { data, error } = await supabase
