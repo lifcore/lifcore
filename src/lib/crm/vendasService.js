@@ -310,6 +310,9 @@ export async function limparHistoricoFinanceiroDeTeste({ apoliceId, contratoId }
 
   return resumo
 }
+
+/**
+ * Exclui uma Venda e suas dependências pré-financeiras (Bloco B —
  * exclusão em cascata, aprovado pelo Chief).
  *
  * NUNCA apaga fato financeiro real: bloqueia com erro claro se existir
