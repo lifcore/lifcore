@@ -4,34 +4,33 @@
  * decisão (formato conhecido / alterado / novo), só adaptada pro
  * runtime Deno e tipado.
  *
- * CORREÇÃO (15/08 — Raphael/Claude, causa raiz do erro 500 real em
- * produção, confirmado pela resposta exata da Edge Function):
- * quando `formatoHomologado.estrategia === 'ia_aprendida'`, o código
- * antigo travava com "Reaplicação de receita aprendida por IA ainda
- * não implementada" — não era bug escondido, era um caminho deixado
+ * CORREÇÃO 1 (15/08 — causa raiz do erro 500 confirmado pela resposta
+ * exata da Edge Function): quando `formatoHomologado.estrategia ===
+ * 'ia_aprendida'`, o código antigo travava com "Reaplicação de receita
+ * aprendida por IA ainda não implementada" — caminho deixado
  * incompleto de propósito. O que fica salvo em `receita_extracao` é só
  * uma DESCRIÇÃO EM TEXTO de como os campos foram identificados da
- * última vez — não é um parser determinístico reaplicável (diferente
- * da estratégia Suhai, que é código puro). Construir um motor que
- * transforma essa descrição em texto num parser de verdade é feature
- * própria, maior, ainda não construída.
+ * última vez, não um parser reaplicável. Até um motor de "replay" de
+ * verdade existir, a correção honesta é chamar a IA de novo — mesmo
+ * caminho de um formato nunca visto.
  *
- * Até esse motor de "replay" existir, a correção honesta é: quando o
- * formato foi aprendido por IA, chama a IA de novo — exatamente o
- * mesmo caminho usado pra formato nunca visto. Custa uma chamada de
- * API a mais por documento desse tipo (não é grátis como Suhai), mas
- * funciona corretamente, sem inventar nenhuma "receita" que não existe
- * de verdade.
+ * CORREÇÃO 2 (15/08 — decisão arquitetural do Raphael): removida a
+ * estratégia Suhai hardcoded (`estrategias/suhai.ts`) do orquestrador.
+ * Motivo: um parser fixo, amarrado a colunas exatas do relatório de
+ * hoje, quebra silenciosamente (ou pior, extrai dado errado sem
+ * travar) se a seguradora mudar o layout — exigindo código novo toda
+ * vez. Isso contraria o propósito do Motor Universal, que deveria
+ * absorver mudança de formato sem precisar de deploy novo. A partir
+ * de agora, TODA seguradora passa pelo caminho de IA (adaptativo) —
+ * o arquivo `suhai.ts` continua existindo em disco (histórico), só não
+ * é mais importado nem usado aqui.
  */
 
 // deno-lint-ignore-file no-explicit-any
-import { calcularAssinaturaEstrutural, estrategiaCompativel } from './identificacao.ts'
+import { calcularAssinaturaEstrutural } from './identificacao.ts'
 import { validarTudo } from './validacao.ts'
 import { detectarAlteracao, calcularConfianca } from './confianca.ts'
-import estrategiaSuhai from './estrategias/suhai.ts'
 import * as extracaoAdaptativa from './extracao-adaptativa.ts'
-
-const ESTRATEGIAS_CONHECIDAS = [estrategiaSuhai]
 
 async function identificarSeguradoraPorCatalogo(linhas: string[], institucionalDb: any) {
   const { data: operadoras, error } = await institucionalDb.from('operadoras').select('id, nome')
@@ -64,10 +63,6 @@ async function buscarFormatoHomologado(seguradoraId: string | null, tipoDocument
     .maybeSingle()
   if (error) throw new Error(`Erro ao buscar formato homologado: ${error.message}`)
   return data
-}
-
-function encontrarEstrategiaPorNome(nome: string) {
-  return ESTRATEGIAS_CONHECIDAS.find((e) => e.nome === nome) ?? null
 }
 
 function classificar(valorBruto: number) {
@@ -103,43 +98,16 @@ export async function processarDocumento({
   const formatoHomologado = await buscarFormatoHomologado(seguradora?.id ?? null, tipoDocumento, operacionalDb)
   const { alterado } = detectarAlteracao(formatoHomologado, assinatura)
 
-  let resultadoExtracao: any
-  let origemExtracao: string
-  let estrategiaUsada: string | null
-
-  if (formatoHomologado && !alterado && formatoHomologado.estrategia === 'ia_aprendida') {
-    // Formato homologado, mas a estratégia salva foi aprendida por IA
-    // — não existe motor de "replay" de receita ainda (ver comentário
-    // do topo do arquivo). Chama a IA de novo, mesmo caminho de um
-    // formato nunca visto.
-    resultadoExtracao = await extracaoAdaptativa.extrair(linhas.join('\n'))
-    origemExtracao = 'conhecida_ia_reaplicada'
-    estrategiaUsada = 'ia_aprendida'
-  } else if (formatoHomologado && !alterado) {
-    const estrategia = encontrarEstrategiaPorNome(formatoHomologado.estrategia)
-    if (!estrategia) throw new Error(`Formato homologado aponta pra estratégia "${formatoHomologado.estrategia}", que não está registrada.`)
-    resultadoExtracao = estrategia.extrair(linhas)
-    origemExtracao = 'conhecida'
-    estrategiaUsada = estrategia.nome
-  } else if (formatoHomologado && alterado) {
-    const estrategia = encontrarEstrategiaPorNome(formatoHomologado.estrategia)
-    resultadoExtracao = estrategia
-      ? estrategia.extrair(linhas)
-      : { eventos: [], nomeOrigemDocumento: seguradora?.nome, periodoInicio: null, periodoFim: null, totalInformadoDocumento: null }
-    origemExtracao = 'conhecida_alterada'
-    estrategiaUsada = estrategia?.nome ?? null
-  } else {
-    const estrategiaCompativelEncontrada = ESTRATEGIAS_CONHECIDAS.find((e) => estrategiaCompativel(e, assinatura.camposDetectados))
-    if (estrategiaCompativelEncontrada) {
-      resultadoExtracao = estrategiaCompativelEncontrada.extrair(linhas)
-      origemExtracao = 'conhecida_sem_homologacao_formal'
-      estrategiaUsada = estrategiaCompativelEncontrada.nome
-    } else {
-      resultadoExtracao = await extracaoAdaptativa.extrair(linhas.join('\n'))
-      origemExtracao = 'adaptativa'
-      estrategiaUsada = 'ia_aprendida'
-    }
-  }
+  // Nenhuma estratégia de código fixo registrada mais — só IA por
+  // token (ver Correção 2 acima). Todo caminho que antes tentava
+  // achar um parser de código cai direto na IA — não existe mais
+  // ramificação por "estratégia registrada". Homologado ou não,
+  // alterado ou não: sempre IA. O `formatoHomologado` continua sendo
+  // consultado (e influencia o nível de confiança abaixo), só não
+  // decide mais QUAL parser rodar.
+  const resultadoExtracao = (await extracaoAdaptativa.extrair(linhas.join('\n'))) as any
+  const origemExtracao = formatoHomologado && !alterado ? 'conhecida_ia_reaplicada' : formatoHomologado && alterado ? 'conhecida_alterada_ia' : 'adaptativa'
+  const estrategiaUsada = 'ia_aprendida'
 
   const eventosClassificados = resultadoExtracao.eventos.map((e: any) => ({
     ...e,
