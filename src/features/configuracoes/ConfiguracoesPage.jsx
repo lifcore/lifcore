@@ -1,9 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import '../../styles/lcds-tokens.css'
 import InfoTooltip from '../../components/InfoTooltip'
 import { cadastrarCorretor } from '../../lib/crm/clientesService'
 import { listarPerfis, atualizarPerfil, desativarPerfil, reativarPerfil, transferirCarteira } from '../../lib/crm/perfisService'
+import {
+  listarPercentuaisPadraoCorretor,
+  salvarPercentualPadraoCorretor,
+  excluirPercentualPadraoCorretor,
+  MODULOS_PERCENTUAL_PADRAO,
+} from '../../lib/crm/apolicesService'
 import { operacional } from '../../lib/supabaseSchemas'
 import { useAuth } from '../auth/AuthContext'
 import SeguradorasCard from './MasterCenterSeguradoras'
@@ -140,10 +146,12 @@ export default function ConfiguracoesPage() {
 }
 
 function ListaCorretores() {
+  const { perfil } = useAuth()
   const [perfis, setPerfis] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [editandoId, setEditandoId] = useState(null)
   const [rascunho, setRascunho] = useState({})
+  const [expandidoPercentuaisId, setExpandidoPercentuaisId] = useState(null)
 
   useEffect(() => {
     carregar()
@@ -194,11 +202,12 @@ function ListaCorretores() {
         <div className="ls-card" style={{ marginTop: '0.75rem', padding: 0 }}>
           <table className="cliente-tabela">
             <thead>
-              <tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Status</th><th>Ações</th></tr>
+              <tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Status</th><th>Comissão</th><th>Ações</th></tr>
             </thead>
             <tbody>
               {perfis.map((p) => (
-                <tr key={p.id}>
+                <Fragment key={p.id}>
+                <tr>
                   {editandoId === p.id ? (
                     <>
                       <td><input value={rascunho.nome_completo} onChange={(e) => setRascunho({ ...rascunho, nome_completo: e.target.value })} /></td>
@@ -212,6 +221,7 @@ function ListaCorretores() {
                         </select>
                       </td>
                       <td>{p.ativo ? 'Ativo' : 'Inativo'}</td>
+                      <td>—</td>
                       <td className="cliente-tabela-acoes">
                         <button className="cliente-tabela-btn" onClick={() => salvarEdicao(p.id)}>Salvar</button>
                         <button className="cliente-tabela-btn" onClick={() => setEditandoId(null)}>Cancelar</button>
@@ -227,6 +237,15 @@ function ListaCorretores() {
                           {p.ativo ? 'Ativo' : 'Inativo'}
                         </span>
                       </td>
+                      <td>
+                        <button
+                          className="ls-btn ls-btn-ghost"
+                          style={{ fontSize: '0.8rem' }}
+                          onClick={() => setExpandidoPercentuaisId(expandidoPercentuaisId === p.id ? null : p.id)}
+                        >
+                          % por módulo
+                        </button>
+                      </td>
                       <td className="cliente-tabela-acoes">
                         <button className="cliente-tabela-btn" onClick={() => iniciarEdicao(p)}>Editar</button>
                         {p.ativo ? (
@@ -238,11 +257,134 @@ function ListaCorretores() {
                     </>
                   )}
                 </tr>
+                {expandidoPercentuaisId === p.id && (
+                  <tr>
+                    <td colSpan={6}>
+                      <PainelPercentuaisCorretor corretorId={p.id} usuarioId={perfil?.id} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
         </div>
       )}
+    </div>
+  )
+}
+
+const ROTULOS_MODULO = {
+  saude: 'Lifcare (Saúde)',
+  auto: 'Lifleet (Auto)',
+  lifsure: 'Lifsure',
+  lishield: 'Lishield',
+  lifplan: 'Lifplan',
+}
+
+/**
+ * % padrão por módulo (Etapa 4, Peça 6). Quando cadastrado, o
+ * vendasService usa isso pra montar sozinho a composição da venda
+ * (Corretor X% / LifitSeg 100−X%) — sem precisar de nenhuma ação
+ * manual em cada venda. Sem cadastro aqui, a venda fica sem composição
+ * automática, e o Gestor define manualmente em Financeiro → Repasses
+ * ("Incluir Participante").
+ */
+function PainelPercentuaisCorretor({ corretorId, usuarioId }) {
+  const [percentuais, setPercentuais] = useState({})
+  const [carregando, setCarregando] = useState(true)
+  const [salvandoModulo, setSalvandoModulo] = useState(null)
+  const [erro, setErro] = useState('')
+
+  useEffect(() => {
+    carregar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [corretorId])
+
+  async function carregar() {
+    setCarregando(true)
+    try {
+      const lista = await listarPercentuaisPadraoCorretor(corretorId)
+      const mapa = {}
+      for (const l of lista) mapa[l.modulo] = { id: l.id, percentual: String(l.percentual) }
+      setPercentuais(mapa)
+    } catch (e) {
+      setErro(e.message)
+    }
+    setCarregando(false)
+  }
+
+  function atualizarValor(modulo, valor) {
+    setPercentuais((atual) => ({ ...atual, [modulo]: { ...atual[modulo], percentual: valor } }))
+  }
+
+  async function handleSalvar(modulo) {
+    const valor = percentuais[modulo]?.percentual
+    if (valor === undefined || valor === '') return
+    setSalvandoModulo(modulo)
+    setErro('')
+    try {
+      await salvarPercentualPadraoCorretor({ corretorId, modulo, percentual: Number(valor), usuarioId })
+      carregar()
+    } catch (e) {
+      setErro(e.message)
+    }
+    setSalvandoModulo(null)
+  }
+
+  async function handleExcluir(modulo) {
+    const id = percentuais[modulo]?.id
+    if (!id) return
+    setSalvandoModulo(modulo)
+    setErro('')
+    try {
+      await excluirPercentualPadraoCorretor(id)
+      carregar()
+    } catch (e) {
+      setErro(e.message)
+    }
+    setSalvandoModulo(null)
+  }
+
+  if (carregando) return <p style={{ fontSize: '0.8rem' }}>Carregando...</p>
+
+  return (
+    <div className="ls-card" style={{ padding: '0.75rem' }}>
+      <p className="config-instrucao" style={{ marginTop: 0 }}>
+        % padrão que este corretor recebe da comissão em cada módulo (o restante fica com a LifitSeg). Deixe em branco os módulos onde ele não atua.
+      </p>
+      {erro && <p className="ls-modal-erro">{erro}</p>}
+      <div className="config-form-grid">
+        {MODULOS_PERCENTUAL_PADRAO.map((modulo) => (
+          <div key={modulo}>
+            <label>{ROTULOS_MODULO[modulo]}</label>
+            <div style={{ display: 'flex', gap: '0.3rem' }}>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={percentuais[modulo]?.percentual ?? ''}
+                onChange={(e) => atualizarValor(modulo, e.target.value)}
+                placeholder="Ex: 70"
+                style={{ width: '80px' }}
+              />
+              <button
+                className="cliente-tabela-btn"
+                onClick={() => handleSalvar(modulo)}
+                disabled={salvandoModulo === modulo || !percentuais[modulo]?.percentual}
+              >
+                Salvar
+              </button>
+              {percentuais[modulo]?.id && (
+                <button className="ls-btn ls-btn-ghost" onClick={() => handleExcluir(modulo)} disabled={salvandoModulo === modulo}>
+                  Remover
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

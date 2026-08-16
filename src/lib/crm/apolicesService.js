@@ -156,6 +156,72 @@ export async function listarCorretores() {
   return data ?? []
 }
 
+// ============================================================
+// PERCENTUAL PADRÃO POR CORRETOR × MÓDULO (Etapa 4, Peça 6 — aprovado
+// pelo Chief/Raphael). Usado pro vendasService auto-preencher a
+// composição da venda sozinho, sem exigir cadastro manual pra cada
+// venda — só quando o corretor tiver esse percentual já definido pro
+// módulo daquela venda. Sem cadastro, cai automaticamente no fluxo
+// manual ("Incluir Participante", em Repasses).
+// ============================================================
+
+const MODULOS_PERCENTUAL_PADRAO = ['saude', 'auto', 'lifsure', 'lishield', 'lifplan']
+export { MODULOS_PERCENTUAL_PADRAO }
+
+/** Lista os percentuais já cadastrados de um corretor, um por módulo */
+export async function listarPercentuaisPadraoCorretor(corretorId) {
+  const { data, error } = await operacional
+    .from('percentuais_padrao_corretor')
+    .select('*')
+    .eq('corretor_id', corretorId)
+    .order('modulo')
+  if (error) throw new Error(`Erro ao listar percentuais do corretor: ${error.message}`)
+  return data ?? []
+}
+
+/**
+ * Cadastra ou atualiza o percentual padrão de um corretor num módulo —
+ * upsert manual (não uso `.upsert()` do Supabase aqui porque quero
+ * diferenciar criar de atualizar explicitamente, e o índice único já
+ * garante no banco que nunca duplica corretor+módulo).
+ */
+export async function salvarPercentualPadraoCorretor({ corretorId, modulo, percentual, usuarioId }) {
+  if (!MODULOS_PERCENTUAL_PADRAO.includes(modulo)) throw new Error(`Módulo inválido: ${modulo}`)
+  if (percentual === null || percentual === undefined || Number(percentual) <= 0 || Number(percentual) > 100) {
+    throw new Error('Percentual precisa estar entre 0 (exclusivo) e 100.')
+  }
+
+  const { data: existente, error: erroExistente } = await operacional
+    .from('percentuais_padrao_corretor')
+    .select('id')
+    .eq('corretor_id', corretorId)
+    .eq('modulo', modulo)
+    .maybeSingle()
+  if (erroExistente) throw new Error(`Erro ao verificar percentual existente: ${erroExistente.message}`)
+
+  if (existente) {
+    const { error } = await operacional
+      .from('percentuais_padrao_corretor')
+      .update({ percentual: Number(percentual), atualizado_em: new Date().toISOString() })
+      .eq('id', existente.id)
+    if (error) throw new Error(`Erro ao atualizar percentual padrão: ${error.message}`)
+    return existente.id
+  }
+
+  const { data, error } = await operacional
+    .from('percentuais_padrao_corretor')
+    .insert({ corretor_id: corretorId, modulo, percentual: Number(percentual), criado_por: usuarioId || null })
+    .select()
+    .single()
+  if (error) throw new Error(`Erro ao cadastrar percentual padrão: ${error.message}`)
+  return data.id
+}
+
+export async function excluirPercentualPadraoCorretor(id) {
+  const { error } = await operacional.from('percentuais_padrao_corretor').delete().eq('id', id)
+  if (error) throw new Error(`Erro ao excluir percentual padrão: ${error.message}`)
+}
+
 /**
  * Agrupa as apólices por corretor + produto, somando o prêmio total —
  * é a "visão bruta" do Painel Master (fechamento mensal de referência).
