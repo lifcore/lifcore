@@ -41,6 +41,7 @@ import {
 import { uploadLoteImportacao, listarLotesImportacao, listarEventosPorLote, confirmarFormatoHomologado, excluirLote, listarSeguradorasCatalogo, atribuirSeguradoraEReprocessar, reprocessarLote } from '../../lib/crm/lotesImportacaoService'
 import { useAuth } from '../auth/AuthContext'
 import { listarCatalogoSeguradoras, listarApolices, listarCorretores } from '../../lib/crm/apolicesService'
+import { vendaTemComposicao, definirComposicaoManual } from '../../lib/crm/vendasService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
 import { operacional } from '../../lib/supabaseSchemas'
 import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
@@ -1140,14 +1141,31 @@ function LinhaLote({ lote, usuarioId, ehMaster, seguradoras, onAtualizado }) {
 }
 
 function RepassesTab() {
+  const { user } = useAuth()
   const [linhas, setLinhas] = useState(null)
   const [corretores, setCorretores] = useState([])
   const [filtroFaixa, setFiltroFaixa] = useState('')
   const [carregando, setCarregando] = useState(true)
+  const [aguardandoDistribuicao, setAguardandoDistribuicao] = useState([])
 
   useEffect(() => {
     carregar()
+    carregarAguardandoDistribuicao()
   }, [])
+
+  async function carregarAguardandoDistribuicao() {
+    try {
+      const dados = await listarRecebimentosConciliadosAguardandoDistribuicao()
+      setAguardandoDistribuicao(dados)
+    } catch (e) {
+      // silencioso — não é crítico pro resto da tela funcionar
+    }
+  }
+
+  function handleDistribuidoNestaTab(recebimentoId) {
+    setAguardandoDistribuicao((atual) => atual.filter((r) => r.id !== recebimentoId))
+    carregar() // repasses recém-gerados já aparecem na lista principal
+  }
 
   async function carregar() {
     setCarregando(true)
@@ -1167,6 +1185,22 @@ function RepassesTab() {
 
   return (
     <div>
+
+      {aguardandoDistribuicao.length > 0 && (
+        <>
+          <h3 style={{ marginTop: 0 }}>Recebimentos conciliados, aguardando composição/distribuição</h3>
+          {aguardandoDistribuicao.map((r) => (
+            <LinhaAguardandoDistribuicao
+              key={r.id}
+              recebimento={r}
+              venda={r.venda}
+              corretores={corretores}
+              usuarioId={user?.id}
+              onDistribuido={handleDistribuidoNestaTab}
+            />
+          ))}
+        </>
+      )}
 
       <div className="kpi-grid">
         {Object.entries(resumo.porFaixa).map(([faixa, dados]) => (
@@ -1216,6 +1250,137 @@ function RepassesTab() {
             </tbody>
           </table>
         </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Recebimento já conciliado (Peça 3), aguardando virar repasse de
+ * verdade (Etapa 4, Peça 6). Dois caminhos:
+ * - Composição já existe (automática, via % padrão do corretor) →
+ *   só mostra "Distribuir".
+ * - Composição não existe → "Incluir Participante", cadastro manual
+ *   com trava de 100% antes de liberar a distribuição.
+ */
+function LinhaAguardandoDistribuicao({ recebimento, venda, corretores, usuarioId, onDistribuido }) {
+  const [temComposicao, setTemComposicao] = useState(null)
+  const [participantes, setParticipantes] = useState([{ tipo: 'corretor', corretorId: '', percentual: '' }])
+  const [salvandoComposicao, setSalvandoComposicao] = useState(false)
+  const [distribuindo, setDistribuindo] = useState(false)
+  const [erro, setErro] = useState('')
+
+  useEffect(() => {
+    if (!venda?.id) return
+    vendaTemComposicao(venda.id).then(setTemComposicao).catch((e) => setErro(e.message))
+  }, [venda?.id])
+
+  const somaPercentual = participantes.reduce((soma, p) => soma + (Number(p.percentual) || 0), 0)
+
+  function atualizarParticipante(index, campo, valor) {
+    setParticipantes((atual) => atual.map((p, i) => (i === index ? { ...p, [campo]: valor } : p)))
+  }
+
+  function adicionarParticipante(tipo) {
+    setParticipantes((atual) => [...atual, { tipo, corretorId: '', percentual: '' }])
+  }
+
+  function removerParticipante(index) {
+    setParticipantes((atual) => (atual.length > 1 ? atual.filter((_, i) => i !== index) : atual))
+  }
+
+  async function handleConfirmarComposicao() {
+    setSalvandoComposicao(true)
+    setErro('')
+    try {
+      await definirComposicaoManual({
+        vendaId: venda.id,
+        participantes: participantes.map((p) => ({
+          tipo: p.tipo,
+          corretorId: p.tipo === 'corretor' ? p.corretorId : undefined,
+          percentual: Number(p.percentual),
+        })),
+      })
+      setTemComposicao(true)
+    } catch (e) {
+      setErro(e.message)
+    }
+    setSalvandoComposicao(false)
+  }
+
+  async function handleDistribuir() {
+    setDistribuindo(true)
+    setErro('')
+    try {
+      await distribuirRecebimento(recebimento.id, usuarioId)
+      onDistribuido(recebimento.id)
+    } catch (e) {
+      setErro(e.message)
+    }
+    setDistribuindo(false)
+  }
+
+  return (
+    <div className="ls-card" style={{ padding: '0.75rem', marginBottom: '0.75rem' }}>
+      <div><strong>Recebimento</strong> {recebimento.id} → <strong>Venda</strong> {venda?.id ?? '—'}</div>
+      <div>Líquido: {formatarMoeda(recebimento.valor_liquido)}</div>
+
+      {erro && <p className="ls-modal-erro">{erro}</p>}
+
+      {temComposicao === null ? (
+        <p style={{ fontSize: '0.8rem' }}>Verificando composição...</p>
+      ) : temComposicao ? (
+        <button className="cliente-tabela-btn" onClick={handleDistribuir} disabled={distribuindo} style={{ marginTop: '0.5rem' }}>
+          {distribuindo ? 'Distribuindo...' : 'Distribuir'}
+        </button>
+      ) : (
+        <div style={{ marginTop: '0.5rem' }}>
+          <p className="config-instrucao">
+            Esta venda não tem composição (o corretor não tem % padrão cadastrado, ou é um caso de divisão entre participantes). Defina abaixo — a soma precisa fechar exatamente 100%.
+          </p>
+          {participantes.map((p, i) => (
+            <div className="cotacao-form-linha" key={i} style={{ alignItems: 'flex-end', marginBottom: '0.4rem' }}>
+              <div>
+                <label>Tipo</label>
+                <select value={p.tipo} onChange={(e) => atualizarParticipante(i, 'tipo', e.target.value)}>
+                  <option value="corretor">Corretor</option>
+                  <option value="lifitseg">LifitSeg</option>
+                </select>
+              </div>
+              {p.tipo === 'corretor' && (
+                <div>
+                  <label>Corretor</label>
+                  <select value={p.corretorId} onChange={(e) => atualizarParticipante(i, 'corretorId', e.target.value)}>
+                    <option value="">Selecione</option>
+                    {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome_completo}</option>)}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label>Percentual</label>
+                <input type="number" step="0.01" value={p.percentual} onChange={(e) => atualizarParticipante(i, 'percentual', e.target.value)} style={{ width: '80px' }} />
+              </div>
+              {participantes.length > 1 && (
+                <button className="ls-btn ls-btn-ghost" onClick={() => removerParticipante(i)}>Remover</button>
+              )}
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.4rem' }}>
+            <button className="ls-btn ls-btn-ghost" onClick={() => adicionarParticipante('corretor')}>+ Corretor</button>
+            <button className="ls-btn ls-btn-ghost" onClick={() => adicionarParticipante('lifitseg')}>+ LifitSeg</button>
+            <span style={{ fontSize: '0.85rem' }}>
+              Soma: <strong style={{ color: Math.abs(somaPercentual - 100) < 0.01 ? 'var(--ls-success, #2f7a3d)' : 'var(--ls-danger, #b23b3b)' }}>{somaPercentual.toFixed(2)}%</strong>
+            </span>
+          </div>
+          <button
+            className="cliente-tabela-btn"
+            style={{ marginTop: '0.5rem' }}
+            onClick={handleConfirmarComposicao}
+            disabled={salvandoComposicao || Math.abs(somaPercentual - 100) > 0.01}
+          >
+            {salvandoComposicao ? 'Salvando...' : 'Confirmar Composição'}
+          </button>
+        </div>
       )}
     </div>
   )

@@ -71,17 +71,19 @@ export async function criarVendaSeElegivel({
   let valorBase = 0
   let produtoId = null
   let operadoraId = null
+  let corretorId = null
 
   if (apoliceId) {
     const { data: apolice, error: erroApolice } = await operacional
       .from('apolices')
-      .select('premio, produto_id, operadora_id')
+      .select('premio, produto_id, operadora_id, corretor_id')
       .eq('id', apoliceId)
       .single()
     if (erroApolice) throw new Error(`Erro ao buscar dados da apólice para a venda: ${erroApolice.message}`)
     valorBase = apolice?.premio ?? 0
     produtoId = apolice?.produto_id ?? null
     operadoraId = apolice?.operadora_id ?? null
+    corretorId = apolice?.corretor_id ?? null
   } else if (contratoId) {
     const { data: contrato, error: erroContrato } = await operacional
       .from('contratos')
@@ -121,7 +123,113 @@ export async function criarVendaSeElegivel({
   }
   if (error) throw new Error(`Erro ao criar venda: ${error.message}`)
 
+  // Auto-preenchimento da composição (Etapa 4, Peça 6 — aprovado pelo
+  // Chief/Raphael). Efeito colateral, igual ao vitalício e ao próprio
+  // geraComissao: uma falha aqui NUNCA pode impedir a Venda de nascer
+  // — só fica sem composição automática, caindo no fluxo manual
+  // ("Incluir Participante", em Repasses).
+  try {
+    await criarComposicaoAutomaticaSeElegivel({ vendaId: venda.id, corretorId, modulo })
+  } catch (erroComposicao) {
+    // Não interrompe o retorno de sucesso da Venda — só não preenche
+    // sozinho. Silencioso de propósito aqui; quem quiser saber o motivo
+    // vê a venda sem composição na tela de Repasses.
+  }
+
   return venda
+}
+
+/**
+ * Composição automática da venda (Etapa 4, Peça 6). Só cria se:
+ * - o corretor tiver percentual padrão cadastrado pra esse módulo
+ *   (`percentuais_padrao_corretor`);
+ * - a venda ainda não tiver nenhuma composição (idempotente — nunca
+ *   duplica nem sobrescreve algo que o Gestor já ajustou manualmente).
+ * Sem essas condições, não faz nada — a venda fica sem composição,
+ * aguardando "Incluir Participante" manual em Repasses.
+ */
+export async function criarComposicaoAutomaticaSeElegivel({ vendaId, corretorId, modulo }) {
+  if (!corretorId || !modulo) return { criada: false, motivo: 'sem corretor_id ou módulo' }
+
+  const { count: qtdExistente, error: erroExistente } = await operacional
+    .from('venda_composicao')
+    .select('id', { count: 'exact', head: true })
+    .eq('venda_id', vendaId)
+  if (erroExistente) throw new Error(`Erro ao verificar composição existente: ${erroExistente.message}`)
+  if (qtdExistente > 0) return { criada: false, motivo: 'venda já tem composição (não sobrescreve)' }
+
+  const { data: padrao, error: erroPadrao } = await operacional
+    .from('percentuais_padrao_corretor')
+    .select('percentual')
+    .eq('corretor_id', corretorId)
+    .eq('modulo', modulo)
+    .maybeSingle()
+  if (erroPadrao) throw new Error(`Erro ao buscar percentual padrão do corretor: ${erroPadrao.message}`)
+  if (!padrao?.percentual) return { criada: false, motivo: 'corretor sem percentual padrão cadastrado nesse módulo' }
+
+  const percentualCorretor = Number(padrao.percentual)
+  const percentualLifitseg = Number((100 - percentualCorretor).toFixed(2))
+
+  // Constraint do banco exige percentual > 0 — se o corretor tiver
+  // 100% cadastrado, não existe linha de LifitSeg pra criar (0% não é
+  // permitido, e também não faria sentido ter um participante com 0).
+  const linhas = [{ venda_id: vendaId, participante_tipo: 'corretor', corretor_id: corretorId, papel: 'vendedor', percentual: percentualCorretor }]
+  if (percentualLifitseg > 0) {
+    linhas.push({ venda_id: vendaId, participante_tipo: 'lifitseg', papel: 'organizacao', percentual: percentualLifitseg })
+  }
+
+  const { error: erroInsert } = await operacional.from('venda_composicao').insert(linhas)
+  if (erroInsert) throw new Error(`Erro ao criar composição automática: ${erroInsert.message}`)
+
+  return { criada: true, percentualCorretor, percentualLifitseg }
+}
+
+/**
+ * Composição manual (Etapa 4, Peça 6) — pro caso raro de 2+ corretores
+ * dividindo a mesma venda, ou quando o corretor não tem percentual
+ * padrão cadastrado. Trava absoluta: soma dos percentuais tem que
+ * fechar exatamente 100%, senão nem grava — nunca fica composição
+ * incompleta no banco.
+ */
+export async function definirComposicaoManual({ vendaId, participantes }) {
+  if (!Array.isArray(participantes) || participantes.length === 0) {
+    throw new Error('Informe ao menos um participante.')
+  }
+  const somaPercentual = participantes.reduce((soma, p) => soma + Number(p.percentual || 0), 0)
+  if (Math.abs(somaPercentual - 100) > 0.01) {
+    throw new Error(`A soma dos percentuais precisa fechar exatamente 100% (está em ${somaPercentual.toFixed(2)}%).`)
+  }
+
+  const { count: qtdExistente, error: erroExistente } = await operacional
+    .from('venda_composicao')
+    .select('id', { count: 'exact', head: true })
+    .eq('venda_id', vendaId)
+  if (erroExistente) throw new Error(`Erro ao verificar composição existente: ${erroExistente.message}`)
+  if (qtdExistente > 0) {
+    throw new Error('Esta venda já tem composição cadastrada — exclua antes de redefinir.')
+  }
+
+  const linhas = participantes.map((p) => ({
+    venda_id: vendaId,
+    participante_tipo: p.tipo,
+    corretor_id: p.tipo === 'corretor' ? p.corretorId : null,
+    parceiro_comercial_id: p.tipo === 'corretora_parceira' ? p.parceiroComercialId : null,
+    papel: p.papel || (p.tipo === 'lifitseg' ? 'organizacao' : 'vendedor'),
+    percentual: Number(p.percentual),
+  }))
+
+  const { error } = await operacional.from('venda_composicao').insert(linhas)
+  if (error) throw new Error(`Erro ao definir composição: ${error.message}`)
+}
+
+/** Checa se uma venda já tem composição cadastrada (automática ou manual) */
+export async function vendaTemComposicao(vendaId) {
+  const { count, error } = await operacional
+    .from('venda_composicao')
+    .select('id', { count: 'exact', head: true })
+    .eq('venda_id', vendaId)
+  if (error) throw new Error(`Erro ao verificar composição: ${error.message}`)
+  return count > 0
 }
 
 /**
