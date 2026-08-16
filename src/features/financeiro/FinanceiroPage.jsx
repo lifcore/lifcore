@@ -83,8 +83,6 @@ const TEXTOS_ABA = {
 }
 
 export default function FinanceiroPage() {
-  const { perfil } = useAuth()
-  const ehMaster = perfil?.papel === 'master'
   const [searchParams, setSearchParams] = useSearchParams()
   const abaAtiva = searchParams.get('aba') || 'lancamentos'
   function setAbaAtiva(aba) { setSearchParams({ aba }) }
@@ -104,11 +102,6 @@ export default function FinanceiroPage() {
         <button className={`cliente-aba ${abaAtiva === 'conciliacao' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('conciliacao')}>Conciliação</button>
         <button className={`cliente-aba ${abaAtiva === 'fluxo' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('fluxo')}>Fluxo de Caixa</button>
         <button className={`cliente-aba ${abaAtiva === 'buscar' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('buscar')}>Buscar</button>
-        {ehMaster && (
-          <button className={`cliente-aba ${abaAtiva === 'limpeza' ? 'cliente-aba-ativa' : ''}`} onClick={() => setAbaAtiva('limpeza')} style={{ color: 'var(--ls-danger, #b23b3b)' }}>
-            🧹 Limpeza (Master)
-          </button>
-        )}
       </div>
 
       {abaAtiva === 'pendencias' && <PendenciasTab setAbaAtiva={setAbaAtiva} />}
@@ -117,7 +110,6 @@ export default function FinanceiroPage() {
       {abaAtiva === 'conciliacao' && <ConciliacaoTab />}
       {abaAtiva === 'fluxo' && <FluxoCaixaTab />}
       {abaAtiva === 'buscar' && <BuscaGlobalTab />}
-      {abaAtiva === 'limpeza' && ehMaster && <LimpezaTesteTab />}
 
       {abaAtiva === 'lancamentos' && <ComissoesSugeridasTab />}
     </div>
@@ -712,116 +704,6 @@ function PendenciasTab({ setAbaAtiva }) {
   )
 }
 
-/**
- * LIMPEZA (MASTER) — achado do Raphael, 16/08. Caminho oficial e
- * separado do Bloco B: NUNCA bloqueia por fato financeiro, existe
- * exatamente pra zerar dado de teste durante validação do sistema.
- * Só visível pra Master (checado em FinanceiroPage, não aqui).
- */
-function LimpezaTesteTab() {
-  const { user } = useAuth()
-  const [termo, setTermo] = useState('')
-  const [buscando, setBuscando] = useState(false)
-  const [resultados, setResultados] = useState([])
-  const [erro, setErro] = useState('')
-  const [processandoId, setProcessandoId] = useState(null)
-  const [ultimoResumo, setUltimoResumo] = useState(null)
-
-  async function handleBuscar() {
-    setBuscando(true)
-    setErro('')
-    setUltimoResumo(null)
-    try {
-      const dados = await buscarDocumentoPorNumero(termo)
-      setResultados(dados)
-    } catch (e) {
-      setErro(e.message)
-    }
-    setBuscando(false)
-  }
-
-  async function handleLimparEExcluir(doc) {
-    const confirmacao1 = window.confirm(
-      `Isso vai APAGAR PERMANENTEMENTE todo o histórico financeiro (comissões, recebimentos, ajustes, composição) ligado à apólice/contrato "${doc.numero_apolice}", e depois excluir o próprio documento. Não é reversível. Confirma que é dado de TESTE?`
-    )
-    if (!confirmacao1) return
-    const confirmacao2 = window.confirm('Tem certeza mesmo? Essa é a última confirmação — não tem como desfazer depois.')
-    if (!confirmacao2) return
-
-    setProcessandoId(doc.id)
-    setErro('')
-    try {
-      const filtro = doc.tipoDocumento === 'apolice' ? { apoliceId: doc.id } : { contratoId: doc.id }
-      const resumo = await limparHistoricoFinanceiroDeTeste(filtro, user?.id)
-
-      if (doc.tipoDocumento === 'apolice') {
-        await excluirApolice(doc.id)
-      } else {
-        await excluirContrato(doc.id)
-      }
-
-      setUltimoResumo({ ...resumo, numeroApolice: doc.numero_apolice })
-      setResultados((atual) => atual.filter((r) => r.id !== doc.id))
-    } catch (e) {
-      setErro(e.message)
-    }
-    setProcessandoId(null)
-  }
-
-  return (
-    <div>
-      <div className="ls-card" style={{ padding: '0.85rem', marginBottom: '1rem', borderLeft: '3px solid var(--ls-danger, #b23b3b)' }}>
-        <strong>⚠️ Zona de risco — só Master.</strong>
-        <p className="config-instrucao" style={{ marginTop: '0.4rem' }}>
-          Apaga permanentemente todo o histórico financeiro (comissões, recebimentos, ajustes, composição) de uma apólice/contrato, mesmo já conciliado ou distribuído, e depois exclui o próprio documento. Feito pra limpar dado de TESTE — nunca use isso em dado real de produção.
-        </p>
-      </div>
-
-      <div className="cotacao-form-linha" style={{ alignItems: 'flex-end', marginBottom: '1rem' }}>
-        <div>
-          <label>Número da apólice/contrato</label>
-          <input value={termo} onChange={(e) => setTermo(e.target.value)} placeholder="Ex: 0001" />
-        </div>
-        <button className="cliente-tabela-btn" onClick={handleBuscar} disabled={buscando || !termo.trim()}>
-          {buscando ? 'Buscando...' : 'Buscar'}
-        </button>
-      </div>
-
-      {erro && <p className="ls-modal-erro">{erro}</p>}
-
-      {ultimoResumo && (
-        <p className="config-sucesso">
-          Apólice/contrato {ultimoResumo.numeroApolice} removido. Limpo: {ultimoResumo.vendasEncontradas} venda(s), {ultimoResumo.comissoesRemovidas} comissão(ões) do ledger, {ultimoResumo.recebimentosRemovidos} recebimento(s), {ultimoResumo.sugestoesRemovidas} sugestão(ões), {ultimoResumo.ajustesRemovidos} ajuste(s), {ultimoResumo.composicoesRemovidas} composição(ões).
-        </p>
-      )}
-
-      {resultados.length > 0 && (
-        <table className="cliente-tabela">
-          <thead><tr><th>Número</th><th>Tipo</th><th>Cliente</th><th>Ações</th></tr></thead>
-          <tbody>
-            {resultados.map((doc) => (
-              <tr key={doc.id}>
-                <td>{doc.numero_apolice}</td>
-                <td>{doc.tipoDocumento === 'apolice' ? 'Apólice' : 'Contrato'}</td>
-                <td>{doc.nome_cliente ?? '—'}</td>
-                <td>
-                  <button
-                    className="cliente-tabela-btn cliente-tabela-btn-perigo"
-                    onClick={() => handleLimparEExcluir(doc)}
-                    disabled={processandoId === doc.id}
-                  >
-                    {processandoId === doc.id ? 'Limpando...' : 'Limpar tudo e excluir'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  )
-}
-
 function BuscaGlobalTab() {
   const { perfil } = useAuth()
   const ehMaster = perfil?.papel === 'master'
@@ -839,6 +721,19 @@ function BuscaGlobalTab() {
   const [buscando, setBuscando] = useState(false)
   const [excluindo, setExcluindo] = useState(null)
   const [erroExclusao, setErroExclusao] = useState('')
+
+  // LIMPEZA DE TESTE (achado do Raphael, 16/08 — corrigido de "aba
+  // própria" pra "seção fechada, dentro da tela que já existe").
+  // NUNCA bloqueia por fato financeiro — existe exatamente pra zerar
+  // dado de teste. Fechada por padrão, só quem clicar vê.
+  const { user } = useAuth()
+  const [mostrarLimpeza, setMostrarLimpeza] = useState(false)
+  const [termoLimpeza, setTermoLimpeza] = useState('')
+  const [buscandoLimpeza, setBuscandoLimpeza] = useState(false)
+  const [resultadosLimpeza, setResultadosLimpeza] = useState([])
+  const [erroLimpeza, setErroLimpeza] = useState('')
+  const [processandoLimpezaId, setProcessandoLimpezaId] = useState(null)
+  const [resumoLimpeza, setResumoLimpeza] = useState(null)
 
   useEffect(() => {
     listarCorretores().then(setCorretores)
@@ -886,8 +781,102 @@ function BuscaGlobalTab() {
     }
   }
 
+  async function handleBuscarLimpeza() {
+    setBuscandoLimpeza(true)
+    setErroLimpeza('')
+    setResumoLimpeza(null)
+    try {
+      const dados = await buscarDocumentoPorNumero(termoLimpeza)
+      setResultadosLimpeza(dados)
+    } catch (e) {
+      setErroLimpeza(e.message)
+    }
+    setBuscandoLimpeza(false)
+  }
+
+  async function handleLimparEExcluir(doc) {
+    const confirmacao1 = window.confirm(
+      `Isso vai APAGAR PERMANENTEMENTE todo o histórico financeiro (comissões, recebimentos, ajustes, composição) ligado à apólice/contrato "${doc.numero_apolice}", e depois excluir o próprio documento. Não é reversível. Confirma que é dado de TESTE?`
+    )
+    if (!confirmacao1) return
+    const confirmacao2 = window.confirm('Tem certeza mesmo? Essa é a última confirmação — não tem como desfazer depois.')
+    if (!confirmacao2) return
+
+    setProcessandoLimpezaId(doc.id)
+    setErroLimpeza('')
+    try {
+      const filtro = doc.tipoDocumento === 'apolice' ? { apoliceId: doc.id } : { contratoId: doc.id }
+      const resumo = await limparHistoricoFinanceiroDeTeste(filtro, user?.id)
+
+      if (doc.tipoDocumento === 'apolice') {
+        await excluirApolice(doc.id)
+      } else {
+        await excluirContrato(doc.id)
+      }
+
+      setResumoLimpeza({ ...resumo, numeroApolice: doc.numero_apolice })
+      setResultadosLimpeza((atual) => atual.filter((r) => r.id !== doc.id))
+    } catch (e) {
+      setErroLimpeza(e.message)
+    }
+    setProcessandoLimpezaId(null)
+  }
+
   return (
     <div>
+      {ehMaster && (
+        <div className="ls-card" style={{ marginBottom: '1rem', padding: '0.75rem' }}>
+          <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarLimpeza((v) => !v)} style={{ color: 'var(--ls-danger, #b23b3b)' }}>
+            🧹 {mostrarLimpeza ? 'Fechar' : 'Limpar dado de teste (apaga tudo, mesmo já conciliado)'}
+          </button>
+
+          {mostrarLimpeza && (
+            <div style={{ marginTop: '0.6rem' }}>
+              <div className="cotacao-form-linha" style={{ alignItems: 'flex-end' }}>
+                <div>
+                  <label>Número da apólice/contrato</label>
+                  <input value={termoLimpeza} onChange={(e) => setTermoLimpeza(e.target.value)} placeholder="Ex: 0001" />
+                </div>
+                <button className="cliente-tabela-btn" onClick={handleBuscarLimpeza} disabled={buscandoLimpeza || !termoLimpeza.trim()}>
+                  {buscandoLimpeza ? 'Buscando...' : 'Buscar'}
+                </button>
+              </div>
+
+              {erroLimpeza && <p className="ls-modal-erro">{erroLimpeza}</p>}
+              {resumoLimpeza && (
+                <p className="config-sucesso">
+                  {resumoLimpeza.numeroApolice} removido. Limpo: {resumoLimpeza.vendasEncontradas} venda(s), {resumoLimpeza.comissoesRemovidas} comissão(ões), {resumoLimpeza.recebimentosRemovidos} recebimento(s), {resumoLimpeza.sugestoesRemovidas} sugestão(ões), {resumoLimpeza.ajustesRemovidos} ajuste(s), {resumoLimpeza.composicoesRemovidas} composição(ões).
+                </p>
+              )}
+
+              {resultadosLimpeza.length > 0 && (
+                <table className="cliente-tabela" style={{ marginTop: '0.5rem' }}>
+                  <thead><tr><th>Número</th><th>Tipo</th><th>Cliente</th><th>Ações</th></tr></thead>
+                  <tbody>
+                    {resultadosLimpeza.map((doc) => (
+                      <tr key={doc.id}>
+                        <td>{doc.numero_apolice}</td>
+                        <td>{doc.tipoDocumento === 'apolice' ? 'Apólice' : 'Contrato'}</td>
+                        <td>{doc.nome_cliente ?? '—'}</td>
+                        <td>
+                          <button
+                            className="cliente-tabela-btn cliente-tabela-btn-perigo"
+                            onClick={() => handleLimparEExcluir(doc)}
+                            disabled={processandoLimpezaId === doc.id}
+                          >
+                            {processandoLimpezaId === doc.id ? 'Limpando...' : 'Limpar tudo e excluir'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="ls-card" style={{ marginBottom: '1rem' }}>
         <div className="cotacao-form-linha">
           <div>
