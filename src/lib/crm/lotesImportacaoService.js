@@ -115,7 +115,7 @@ export async function uploadLoteImportacao({ file, enviadoPor, seguradoraId = nu
   // (via botão de reprocessar, ou de novo automaticamente se
   // reenviarmos o gatilho).
   try {
-    await dispararProcessamento(lote.id, storage)
+    await dispararProcessamento(lote.id, enviadoPor, storage)
   } catch (e) {
     console.error('Processamento automático falhou, lote ficará como "recebido":', e.message)
   }
@@ -128,10 +128,37 @@ export async function uploadLoteImportacao({ file, enviadoPor, seguradoraId = nu
  * automaticamente pelo upload — pode também ser chamada de novo
  * manualmente (ex: depois de atribuir seguradora na prévia).
  */
-export async function dispararProcessamento(loteId, clienteStorage = null) {
+/**
+ * Dispara a Edge Function que faz a extração/normalização. Chamada
+ * automaticamente pelo upload — pode também ser chamada de novo
+ * manualmente (ex: depois de atribuir seguradora na prévia).
+ *
+ * CORREÇÃO (achado do Raphael, 16/08): depois que a Edge Function
+ * processa com sucesso, se a confiança vier ALTA, dispara a ponte
+ * (`criarRecebimentosEConciliarAutomatico`) — cria os recebimentos de
+ * verdade e tenta conciliar automaticamente cada um, sem precisar de
+ * clique manual nenhum. REVISÃO/BLOQUEADO nunca disparam isso — ficam
+ * esperando o Gestor revisar na prévia, como sempre.
+ */
+export async function dispararProcessamento(loteId, usuarioId = null, clienteStorage = null) {
   const storage = clienteStorage || (await obterClienteStorage())
   const { data, error } = await storage.functions.invoke('processar-lote', { body: { loteId } })
   if (error) throw new Error(`Erro ao processar o lote: ${error.message}`)
+
+  if (data?.ok && data?.nivelConfianca === 'alta') {
+    try {
+      const { criarRecebimentosEConciliarAutomatico } = await import('./comissionamentoService')
+      const resumoPonte = await criarRecebimentosEConciliarAutomatico(loteId, usuarioId)
+      return { ...data, ponte: resumoPonte }
+    } catch (erroPonte) {
+      // Não derruba o processamento (que já teve sucesso) por causa da
+      // ponte — o lote fica processado normalmente, só sem os
+      // recebimentos automáticos; dá pra rodar a ponte de novo depois.
+      console.error('Ponte pra recebimentos falhou, lote processado normalmente mesmo assim:', erroPonte.message)
+      return data
+    }
+  }
+
   return data
 }
 
@@ -151,7 +178,7 @@ export async function listarSeguradorasCatalogo(cliente = null) {
  * automática não encontrou) + reprocessar. Substitui o que antes
  * exigia rodar SQL manual — agora é um botão na prévia.
  */
-export async function atribuirSeguradoraEReprocessar(loteId, seguradoraId, cliente = null, clienteStorage = null) {
+export async function atribuirSeguradoraEReprocessar(loteId, seguradoraId, usuarioId = null, cliente = null, clienteStorage = null) {
   const db = cliente || (await obterClientePadrao())
   const storage = clienteStorage || (await obterClienteStorage())
 
@@ -183,7 +210,7 @@ export async function atribuirSeguradoraEReprocessar(loteId, seguradoraId, clien
     .eq('id', loteId)
   if (erroUpdate) throw new Error(`Erro ao atualizar lote: ${erroUpdate.message}`)
 
-  return dispararProcessamento(loteId, storage)
+  return dispararProcessamento(loteId, usuarioId, storage)
 }
 
 /**
@@ -191,9 +218,9 @@ export async function atribuirSeguradoraEReprocessar(loteId, seguradoraId, clien
  * automático falhou (ex: instabilidade momentânea) — sem precisar
  * mexer em nada além de chamar de novo.
  */
-export async function reprocessarLote(loteId, clienteStorage = null) {
+export async function reprocessarLote(loteId, usuarioId = null, clienteStorage = null) {
   const storage = clienteStorage || (await obterClienteStorage())
-  return dispararProcessamento(loteId, storage)
+  return dispararProcessamento(loteId, usuarioId, storage)
 }
 
 export async function listarLotesImportacao(cliente = null) {

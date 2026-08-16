@@ -1030,7 +1030,7 @@ function LinhaLote({ lote, usuarioId, ehMaster, seguradoras, onAtualizado }) {
     setAtribuindo(true)
     setErroConfirmacao('')
     try {
-      await atribuirSeguradoraEReprocessar(lote.id, seguradoraEscolhida)
+      await atribuirSeguradoraEReprocessar(lote.id, seguradoraEscolhida, usuarioId)
       setEventos(null)
       onAtualizado()
     } catch (e) {
@@ -1043,7 +1043,7 @@ function LinhaLote({ lote, usuarioId, ehMaster, seguradoras, onAtualizado }) {
     setReprocessando(true)
     setErroConfirmacao('')
     try {
-      await reprocessarLote(lote.id)
+      await reprocessarLote(lote.id, usuarioId)
       setEventos(null)
       onAtualizado()
     } catch (e) {
@@ -1236,10 +1236,6 @@ function RepassesTab() {
           ))}
         </>
       )}
-
-      <div className="kpi-grid">
-        <KpiCard label="Total a repassar" valor={formatarMoeda(acionaveis.reduce((soma, l) => soma + Number(l.valor_repasse_corretor || 0), 0))} trendTexto={`${acionaveis.length} repasse(s)`} />
-      </div>
 
       {acionaveis.length === 0 ? (
         <p className="cliente-vazio">Nenhum repasse liberado pra pagamento.</p>

@@ -323,6 +323,109 @@ export async function conciliarFechamentoAgregado(recebimentoId, { operadoraId, 
   if (error) throw new Error(`Erro ao conciliar fechamento agregado: ${error.message}`)
 }
 
+// ============================================================
+// PONTE MOTOR UNIVERSAL → RECEBIMENTOS (achado do Raphael, 16/08).
+// Transforma eventos já extraídos pela IA em `recebimentos_comissao`
+// de verdade, e tenta conciliar automaticamente cada um — só quando o
+// vínculo é inequívoco (apólice + seguradora batem exato, sem
+// ambiguidade). Nunca força nada: sem match claro, o recebimento
+// nasce e fica esperando na fila manual de Conciliação, como sempre.
+// ============================================================
+
+/**
+ * Cria um `recebimentos_comissao` por evento classificado como
+ * 'recebimento' (valor positivo) do lote, e tenta conciliar cada um
+ * automaticamente. Só dispara pra lotes com confiança ALTA (chamado
+ * de `lotesImportacaoService.js`, logo após o processamento) —
+ * REVISÃO/BLOQUEADO ficam manuais, o sistema não vincula algo que
+ * ele mesmo está inseguro de ter lido certo.
+ *
+ * Eventos 'ajuste_estorno' (valor negativo) e 'zero_sem_recebimento'
+ * NÃO são convertidos aqui ainda — ficam só na prévia do lote,
+ * aguardando desenho próprio (registrado, não esquecido).
+ */
+export async function criarRecebimentosEConciliarAutomatico(loteId, usuarioId, cliente = null) {
+  const db = cliente || (await obterClientePadrao())
+
+  const { data: lote, error: erroLote } = await db.from('lotes_importacao').select('*').eq('id', loteId).single()
+  if (erroLote) throw new Error(`Erro ao buscar lote: ${erroLote.message}`)
+
+  const { data: eventos, error: erroEventos } = await db
+    .from('eventos_financeiros_normalizados')
+    .select('*')
+    .eq('lote_importacao_id', loteId)
+    .eq('classificacao', 'recebimento')
+  if (erroEventos) throw new Error(`Erro ao buscar eventos do lote: ${erroEventos.message}`)
+
+  const resumo = { totalEventos: eventos?.length ?? 0, recebimentosCriados: 0, conciliadosAutomaticamente: 0, semApoliceReconhecida: 0, erros: [] }
+
+  for (const evento of eventos ?? []) {
+    try {
+      const valorDescontos =
+        Number(evento.valor_inss || 0) + Number(evento.valor_irrf || 0) + Number(evento.valor_iss || 0) + Number(evento.valor_outros_descontos || 0)
+
+      const { data: recebimento, error: erroInsert } = await db
+        .from('recebimentos_comissao')
+        .insert({
+          operadora_id: lote.seguradora_id,
+          numero_apolice_informado: evento.numero_apolice_informado ?? null,
+          segurado_informado: evento.segurado_informado ?? null,
+          data_recebimento: evento.data_evento ?? lote.competencia_informada ?? new Date().toISOString().slice(0, 10),
+          competencia_referencia: lote.competencia_informada,
+          valor_bruto: evento.valor_bruto,
+          valor_descontos: valorDescontos,
+          documento_origem: lote.nome_arquivo_original,
+          criado_por: usuarioId || null,
+        })
+        .select()
+        .single()
+      if (erroInsert) throw new Error(erroInsert.message)
+      resumo.recebimentosCriados++
+
+      // Sem número de apólice no evento, ou sem seguradora identificada
+      // no lote — não tem chave nenhuma pra tentar casar. Fica manual.
+      if (!evento.numero_apolice_informado || !lote.seguradora_id) {
+        resumo.semApoliceReconhecida++
+        continue
+      }
+
+      const { data: apolicesEncontradas, error: erroApolice } = await db
+        .from('apolices')
+        .select('id')
+        .eq('numero_apolice', evento.numero_apolice_informado)
+        .eq('operadora_id', lote.seguradora_id)
+      if (erroApolice) throw new Error(erroApolice.message)
+      // Zero ou mais de uma apólice com o mesmo número — ambíguo,
+      // nunca escolhe por conta própria. Fica manual.
+      if (!apolicesEncontradas || apolicesEncontradas.length !== 1) {
+        resumo.semApoliceReconhecida++
+        continue
+      }
+
+      const { data: vendaEncontrada, error: erroVenda } = await db
+        .from('vendas')
+        .select('id')
+        .eq('apolice_id', apolicesEncontradas[0].id)
+        .maybeSingle()
+      if (erroVenda) throw new Error(erroVenda.message)
+      if (!vendaEncontrada) {
+        resumo.semApoliceReconhecida++
+        continue
+      }
+
+      // Reaproveita conciliarRecebimento tal como já existe — mesma
+      // trava de duplicidade (JS + índice único no banco), mesma
+      // lógica, zero atalho.
+      await conciliarRecebimento(recebimento.id, { vendaId: vendaEncontrada.id }, usuarioId, db)
+      resumo.conciliadosAutomaticamente++
+    } catch (e) {
+      resumo.erros.push({ evento: evento.linha_original_ref ?? evento.id, erro: e.message })
+    }
+  }
+
+  return resumo
+}
+
 /** LEITURA — fechamentos agregados já conciliados, mais recentes primeiro. */
 export async function listarFechamentosAgregados(cliente = null) {
   const db = cliente || (await obterClientePadrao())
