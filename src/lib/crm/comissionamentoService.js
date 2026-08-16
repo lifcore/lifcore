@@ -346,7 +346,7 @@ export async function listarRecebimentosConciliadosAguardandoDistribuicao(client
   const db = cliente || (await obterClientePadrao())
   const { data, error } = await db
     .from('recebimentos_comissao')
-    .select('*, venda:vendas(id, apolice_id, contrato_id, modulo, corretor_id)')
+    .select('*, venda:vendas(id, apolice_id, contrato_id, modulo, apolice:apolices(corretor_id))')
     .eq('status', 'conciliado')
     .order('conciliado_em', { ascending: false })
   if (error) throw new Error(`Erro ao listar recebimentos conciliados aguardando distribuição: ${error.message}`)

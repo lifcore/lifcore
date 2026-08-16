@@ -1297,7 +1297,7 @@ function LinhaAguardandoDistribuicao({ recebimento, venda, corretores, usuarioId
       // que precisa de digitação manual.
       const resultado = await criarComposicaoAutomaticaSeElegivel({
         vendaId: venda.id,
-        corretorId: venda.corretor_id ?? null,
+        corretorId: venda.apolice?.corretor_id ?? null,
         modulo: venda.modulo,
       })
       setTemComposicao(Boolean(resultado.criada))
