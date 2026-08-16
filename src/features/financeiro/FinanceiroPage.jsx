@@ -23,6 +23,7 @@ import {
   TIPOS_RECEBIMENTO_VALIDOS,
   conciliarFechamentoAgregado,
   listarFechamentosAgregados,
+  excluirFechamentoAgregado,
 } from '../../lib/crm/comissionamentoService'
 import {
   listarComissoesSugeridasDetalhado,
@@ -1673,7 +1674,11 @@ function ConciliacaoTab() {
         <>
           <h3>Fechamentos Agregados (Nível B — sem apólice identificável)</h3>
           {fechamentosAgregados.map((recebimento) => (
-            <LinhaFechamentoAgregado key={recebimento.id} recebimento={recebimento} />
+            <LinhaFechamentoAgregado
+              key={recebimento.id}
+              recebimento={recebimento}
+              onExcluido={(id) => setFechamentosAgregados((atual) => atual.filter((r) => r.id !== id))}
+            />
           ))}
         </>
       )}
@@ -2195,10 +2200,25 @@ function PainelConfrontoVenda({ vendaId, usuarioId, onVendaExcluida }) {
  * competência. Sem "Distribuir": não existe venda pra dividir entre
  * participantes, é só confronto de auditoria.
  */
-function LinhaFechamentoAgregado({ recebimento }) {
+function LinhaFechamentoAgregado({ recebimento, onExcluido }) {
+  const { perfil } = useAuth()
+  const ehMaster = perfil?.papel === 'master'
   const [confronto, setConfronto] = useState(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [excluindo, setExcluindo] = useState(false)
+
+  async function handleExcluir() {
+    if (!window.confirm('Excluir PERMANENTEMENTE este fechamento agregado? Não é reversível.')) return
+    setExcluindo(true)
+    try {
+      await excluirFechamentoAgregado(recebimento.id)
+      onExcluido?.(recebimento.id)
+    } catch (e) {
+      window.alert(e.message)
+      setExcluindo(false)
+    }
+  }
 
   useEffect(() => {
     setCarregando(true)
@@ -2229,6 +2249,11 @@ function LinhaFechamentoAgregado({ recebimento }) {
         <span className="ls-badge" style={{ background: CORES_STATUS[statusGeral] }}>
           {statusGeral === 'conciliado' ? 'CONCILIADO' : 'DIVERGENTE'}
         </span>
+        {ehMaster && (
+          <button className="cliente-tabela-btn cliente-tabela-btn-perigo" style={{ fontSize: '0.8rem' }} onClick={handleExcluir} disabled={excluindo}>
+            {excluindo ? 'Excluindo...' : '🗑️ Excluir (Master)'}
+          </button>
+        )}
       </div>
       <p style={{ fontSize: '0.8rem', marginTop: '0.4rem' }}>
         {confronto.quantidadeVendasValidadas} venda(s) validada(s) somam {formatarMoeda(confronto.totalEsperadoLiquido)}

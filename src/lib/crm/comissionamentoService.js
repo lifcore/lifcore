@@ -334,6 +334,20 @@ export async function listarFechamentosAgregados(cliente = null) {
   if (error) throw new Error(`Erro ao listar fechamentos agregados: ${error.message}`)
   return data ?? []
 }
+
+/**
+ * Exclusão de Fechamento Agregado — Master only (achado do Raphael,
+ * 16/08). Diferente da exclusão de venda: um fechamento agregado
+ * nunca tem `venda_id` (é por natureza — Nível B, sem apólice
+ * identificável), então não existe cascata nenhuma pra fazer — só
+ * apaga o próprio registro de `recebimentos_comissao`. Restrição de
+ * acesso é só na UI, mesmo padrão de sempre.
+ */
+export async function excluirFechamentoAgregado(recebimentoId) {
+  const { error } = await (await obterClientePadrao()).from('recebimentos_comissao').delete().eq('id', recebimentoId)
+  if (error) throw new Error(`Erro ao excluir fechamento agregado: ${error.message}`)
+}
+
 /**
  * LEITURA — recebimentos já conciliados (vinculados a uma Venda), mas
  * ainda não distribuídos. Corrige achado do Raphael (15/08): a lista
