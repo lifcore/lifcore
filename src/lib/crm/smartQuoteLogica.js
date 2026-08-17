@@ -24,8 +24,16 @@ export function selecionarRegraPrecificacaoAplicavel(regras, contexto) {
   }
 
   const compativeis = vigentes.filter((r) => {
-    if (r.regiao != null && regiao != null && r.regiao !== regiao) return false
-    if (r.segmento != null && segmento != null && r.segmento !== segmento) return false
+    // CORREÇÃO (17/08, achado no teste): antes só excluía em
+    // divergência explícita (regra e contexto preenchidos e
+    // diferentes) — se o contexto não informasse região/segmento, uma
+    // regra específica (ex: "MEI, 2-5 vidas") podia vencer por
+    // especificidade sem confirmação nenhuma de que o cliente é MEI.
+    // Agora: se a regra especifica uma dimensão, o contexto TEM que
+    // confirmar essa dimensão — contexto ausente é tratado como
+    // incompatível, nunca como "deixa passar".
+    if (r.regiao != null && r.regiao !== regiao) return false
+    if (r.segmento != null && r.segmento !== segmento) return false
     if (r.faixa_vidas_min != null && totalVidas != null && totalVidas < r.faixa_vidas_min) return false
     if (r.faixa_vidas_max != null && totalVidas != null && totalVidas > r.faixa_vidas_max) return false
     return true
