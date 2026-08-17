@@ -12,7 +12,6 @@ import {
 } from '../../lib/crm/apolicesService'
 import { operacional } from '../../lib/supabaseSchemas'
 import { useAuth } from '../auth/AuthContext'
-import SeguradorasCard from './MasterCenterSeguradoras'
 import RegrasComissaoCard from './RegrasComissaoCard'
 
 export default function ConfiguracoesPage() {
@@ -136,7 +135,7 @@ export default function ConfiguracoesPage() {
 
       {abaAtiva === 'transferir' && ehMaster && <TransferirCarteiraCard />}
 
-      {abaAtiva === 'seguradoras' && ehMaster && <SeguradorasCard />}
+      {abaAtiva === 'seguradoras' && ehMaster && <SeguradorasRedirectCard />}
 
       {abaAtiva === 'regras-comissao' && ehMaster && <RegrasComissaoCard />}
 
@@ -497,6 +496,37 @@ function ConexoesRedirectCard() {
       </p>
       <Link to="/connect?aba=conexoes" className="ls-btn ls-btn-primary">
         Abrir Conexões no Connect Center →
+      </Link>
+    </div>
+  )
+}
+
+/**
+ * Passo 2 do Documento Mestre (Chief) — Seguradoras (cadastro de
+ * operadora, Catálogo Oficial de Produtos e Importação de Material de
+ * Mercado) saiu de Configurações e virou o Catálogo de Mercado do
+ * Connect Center, seguindo o mesmo padrão do CONNECT-004C (Conexões):
+ * esta tela não guarda mais o CRUD — só redireciona. Nenhum dado foi
+ * apagado, nenhuma tabela mudou; só a UI de gestão mudou de endereço.
+ * Tag de governança oficial (equivalente ao CONNECT-004C) a confirmar
+ * com o Chief.
+ */
+function SeguradorasRedirectCard() {
+  return (
+    <div className="ls-card" style={{ marginTop: '1.5rem' }}>
+      <h3>
+        🏢 Seguradoras e Catálogo de Mercado
+        <InfoTooltip
+          titulo="Seguradoras e Catálogo de Mercado"
+          texto="O cadastro de seguradoras, o Catálogo Oficial de Produtos e a Importação de Material de Mercado agora vivem no Connect Center — módulo mestre de Mercado da plataforma (operadoras, produtos, preços, regras, rede)."
+        />
+      </h3>
+      <p className="config-instrucao" style={{ marginBottom: '1rem' }}>
+        Essa gestão foi movida pro Connect Center, junto com o resto do que é dado de mercado da plataforma.
+        Nenhuma seguradora, produto ou importação foi perdida — só a tela mudou de lugar.
+      </p>
+      <Link to="/connect?aba=catalogo" className="ls-btn ls-btn-primary">
+        Abrir Catálogo de Mercado no Connect Center →
       </Link>
     </div>
   )

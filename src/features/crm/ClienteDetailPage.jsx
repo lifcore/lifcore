@@ -712,6 +712,16 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
             setCotacaoEditando(null)
             onAtualizado()
           }}
+          onCriado={(novaCotacao) => {
+            // CORREÇÃO 17/08 — na primeira criação, NÃO fecha o
+            // formulário: troca pro modo "editando" com a Cotação
+            // recém-criada, mantendo o mesmo formulário aberto pra que
+            // Cenário Atual e Propostas de Mercado fiquem visíveis sem
+            // precisar reabrir manualmente depois.
+            setMostrarForm(false)
+            setCotacaoEditando(novaCotacao)
+            onAtualizado()
+          }}
           onCancelar={() => {
             setMostrarForm(false)
             setCotacaoEditando(null)

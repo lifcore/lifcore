@@ -4,11 +4,9 @@ import '../../styles/centers.css'
 import '../../styles/lcds-tokens.css'
 import './connect-inbox.css'
 import InfoTooltip from '../../components/InfoTooltip'
-import KpiCard from '../../components/KpiCard'
 import {
   listarEventosConnect,
   listarFilaOperacional,
-  obterKpisConnect,
   obterPainelSaude,
   atribuirResponsavel,
 } from '../../lib/connect/connectService'
@@ -16,6 +14,7 @@ import { listarTodasConexoes, criarConexaoOperadora, obterOrganizacaoPadrao } fr
 import { listarProviders } from '../../lib/connect/providerRegistryService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
 import { formatarDataBR } from '../../lib/utils/formatarData'
+import MasterCenterSeguradoras from './MasterCenterSeguradoras'
 
 const STATUS_LOG = {
   recebido: { label: 'Aguardando', classe: 'lcds-badge-alerta' },
@@ -30,13 +29,8 @@ const ORIGEM_TIPO = {
 
 export default function ConnectInboxPage() {
   const [searchParams] = useSearchParams()
-  const abaValida = ['fila', 'eventos', 'saude', 'conexoes'].includes(searchParams.get('aba'))
+  const abaValida = ['fila', 'eventos', 'saude', 'conexoes', 'catalogo'].includes(searchParams.get('aba'))
   const [abaAtiva, setAbaAtiva] = useState(abaValida ? searchParams.get('aba') : 'fila')
-  const [kpis, setKpis] = useState(null)
-
-  useEffect(() => {
-    obterKpisConnect().then(setKpis).catch(() => setKpis(null))
-  }, [])
 
   return (
     <div className="config-page" data-theme="lcds">
@@ -44,25 +38,9 @@ export default function ConnectInboxPage() {
         Connect Center — Connect Inbox
         <InfoTooltip
           titulo="Connect Center"
-          texto="Camada de observabilidade e fila operacional das entradas externas (site, futuros parceiros). Responde só 'o que entrou, quando, por onde, para onde foi e em que estado está' — conversão, desempenho e ROI pertencem ao futuro BI Center, não a esta tela."
+          texto="Duas frentes: (1) observabilidade e fila operacional das entradas externas (site, futuros parceiros) — responde 'o que entrou, quando, por onde, para onde foi e em que estado está'; e (2) módulo mestre de Mercado — cadastro de operadoras, catálogo de produtos, preços, regras e importação de material de mercado. Conversão, desempenho e ROI pertencem ao futuro BI Center, não a esta tela. KPIs desta área vão migrar pra um módulo de KPIs dedicado."
         />
       </h2>
-
-      {kpis && (
-        <div className="kpi-grid">
-          <KpiCard label="Entradas Recebidas" valor={kpis.entradasRecebidas} />
-          <KpiCard
-            label="Sem Responsável"
-            valor={kpis.semResponsavel}
-            trendTexto={kpis.semResponsavel > 0 ? 'requer atribuição' : undefined}
-            trendTipo="negativo"
-            destacado={kpis.semResponsavel > 0}
-          />
-          <KpiCard label="Processadas" valor={kpis.processadas} />
-          <KpiCard label="Com Erro" valor={kpis.comErro} trendTipo="negativo" destacado={kpis.comErro > 0} />
-          <KpiCard label="Aguardando Processamento" valor={kpis.aguardandoProcessamento} />
-        </div>
-      )}
 
       <div className="cliente-abas" style={{ marginBottom: '1rem' }}>
         <button
@@ -89,12 +67,20 @@ export default function ConnectInboxPage() {
         >
           Conexões
         </button>
+        <button
+          className={`cliente-aba ${abaAtiva === 'catalogo' ? 'cliente-aba-ativa' : ''}`}
+          onClick={() => setAbaAtiva('catalogo')}
+        >
+          Catálogo de Mercado
+        </button>
       </div>
 
       {abaAtiva === 'fila' && <FilaOperacionalTab />}
       {abaAtiva === 'eventos' && <LogEventosTab />}
       {abaAtiva === 'saude' && <HealthDashboardTab />}
-      {abaAtiva === 'conexoes' && <ConexoesTab />}    </div>
+      {abaAtiva === 'conexoes' && <ConexoesTab />}
+      {abaAtiva === 'catalogo' && <MasterCenterSeguradoras />}
+    </div>
   )
 }
 

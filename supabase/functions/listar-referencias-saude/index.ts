@@ -15,9 +15,10 @@
 //   - sem parâmetro:              lista tudo (exceto INATIVO/MONITORAMENTO)
 //   - ?slug=hospital-x:           1 instituição específica (qualquer status, pra página própria)
 //   - ?regiao=jundiai-entorno:    filtra por região
+//   - ?tipo=hospital:             filtra por tipo (hospital|laboratorio|clinica)
 //   - ?especialidade=Cardiologia: filtra por especialidade (contém)
 //   - ?patologia=Infarto:         filtra por patologia (contém)
-// Os filtros de regiao/especialidade/patologia podem ser combinados.
+// Os filtros de regiao/tipo/especialidade/patologia podem ser combinados.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -70,7 +71,7 @@ async function carregarConfiguracao() {
   return configCache
 }
 
-const COLUNAS_PUBLICAS = 'id, slug, nome, tipo, cidade, regiao, endereco, site_oficial, telefone, especialidades, patologias, exames, descricao, destaque, status'
+const COLUNAS_PUBLICAS = 'id, slug, nome, tipo, cidade, regiao, endereco, site_oficial, telefone, especialidades, patologias, exames, descricao, destaque, status, google_business_url, logo_url, servicos_destaque, operadoras_informadas, observacao_cobertura'
 
 Deno.serve(async (req) => {
   const origemRequisicao = req.headers.get('origin')
@@ -96,6 +97,7 @@ Deno.serve(async (req) => {
   const url = new URL(req.url)
   const slug = url.searchParams.get('slug')
   const regiao = url.searchParams.get('regiao')
+  const tipo = url.searchParams.get('tipo')
   const especialidade = url.searchParams.get('especialidade')
   const patologia = url.searchParams.get('patologia')
 
@@ -138,8 +140,7 @@ Deno.serve(async (req) => {
     .order('nome', { ascending: true })
 
   if (regiao) query = query.eq('regiao', regiao)
-  if (especialidade) query = query.contains('especialidades', [especialidade])
-  if (patologia) query = query.contains('patologias', [patologia])
+  if (tipo) query = query.eq('tipo', tipo)
 
   const { data, error } = await query
 
@@ -148,5 +149,26 @@ Deno.serve(async (req) => {
     return respostaJson({ message: 'Erro ao listar referências.' }, 500, headers)
   }
 
-  return respostaJson({ success: true, data: data ?? [] }, 200, headers)
+  // CORREÇÃO (11/08): especialidade/patologia usam busca PARCIAL,
+  // case-insensitive, feita em JS — não mais match exato no Postgres.
+  // Motivo: a taxonomia fixa do Chief ('Cardiologia', 'Oncologia'...)
+  // não bate palavra-por-palavra com o que fica salvo por instituição
+  // ('Oncologia Pediátrica', 'Cardiologia Pediátrica') — match exato
+  // faria essas instituições sumirem da página da especialidade-mãe.
+  let resultado = data ?? []
+
+  if (especialidade) {
+    const busca = especialidade.toLowerCase()
+    resultado = resultado.filter((item) =>
+      (item.especialidades ?? []).some((e: string) => e.toLowerCase().includes(busca))
+    )
+  }
+  if (patologia) {
+    const busca = patologia.toLowerCase()
+    resultado = resultado.filter((item) =>
+      (item.patologias ?? []).some((p: string) => p.toLowerCase().includes(busca))
+    )
+  }
+
+  return respostaJson({ success: true, data: resultado }, 200, headers)
 })

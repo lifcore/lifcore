@@ -68,8 +68,17 @@ function reconstruirBlocos(itensCotacao) {
  * conteúdo desse arquivo. Se o export real for diferente (nome do hook
  * ou do campo do usuário), ajustar só a linha do import e a leitura de
  * `usuario?.id` abaixo.
+ *
+ * CORREÇÃO (achado real de teste, 17/08 — Raphael): o formulário
+ * fechava sozinho assim que uma Cotação NOVA era salva, escondendo
+ * Cenário Atual/Propostas de Mercado antes do corretor conseguir ver
+ * que elas tinham acabado de aparecer — dava a falsa impressão de que
+ * precisava criar uma segunda Cotação pra "continuar preenchendo".
+ * Agora, na primeira criação, o formulário fica aberto (via `onCriado`,
+ * novo prop opcional) até o corretor clicar em "Concluir e voltar à
+ * lista", explicitamente.
  */
-export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoId, onSalvo, onCancelar }) {
+export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoId, onSalvo, onCriado, onCancelar }) {
   const { usuario } = useAuth()
   const [operadoraId, setOperadoraId] = useState(cotacaoExistente?.operadora_id ?? '')
   const [operadoraNome, setOperadoraNome] = useState(cotacaoExistente?.operadora_nome_livre ?? '')
@@ -176,11 +185,24 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
       if (cotacaoExistente) {
         await atualizarCotacao(cotacaoExistente.id, dados, itens)
         setCotacaoSalvaId(cotacaoExistente.id)
+        onSalvo()
       } else {
         const novaCotacao = await criarCotacao({ clienteProspectId, casoId: casoId ?? null, dados: { ...dados, status: 'em_analise' }, itens })
         setCotacaoSalvaId(novaCotacao.id)
+        // CORREÇÃO (achado real de teste, 17/08): na primeira vez que a
+        // Cotação é criada, NÃO fecha o formulário — Cenário Atual e
+        // Propostas de Mercado só aparecem depois que existe um id
+        // real, e fechar aqui escondia essas seções antes do corretor
+        // conseguir vê-las (obrigava reabrir manualmente via "Editar",
+        // gerando a falsa impressão de precisar criar outra Cotação).
+        // `onCriado` mantém o mesmo formulário aberto, agora em modo
+        // edição, com as seções já visíveis.
+        if (onCriado) {
+          onCriado(novaCotacao)
+        } else {
+          onSalvo()
+        }
       }
-      onSalvo()
     } catch (err) {
       setErro(err.message)
     } finally {
@@ -288,6 +310,17 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
 
           <hr className="cenario-atual-separador" />
           <PropostasEstudoForm cotacaoId={cotacaoSalvaId} clienteProspectId={clienteProspectId} itensCotacao={itensParaFinanceiro} usuarioId={usuario?.id ?? null} />
+
+          {/* CORREÇÃO 17/08 — antes só existia "Cancelar" (que soa como
+              descartar) pra sair daqui. Agora tem uma ação explícita de
+              concluir, já que o formulário fica aberto de propósito
+              depois de criar, pra dar tempo do corretor preencher
+              Cenário Atual e Propostas antes de voltar pra lista. */}
+          <div className="ls-modal-acoes" style={{ marginTop: '1rem' }}>
+            <button className="ls-btn ls-btn-primary" onClick={onSalvo}>
+              ✓ Concluir e voltar à lista
+            </button>
+          </div>
         </div>
       )}
     </div>
