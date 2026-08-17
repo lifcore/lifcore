@@ -16,7 +16,7 @@ import {
   excluirLoteEstudo,
 } from '../../lib/crm/estudoMercadoService'
 import { promoverPropostaParaCliente } from '../../lib/crm/clientePlanosReferenciaService'
-import BotaoGerarEstudoPremium from './BotaoGerarEstudoPremium'
+import BotaoGerarEstudoEssencial from './BotaoGerarEstudoEssencial'
 import {
   calcularComposicaoDaCotacao,
   calcularValorPropostaParaComposicao,
@@ -248,7 +248,7 @@ export default function PropostasEstudoForm({ cotacaoId, clienteProspectId = nul
           {enviando ? 'Enviando...' : '+ Enviar Multicálculo (PDF)'}
           <input type="file" accept=".pdf" onChange={handleUpload} disabled={enviando} style={{ display: 'none' }} />
         </label>
-        <BotaoGerarEstudoPremium cotacaoId={cotacaoId} propostasConfirmadasCount={totalConfirmadas} />
+        <BotaoGerarEstudoEssencial cotacaoId={cotacaoId} propostasConfirmadasCount={totalConfirmadas} />
       </div>
 
       {lotes.map((lote) => {
