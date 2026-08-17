@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { criarCotacao, atualizarCotacao, calcularPorte, listarCatalogoOperadoras, parseValorBR } from '../../lib/crm/clientesService'
+import { useAuth } from '../auth/AuthContext'
+import CenarioAtualForm from './CenarioAtualForm'
 
 const FAIXAS_ETARIAS_ANS = [
   '00-18', '19-23', '24-28', '29-33', '34-38',
@@ -44,8 +46,21 @@ function reconstruirBlocos(itensCotacao) {
  * usa o catálogo compartilhado institucional; cadastro de operadora
  * nova continua pela tela de Configurações, fora de escopo desta
  * correção).
+ *
+ * ADIÇÃO (SPEC-001A, Peça 1 do Motor de Estudo de Mercado): seção
+ * "Cenário Atual" embutida abaixo da Cotação já salva — nunca cria tela
+ * ou aba nova (regra fixa do projeto), só aparece depois que a Cotação
+ * já tem `id` real no banco, porque `cenario_atual_planos.cotacao_id`
+ * é obrigatório.
+ *
+ * ATENÇÃO: `useAuth()` é uma suposição de nome de hook/export a partir
+ * do padrão do projeto (arquivo `AuthContext.jsx`) — não tive acesso ao
+ * conteúdo desse arquivo. Se o export real for diferente (nome do hook
+ * ou do campo do usuário), ajustar só a linha do import e a leitura de
+ * `usuario?.id` abaixo.
  */
 export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoId, onSalvo, onCancelar }) {
+  const { usuario } = useAuth()
   const [operadoraId, setOperadoraId] = useState(cotacaoExistente?.operadora_id ?? '')
   const [operadoraNome, setOperadoraNome] = useState(cotacaoExistente?.operadora_nome_livre ?? '')
   const [validade, setValidade] = useState(cotacaoExistente?.validade ?? '')
@@ -53,6 +68,7 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
   const [catalogoOperadoras, setCatalogoOperadoras] = useState([])
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
+  const [cotacaoSalvaId, setCotacaoSalvaId] = useState(cotacaoExistente?.id ?? null)
 
   useEffect(() => {
     listarCatalogoOperadoras().then(setCatalogoOperadoras).catch(() => {})
@@ -135,8 +151,10 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
 
       if (cotacaoExistente) {
         await atualizarCotacao(cotacaoExistente.id, dados, itens)
+        setCotacaoSalvaId(cotacaoExistente.id)
       } else {
-        await criarCotacao({ clienteProspectId, casoId: casoId ?? null, dados: { ...dados, status: 'em_analise' }, itens })
+        const novaCotacao = await criarCotacao({ clienteProspectId, casoId: casoId ?? null, dados: { ...dados, status: 'em_analise' }, itens })
+        setCotacaoSalvaId(novaCotacao.id)
       }
       onSalvo()
     } catch (err) {
@@ -238,6 +256,13 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
           {salvando ? 'Salvando...' : cotacaoExistente ? 'Salvar alterações' : 'Registrar Cotação'}
         </button>
       </div>
+
+      {cotacaoSalvaId && (
+        <div className="cenario-atual-secao">
+          <hr className="cenario-atual-separador" />
+          <CenarioAtualForm cotacaoId={cotacaoSalvaId} usuarioId={usuario?.id ?? null} />
+        </div>
+      )}
     </div>
   )
 }
