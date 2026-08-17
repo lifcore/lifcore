@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { criarCotacao, atualizarCotacao, calcularPorte, listarCatalogoOperadoras, parseValorBR } from '../../lib/crm/clientesService'
 import { useAuth } from '../auth/AuthContext'
 import CenarioAtualForm from './CenarioAtualForm'
+import PropostasEstudoForm from './PropostasEstudoForm'
 
 const FAIXAS_ETARIAS_ANS = [
   '00-18', '19-23', '24-28', '29-33', '34-38',
@@ -53,6 +54,15 @@ function reconstruirBlocos(itensCotacao) {
  * já tem `id` real no banco, porque `cenario_atual_planos.cotacao_id`
  * é obrigatório.
  *
+ * ADIÇÃO (SPEC-001, Peça 3 do Motor de Estudo de Mercado): seção
+ * "Propostas de Mercado" — upload do Multicálculo, prévia editável e
+ * comparativo financeiro. Usa a composição de vidas por faixa desta
+ * própria Cotação (`itensParaFinanceiro`, mesma estrutura que já vai
+ * pro banco em `itens_cotacao`) pra calcular a mensalidade real de cada
+ * proposta — nunca lê o "total" que o próprio Multicálculo mostra, que
+ * é só uma referência genérica de 1 vida por faixa, não a composição
+ * real do cliente.
+ *
  * ATENÇÃO: `useAuth()` é uma suposição de nome de hook/export a partir
  * do padrão do projeto (arquivo `AuthContext.jsx`) — não tive acesso ao
  * conteúdo desse arquivo. Se o export real for diferente (nome do hook
@@ -89,6 +99,20 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
     0
   )
   const porteCalculado = totalVidas ? calcularPorte(totalVidas) : null
+
+  /** Mesma composição que vai pro banco em itens_cotacao — usada ao vivo pelo comparativo financeiro das Propostas de Mercado, sem precisar esperar salvar. */
+  const itensParaFinanceiro = []
+  for (const bloco of blocosPlano) {
+    for (const faixa of FAIXAS_ETARIAS_ANS) {
+      const { vidas } = bloco.faixas[faixa]
+      if (vidas) {
+        itensParaFinanceiro.push({
+          faixa_etaria: blocosPlano.length > 1 && bloco.plano ? `${faixa} (${bloco.plano})` : faixa,
+          quantidade_vidas: parseInt(vidas, 10),
+        })
+      }
+    }
+  }
 
   function selecionarOperadora(id) {
     setOperadoraId(id)
@@ -261,6 +285,9 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
         <div className="cenario-atual-secao">
           <hr className="cenario-atual-separador" />
           <CenarioAtualForm cotacaoId={cotacaoSalvaId} usuarioId={usuario?.id ?? null} />
+
+          <hr className="cenario-atual-separador" />
+          <PropostasEstudoForm cotacaoId={cotacaoSalvaId} itensCotacao={itensParaFinanceiro} usuarioId={usuario?.id ?? null} />
         </div>
       )}
     </div>
