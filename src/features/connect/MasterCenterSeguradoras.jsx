@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import InfoTooltip from '../../components/InfoTooltip'
 import {
   listarCatalogoSeguradoras,
@@ -17,8 +17,8 @@ import {
   listarProdutos,
   criarProduto,
   listarProdutosDaOperadora,
-  habilitarProdutoNaOperadora,
-  desabilitarProdutoNaOperadora,
+  habilitarProdutosNaOperadora,
+  desabilitarProdutosNaOperadora,
   listarCanaisDaOperadora,
   adicionarCanalOperadora,
   removerCanalOperadora,
@@ -374,6 +374,29 @@ function SeguradoraItem({ seguradora, onAtualizado }) {
 }
 
 /**
+ * Checkbox tri-state (nenhum / parcial / todos) — o atributo
+ * `indeterminate` não existe como prop de JSX, só como propriedade do
+ * nó DOM, por isso precisa do ref + useEffect.
+ */
+function CheckboxModulo({ estado, onChange }) {
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = estado === 'parcial'
+  }, [estado])
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      style={{ width: 'auto' }}
+      checked={estado === 'todos'}
+      onChange={onChange}
+    />
+  )
+}
+
+/**
  * Painel de Dados Institucionais (Blocos A, C e D): tipo de parceiro,
  * modelo financeiro/competência (preparatório, sem lógica de cálculo),
  * produtos habilitados (Bloco B) e canais de integração (Bloco D).
@@ -389,6 +412,8 @@ function PainelInstitucional({ seguradora, onAtualizado }) {
   const [produtosDisponiveis, setProdutosDisponiveis] = useState([])
   const [produtosHabilitados, setProdutosHabilitados] = useState([])
   const [carregandoProdutos, setCarregandoProdutos] = useState(true)
+  const [modulosExpandidos, setModulosExpandidos] = useState(new Set())
+  const [erroProdutos, setErroProdutos] = useState('')
 
   const [canais, setCanais] = useState([])
   const [novoTipoCanal, setNovoTipoCanal] = useState(TIPOS_CANAL[0])
@@ -428,13 +453,58 @@ function PainelInstitucional({ seguradora, onAtualizado }) {
   }
 
   async function handleToggleProduto(produto) {
+    setErroProdutos('')
     const vinculo = produtosHabilitados.find((p) => p.id === produto.id)
-    if (vinculo) {
-      await desabilitarProdutoNaOperadora(vinculo.vinculoId)
-    } else {
-      await habilitarProdutoNaOperadora(seguradora.id, produto.id)
+    try {
+      if (vinculo) {
+        await desabilitarProdutosNaOperadora([vinculo.vinculoId])
+      } else {
+        await habilitarProdutosNaOperadora(seguradora.id, [produto.id])
+      }
+      await carregarProdutos()
+    } catch (err) {
+      // Antes esse erro morria aqui sem avisar ninguém — o checkbox
+      // simplesmente "não funcionava" porque carregarProdutos() nunca
+      // era chamado. Agora aparece pro usuário e no console.
+      console.error('[PainelInstitucional] Erro ao alternar produto:', err)
+      setErroProdutos(err.message)
     }
-    carregarProdutos()
+  }
+
+  /**
+   * Toggle por módulo (feedback do Raphael sobre a lista de produtos
+   * ficar gigante): marca/desmarca todos os produtos daquele módulo
+   * de uma vez, em lote. Se estiver parcial, completa (habilita os que
+   * faltam) em vez de desligar tudo — comportamento padrão de tri-state.
+   */
+  async function handleToggleModulo(moduloId) {
+    setErroProdutos('')
+    const produtosDoModulo = produtosDisponiveis.filter((p) => p.modulo === moduloId)
+    const habilitadosDoModulo = produtosDoModulo.filter((p) => idsHabilitados.has(p.id))
+    try {
+      if (habilitadosDoModulo.length === produtosDoModulo.length) {
+        const vinculoIds = habilitadosDoModulo
+          .map((p) => produtosHabilitados.find((h) => h.id === p.id)?.vinculoId)
+          .filter(Boolean)
+        await desabilitarProdutosNaOperadora(vinculoIds)
+      } else {
+        const faltantes = produtosDoModulo.filter((p) => !idsHabilitados.has(p.id)).map((p) => p.id)
+        await habilitarProdutosNaOperadora(seguradora.id, faltantes)
+      }
+      await carregarProdutos()
+    } catch (err) {
+      console.error('[PainelInstitucional] Erro ao alternar módulo:', err)
+      setErroProdutos(err.message)
+    }
+  }
+
+  function toggleExpandido(moduloId) {
+    setModulosExpandidos((atual) => {
+      const novo = new Set(atual)
+      if (novo.has(moduloId)) novo.delete(moduloId)
+      else novo.add(moduloId)
+      return novo
+    })
   }
 
   async function handleAdicionarCanal() {
@@ -493,19 +563,59 @@ function PainelInstitucional({ seguradora, onAtualizado }) {
 
       <div className="ls-card" style={{ padding: '0.85rem', marginTop: '0.6rem' }}>
         <strong>Produtos habilitados</strong>
+        {erroProdutos && <p className="ls-modal-erro">{erroProdutos}</p>}
         {carregandoProdutos ? (
           <p className="cliente-carregando">Carregando produtos...</p>
         ) : produtosDisponiveis.length === 0 ? (
           <p className="cliente-vazio">Nenhum produto no catálogo ainda — cadastre em "📦 Catálogo de Produtos".</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.5rem' }}>
-            {produtosDisponiveis.map((p) => (
-              <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
-                <input type="checkbox" style={{ width: 'auto' }} checked={idsHabilitados.has(p.id)} onChange={() => handleToggleProduto(p)} />
-                <span className="ls-badge">{MODULO_LABEL[p.modulo] ?? p.modulo}</span>
-                {p.nome}
-              </label>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.5rem' }}>
+            {MODULOS_GESTOR.map((m) => {
+              const produtosDoModulo = produtosDisponiveis.filter((p) => p.modulo === m.id)
+              if (produtosDoModulo.length === 0) return null
+              const habilitadosDoModulo = produtosDoModulo.filter((p) => idsHabilitados.has(p.id))
+              const estadoModulo =
+                habilitadosDoModulo.length === 0 ? 'nenhum'
+                : habilitadosDoModulo.length === produtosDoModulo.length ? 'todos'
+                : 'parcial'
+              const expandido = modulosExpandidos.has(m.id)
+              return (
+                <div key={m.id} className="ls-card" style={{ padding: '0.5rem 0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                      <CheckboxModulo estado={estadoModulo} onChange={() => handleToggleModulo(m.id)} />
+                      <strong>{m.label}</strong>
+                      <span className="config-instrucao" style={{ fontSize: '0.8rem' }}>
+                        ({habilitadosDoModulo.length}/{produtosDoModulo.length})
+                      </span>
+                    </label>
+                    <button
+                      className="ls-btn ls-btn-ghost"
+                      style={{ fontSize: '0.8rem' }}
+                      onClick={() => toggleExpandido(m.id)}
+                    >
+                      {expandido ? 'Fechar' : 'Ver produtos'} ▾
+                    </button>
+                  </div>
+
+                  {expandido && (
+                    <div style={{ marginTop: '0.5rem', paddingLeft: '1.6rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                      {produtosDoModulo.map((p) => (
+                        <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                          <input
+                            type="checkbox"
+                            style={{ width: 'auto' }}
+                            checked={idsHabilitados.has(p.id)}
+                            onChange={() => handleToggleProduto(p)}
+                          />
+                          {p.nome}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

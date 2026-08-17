@@ -79,6 +79,25 @@ export async function desabilitarProdutoNaOperadora(vinculoId) {
   if (error) throw new Error(`Erro ao desabilitar produto da operadora: ${error.message}`)
 }
 
+/**
+ * Habilita vários produtos de uma vez pra mesma operadora (toggle por
+ * módulo) — uma query só, em vez de N chamadas sequenciais a
+ * habilitarProdutoNaOperadora.
+ */
+export async function habilitarProdutosNaOperadora(operadoraId, produtoIds) {
+  if (!produtoIds?.length) return
+  const linhas = produtoIds.map((produtoId) => ({ operadora_id: operadoraId, produto_id: produtoId }))
+  const { error } = await institucional.from('operadora_produtos').insert(linhas)
+  if (error) throw new Error(`Erro ao habilitar produtos na operadora: ${error.message}`)
+}
+
+/** Remove vários vínculos de uma vez (toggle por módulo desabilitando todos) */
+export async function desabilitarProdutosNaOperadora(vinculoIds) {
+  if (!vinculoIds?.length) return
+  const { error } = await institucional.from('operadora_produtos').delete().in('id', vinculoIds)
+  if (error) throw new Error(`Erro ao desabilitar produtos da operadora: ${error.message}`)
+}
+
 // ============================================================
 // BLOCO D — Catálogo de Canais (não é enum — múltiplos por operadora)
 // ============================================================
