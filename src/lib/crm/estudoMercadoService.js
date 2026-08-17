@@ -195,6 +195,36 @@ export async function confirmarOperadoraProposta(propostaId, operadoraId) {
   if (error) throw new Error(`Erro ao confirmar operadora da proposta: ${error.message}`)
 }
 
+/**
+ * SPEC-002 §7 — lista os Planos/Variantes do catálogo do Connect
+ * Center para uma operadora, pra popular o seletor de vínculo na
+ * prévia da Cotação.
+ */
+export async function listarPlanosVariantesDaOperadora(operadoraId) {
+  if (!operadoraId) return []
+  const { data, error } = await institucional
+    .from('planos_variantes')
+    .select('id, nome_plano, variante, modalidade, acomodacao')
+    .eq('operadora_id', operadoraId)
+    .eq('status', 'ativo')
+    .order('nome_plano')
+  if (error) throw new Error(`Erro ao listar planos do catálogo: ${error.message}`)
+  return data ?? []
+}
+
+/**
+ * Confirma a qual Plano/Variante do catálogo institucional (Connect
+ * Center) uma proposta extraída corresponde. Vínculo sempre manual —
+ * nunca por semelhança entre coluna_chave e nome_plano do catálogo.
+ */
+export async function confirmarPlanoVarianteProposta(propostaId, planoVarianteId) {
+  const { error } = await operacional
+    .from('propostas_estudo')
+    .update({ plano_variante_id: planoVarianteId || null })
+    .eq('id', propostaId)
+  if (error) throw new Error(`Erro ao confirmar plano/variante da proposta: ${error.message}`)
+}
+
 /** Confirma ou rejeita uma proposta extraída, após revisão humana. */
 export async function definirStatusRevisaoProposta(propostaId, status) {
   if (!['pendente', 'confirmada', 'rejeitada'].includes(status)) {

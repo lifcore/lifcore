@@ -287,7 +287,7 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
           <CenarioAtualForm cotacaoId={cotacaoSalvaId} usuarioId={usuario?.id ?? null} />
 
           <hr className="cenario-atual-separador" />
-          <PropostasEstudoForm cotacaoId={cotacaoSalvaId} itensCotacao={itensParaFinanceiro} usuarioId={usuario?.id ?? null} />
+          <PropostasEstudoForm cotacaoId={cotacaoSalvaId} clienteProspectId={clienteProspectId} itensCotacao={itensParaFinanceiro} usuarioId={usuario?.id ?? null} />
         </div>
       )}
     </div>

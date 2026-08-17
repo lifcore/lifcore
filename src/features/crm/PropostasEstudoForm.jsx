@@ -7,12 +7,15 @@ import {
   listarLotesEstudoPorCotacao,
   listarPropostasPorLote,
   confirmarOperadoraProposta,
+  listarPlanosVariantesDaOperadora,
+  confirmarPlanoVarianteProposta,
   definirStatusRevisaoProposta,
   definirPapelSelecao,
   reordenarPropostas,
   confirmarFormatoHomologadoEstudo,
   excluirLoteEstudo,
 } from '../../lib/crm/estudoMercadoService'
+import { promoverPropostaParaCliente } from '../../lib/crm/clientePlanosReferenciaService'
 import BotaoGerarEstudoPremium from './BotaoGerarEstudoPremium'
 import {
   calcularComposicaoDaCotacao,
@@ -56,9 +59,11 @@ function formatarMoeda(v) {
  * Assim como o Cenário Atual, só faz sentido depois que a Cotação já
  * tem `id` — segue o mesmo padrão de seção embutida, sem tela nova.
  */
-export default function PropostasEstudoForm({ cotacaoId, itensCotacao = [], usuarioId = null }) {
+export default function PropostasEstudoForm({ cotacaoId, clienteProspectId = null, itensCotacao = [], usuarioId = null }) {
   const [lotes, setLotes] = useState([])
   const [propostasPorLote, setPropostasPorLote] = useState({})
+  const [planosPorOperadora, setPlanosPorOperadora] = useState({})
+  const [promovendoId, setPromovendoId] = useState(null)
   const [cenarioAtual, setCenarioAtual] = useState([])
   const [catalogoOperadoras, setCatalogoOperadoras] = useState([])
   const [enviando, setEnviando] = useState(false)
@@ -149,12 +154,39 @@ export default function PropostasEstudoForm({ cotacaoId, itensCotacao = [], usua
   async function handleOperadora(propostaId, loteId, operadoraId) {
     try {
       await confirmarOperadoraProposta(propostaId, operadoraId || null)
-      setPropostasPorLote((await listarPropostasPorLote(loteId)) && {
-        ...propostasPorLote,
-        [loteId]: await listarPropostasPorLote(loteId),
-      })
+      if (operadoraId && !planosPorOperadora[operadoraId]) {
+        const planos = await listarPlanosVariantesDaOperadora(operadoraId)
+        setPlanosPorOperadora((atual) => ({ ...atual, [operadoraId]: planos }))
+      }
+      setPropostasPorLote({ ...propostasPorLote, [loteId]: await listarPropostasPorLote(loteId) })
     } catch (err) {
       setErro(err.message)
+    }
+  }
+
+  /** SPEC-002 §7 — vínculo com o catálogo real do Connect Center. Sempre manual, nunca por semelhança de texto. */
+  async function handlePlanoVariante(propostaId, loteId, planoVarianteId) {
+    try {
+      await confirmarPlanoVarianteProposta(propostaId, planoVarianteId || null)
+      setPropostasPorLote({ ...propostasPorLote, [loteId]: await listarPropostasPorLote(loteId) })
+    } catch (err) {
+      setErro(err.message)
+    }
+  }
+
+  /** Botão "promover pro Cliente" — cópia de referência pontual, decisão do corretor (não muda onde o dado mora por padrão). */
+  async function handlePromoverParaCliente(proposta) {
+    if (!clienteProspectId) {
+      setErro('Cliente não identificado — não é possível promover esta proposta.')
+      return
+    }
+    setPromovendoId(proposta.id)
+    try {
+      await promoverPropostaParaCliente({ clienteProspectId, propostaEstudo: proposta, cotacaoId, usuarioId })
+    } catch (err) {
+      setErro(err.message)
+    } finally {
+      setPromovendoId(null)
     }
   }
 
@@ -296,6 +328,28 @@ export default function PropostasEstudoForm({ cotacaoId, itensCotacao = [], usua
                     </div>
                   </div>
 
+                  {proposta.operadora_id && (
+                    <div className="cotacao-form-linha">
+                      <div>
+                        <label>Plano no catálogo (Connect Center)</label>
+                        <select
+                          value={proposta.plano_variante_id ?? ''}
+                          onChange={(e) => handlePlanoVariante(proposta.id, lote.id, e.target.value)}
+                        >
+                          <option value="">Sem vínculo com o catálogo</option>
+                          {(planosPorOperadora[proposta.operadora_id] ?? []).map((pv) => (
+                            <option key={pv.id} value={pv.id}>
+                              {pv.nome_plano}{pv.variante ? ` — ${pv.variante}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {planosPorOperadora[proposta.operadora_id]?.length === 0 && (
+                          <span className="propostas-estudo-alerta">Nenhum plano cadastrado no Connect Center para esta operadora ainda.</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="propostas-estudo-atributos">
                     <span>Modalidade: {proposta.modalidade ?? '—'}</span>
                     <span>Acomodação: {proposta.acomodacao ?? '—'}</span>
@@ -319,6 +373,16 @@ export default function PropostasEstudoForm({ cotacaoId, itensCotacao = [], usua
                   </div>
 
                   <div className="ls-modal-acoes">
+                    {clienteProspectId && (
+                      <button
+                        className="ls-btn ls-btn-ghost"
+                        onClick={() => handlePromoverParaCliente(proposta)}
+                        disabled={promovendoId === proposta.id}
+                        title="Guardar uma cópia de referência deste plano no cadastro do cliente (cliente estratégico)"
+                      >
+                        {promovendoId === proposta.id ? 'Promovendo...' : '📌 Promover pro Cliente'}
+                      </button>
+                    )}
                     <button
                       className={proposta.status_revisao === 'rejeitada' ? 'ls-btn ls-btn-primary' : 'ls-btn ls-btn-ghost'}
                       onClick={() => handleStatusRevisao(proposta.id, lote.id, 'rejeitada')}
