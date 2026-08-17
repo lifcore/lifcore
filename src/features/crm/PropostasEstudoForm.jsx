@@ -13,6 +13,7 @@ import {
   confirmarFormatoHomologadoEstudo,
   excluirLoteEstudo,
 } from '../../lib/crm/estudoMercadoService'
+import BotaoGerarEstudoPremium from './BotaoGerarEstudoPremium'
 import {
   calcularComposicaoDaCotacao,
   calcularValorPropostaParaComposicao,
@@ -196,6 +197,10 @@ export default function PropostasEstudoForm({ cotacaoId, itensCotacao = [], usua
     )
   }
 
+  const totalConfirmadas = Object.values(propostasPorLote)
+    .flat()
+    .filter((p) => p.status_revisao === 'confirmada').length
+
   return (
     <div className="cotacao-form propostas-estudo-form">
       <h3>Propostas de Mercado (Multicálculo)</h3>
@@ -211,6 +216,7 @@ export default function PropostasEstudoForm({ cotacaoId, itensCotacao = [], usua
           {enviando ? 'Enviando...' : '+ Enviar Multicálculo (PDF)'}
           <input type="file" accept=".pdf" onChange={handleUpload} disabled={enviando} style={{ display: 'none' }} />
         </label>
+        <BotaoGerarEstudoPremium cotacaoId={cotacaoId} propostasConfirmadasCount={totalConfirmadas} />
       </div>
 
       {lotes.map((lote) => {
