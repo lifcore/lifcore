@@ -52,6 +52,26 @@ export async function inativarProduto(produtoId) {
 }
 
 // ============================================================
+// Regiões Tarifárias (Passo 3 do Documento Mestre)
+// ============================================================
+
+/**
+ * Lista as regiões tarifárias cadastradas — extensível (hoje Jundiaí,
+ * São Paulo e Região, Campinas e Região; cresce conforme homologa mais
+ * praça). Usado sempre que um lote de importação de mercado precisa
+ * declarar de qual região é a tabela (a região é propriedade do
+ * arquivo inteiro, confirmado nos PDFs de referência da Porto Seguro
+ * — nunca extraída linha a linha do documento).
+ */
+export async function listarRegioesTarifarias({ apenasAtivas = true } = {}) {
+  let query = institucional.from('regioes_tarifarias').select('*').order('nome')
+  if (apenasAtivas) query = query.eq('ativo', true)
+  const { data, error } = await query
+  if (error) throw new Error(`Erro ao listar regiões tarifárias: ${error.message}`)
+  return data ?? []
+}
+
+// ============================================================
 // BLOCO B — Vínculo Operadora × Produto (N:N)
 // ============================================================
 

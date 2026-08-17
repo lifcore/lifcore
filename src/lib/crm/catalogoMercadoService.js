@@ -71,7 +71,7 @@ export async function inativarPlanoVariante(id) {
 // Regras de Precificação — nunca gravar preço solto (correção 17/08)
 // ============================================================
 
-const DIMENSOES_MINIMAS_PRECO = ['regiao', 'tipo_contratacao', 'segmento', 'faixa_vidas_min', 'faixa_etaria']
+const DIMENSOES_MINIMAS_PRECO = ['regiao_tarifaria_id', 'tipo_contratacao', 'segmento', 'faixa_vidas_min', 'faixa_etaria']
 
 /**
  * Valida se uma regra de preço tem dimensão suficiente antes de
@@ -210,7 +210,10 @@ export async function listarRedeCredenciada({ planoVarianteId, regiao } = {}) {
 // ============================================================
 
 export async function listarLotesImportacaoMercado({ dominio, operadoraId } = {}) {
-  let query = institucional.from('lotes_importacao_mercado').select('*').order('criado_em', { ascending: false })
+  let query = institucional
+    .from('lotes_importacao_mercado')
+    .select('*, regioes_tarifarias(nome)')
+    .order('criado_em', { ascending: false })
   if (dominio) query = query.eq('dominio', dominio)
   if (operadoraId) query = query.eq('operadora_id', operadoraId)
   const { data, error } = await query
@@ -308,13 +311,18 @@ export async function aprovarTodasDivergenciasDoLote(loteImportacaoId, usuarioId
 /**
  * Upload de material de mercado (Planos, Preços, Carência,
  * Coparticipação, Reembolso, Regra Comercial ou Rede) pra uma
- * operadora. Dispara o processamento automaticamente — se falhar, o
- * lote fica em "recebido" e pode ser reprocessado depois.
+ * operadora. Região é sempre propriedade do arquivo inteiro — nunca
+ * extraída do texto do documento (confirmado nos PDFs de referência
+ * Porto Seguro SP/Jundiaí: o título já diz a região, e cada arquivo é
+ * de uma tabela de venda única por praça). Dispara o processamento
+ * automaticamente — se falhar, o lote fica em "recebido" e pode ser
+ * reprocessado depois.
  */
-export async function uploadMaterialMercado({ file, dominio, operadoraId, enviadoPor }) {
+export async function uploadMaterialMercado({ file, dominio, operadoraId, regiaoTarifariaId, enviadoPor }) {
   if (!file) throw new Error('Selecione um arquivo.')
   if (!dominio) throw new Error('Selecione o domínio do material (Planos, Preços, Carência...).')
   if (!operadoraId) throw new Error('Operadora não identificada.')
+  if (!regiaoTarifariaId) throw new Error('Selecione a região tarifária deste arquivo — cada tabela de preço vale para uma região só.')
 
   inferirTipoArquivo(file.name)
   const hash = await calcularHashArquivo(file)
@@ -338,6 +346,7 @@ export async function uploadMaterialMercado({ file, dominio, operadoraId, enviad
     .insert({
       dominio,
       operadora_id: operadoraId,
+      regiao_tarifaria_id: regiaoTarifariaId,
       storage_path: caminho,
       nome_arquivo_original: file.name,
       hash_arquivo: hash,

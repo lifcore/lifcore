@@ -10,6 +10,7 @@ import {
   rejeitarDivergencia,
   aprovarTodasDivergenciasDoLote,
 } from '../../lib/crm/catalogoMercadoService'
+import { listarRegioesTarifarias } from '../../lib/crm/catalogoInstitucionalService'
 
 const STATUS_LOTE_LABEL = {
   recebido: 'Recebido — processando...',
@@ -53,6 +54,8 @@ function resumoDivergencia(d) {
  */
 export default function PainelImportacaoMercado({ operadoraId, usuarioId = null }) {
   const [dominio, setDominio] = useState(DOMINIOS_MERCADO[0].valor)
+  const [regioes, setRegioes] = useState([])
+  const [regiaoTarifariaId, setRegiaoTarifariaId] = useState('')
   const [lotes, setLotes] = useState([])
   const [divergenciasPorLote, setDivergenciasPorLote] = useState({})
   const [enviando, setEnviando] = useState(false)
@@ -61,6 +64,7 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
 
   useEffect(() => {
     carregar()
+    listarRegioesTarifarias().then(setRegioes).catch((err) => setErro(err.message))
   }, [operadoraId])
 
   async function carregar() {
@@ -83,10 +87,15 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
   async function handleUpload(e) {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!regiaoTarifariaId) {
+      setErro('Selecione a região tarifária antes de enviar o arquivo — cada tabela vale para uma região só.')
+      e.target.value = ''
+      return
+    }
     setEnviando(true)
     setErro(null)
     try {
-      await uploadMaterialMercado({ file, dominio, operadoraId, enviadoPor: usuarioId })
+      await uploadMaterialMercado({ file, dominio, operadoraId, regiaoTarifariaId, enviadoPor: usuarioId })
       await carregar()
     } catch (err) {
       setErro(err.message)
@@ -166,9 +175,27 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
           </select>
         </div>
         <div>
-          <label className="ls-btn ls-btn-primary" style={{ display: 'inline-block', cursor: 'pointer' }}>
+          <label>Região Tarifária</label>
+          <select value={regiaoTarifariaId} onChange={(e) => setRegiaoTarifariaId(e.target.value)}>
+            <option value="">Selecione...</option>
+            {regioes.map((r) => (
+              <option key={r.id} value={r.id}>{r.nome}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label
+            className="ls-btn ls-btn-primary"
+            style={{ display: 'inline-block', cursor: regiaoTarifariaId ? 'pointer' : 'not-allowed', opacity: regiaoTarifariaId ? 1 : 0.5 }}
+          >
             {enviando ? 'Enviando...' : '+ Enviar arquivo (PDF/Excel/CSV/TXT)'}
-            <input type="file" accept=".pdf,.xlsx,.xls,.csv,.txt" onChange={handleUpload} disabled={enviando} style={{ display: 'none' }} />
+            <input
+              type="file"
+              accept=".pdf,.xlsx,.xls,.csv,.txt"
+              onChange={handleUpload}
+              disabled={enviando || !regiaoTarifariaId}
+              style={{ display: 'none' }}
+            />
           </label>
         </div>
       </div>
@@ -186,6 +213,9 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
                     <strong>{lote.nome_arquivo_original}</strong>
                     <span className="ls-badge" style={{ marginLeft: '0.5rem' }}>
                       {DOMINIOS_MERCADO.find((d) => d.valor === lote.dominio)?.label ?? lote.dominio}
+                    </span>
+                    <span className="ls-badge" style={{ marginLeft: '0.4rem' }}>
+                      {lote.regioes_tarifarias?.nome ?? 'região não identificada'}
                     </span>
                     <span style={{ marginLeft: '0.5rem' }}>{STATUS_LOTE_LABEL[lote.status] ?? lote.status}</span>
                   </div>
