@@ -25,6 +25,8 @@ import {
   atualizarCamposInstitucionais,
 } from '../../lib/crm/catalogoInstitucionalService'
 import BotaoOperacaoCritica from '../../components/BotaoOperacaoCritica'
+import PainelImportacaoMercado from './PainelImportacaoMercado'
+import { useAuth } from '../auth/AuthContext'
 
 const MODULOS_GESTOR = [
   { id: 'saude', label: 'Lifcare (Saúde)' },
@@ -377,6 +379,7 @@ function SeguradoraItem({ seguradora, onAtualizado }) {
  * produtos habilitados (Bloco B) e canais de integração (Bloco D).
  */
 function PainelInstitucional({ seguradora, onAtualizado }) {
+  const { usuario } = useAuth()
   const [tipoParceiro, setTipoParceiro] = useState(seguradora.tipo_parceiro ?? 'seguradora')
   const [modeloFinanceiro, setModeloFinanceiro] = useState(seguradora.modelo_financeiro ?? '')
   const [competenciaFinanceira, setCompetenciaFinanceira] = useState(seguradora.competencia_financeira ?? '')
@@ -548,6 +551,11 @@ function PainelInstitucional({ seguradora, onAtualizado }) {
           <button className="ls-btn ls-btn-ghost" onClick={handleAdicionarCanal}>+ Adicionar Canal</button>
         </div>
       </div>
+
+      {/* SPEC-002 (Connect Center), Peça 2 — importação de material de
+          mercado por domínio, sempre por operadora, com fila de
+          aprovação. Nenhuma tela nova — vive aqui, ao lado de Canais. */}
+      <PainelImportacaoMercado operadoraId={seguradora.id} usuarioId={usuario?.id ?? null} />
     </div>
   )
 }
