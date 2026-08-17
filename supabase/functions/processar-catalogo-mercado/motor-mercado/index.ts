@@ -80,7 +80,7 @@ export async function processarDominioPlanos(texto: string, operadoraId: string,
 // ----------------------------------------------------------------------
 // Domínio: Regras de Precificação (a correção de 17/08 aplicada aqui)
 // ----------------------------------------------------------------------
-export async function processarDominioPrecos(texto: string, operadoraId: string, db: Db): Promise<Divergencia[]> {
+export async function processarDominioPrecos(texto: string, operadoraId: string, db: Db, regiaoTarifariaId: string | null): Promise<Divergencia[]> {
   const { data: planosExistentes } = await db.from('planos_variantes').select('id, nome_plano, variante').eq('operadora_id', operadoraId)
   const mapaPlanos = new Map((planosExistentes ?? []).map((p: Record<string, unknown>) => [`${p.nome_plano}|${p.variante ?? ''}`, p.id]))
   const nomesConhecidos = (planosExistentes ?? []).map((p: Record<string, unknown>) => `${p.nome_plano}${p.variante ? ' - ' + p.variante : ''}`)
@@ -91,16 +91,22 @@ export async function processarDominioPrecos(texto: string, operadoraId: string,
   for (const r of resultado.regras) {
     const planoVarianteId = encontrarPlanoIdPorTexto(r.plano_texto as string, mapaPlanos)
 
-    const dimensoesPresentes = ['regiao', 'tipo_contratacao', 'segmento', 'faixa_vidas_min', 'faixa_etaria'].filter((d) => r[d] != null)
-    const statusSugerido = r.valor == null || dimensoesPresentes.length === 0 ? 'regra_insuficiente' : 'vigente'
+    // Passo 3 (Documento Mestre) — região não é mais extraída do texto:
+    // é propriedade do arquivo inteiro, vem do lote (confirmado nos
+    // PDFs de referência Porto Seguro SP/Jundiaí — o título já diz a
+    // região). Sem regiaoTarifariaId, a regra nunca fecha como vigente.
+    const dimensoesPresentes = ['tipo_contratacao', 'segmento', 'faixa_vidas_min', 'faixa_etaria'].filter((d) => r[d] != null)
+    const statusSugerido = r.valor == null || !regiaoTarifariaId || dimensoesPresentes.length === 0 ? 'regra_insuficiente' : 'vigente'
     const motivo =
       statusSugerido === 'regra_insuficiente'
-        ? 'Preço identificado, mas regra comercial insuficiente para registro no catálogo — nenhuma dimensão comercial pôde ser determinada.'
+        ? !regiaoTarifariaId
+          ? 'Preço identificado, mas o lote não tem região tarifária definida — regra não pode virar vigente sem saber a qual tabela de venda ela pertence.'
+          : 'Preço identificado, mas regra comercial insuficiente para registro no catálogo — nenhuma dimensão comercial pôde ser determinada.'
         : null
 
     const dadoNovo = {
       plano_variante_id: planoVarianteId,
-      regiao: r.regiao ?? null,
+      regiao_tarifaria_id: regiaoTarifariaId ?? null,
       tipo_contratacao: r.tipo_contratacao ?? null,
       segmento: r.segmento ?? null,
       faixa_vidas_min: r.faixa_vidas_min ?? null,
@@ -169,7 +175,7 @@ export async function processarDominioRegraMercado(texto: string, dominio: strin
 // Domínio: Rede Credenciada — marca/unidade resolvidos direto, só o
 // vínculo plano×unidade vai pra fila (ver nota no topo do arquivo).
 // ----------------------------------------------------------------------
-export async function processarDominioRede(texto: string, operadoraId: string, db: Db): Promise<Divergencia[]> {
+export async function processarDominioRede(texto: string, operadoraId: string, db: Db, regiaoTarifariaId: string | null): Promise<Divergencia[]> {
   const { data: planosExistentes } = await db.from('planos_variantes').select('id, nome_plano, variante').eq('operadora_id', operadoraId)
   const mapaPlanos = new Map((planosExistentes ?? []).map((p: Record<string, unknown>) => [`${p.nome_plano}|${p.variante ?? ''}`, p.id]))
   const nomesConhecidos = (planosExistentes ?? []).map((p: Record<string, unknown>) => `${p.nome_plano}${p.variante ? ' - ' + p.variante : ''}`)
@@ -191,12 +197,19 @@ export async function processarDominioRede(texto: string, operadoraId: string, d
       marcaId = marcaNova?.id ?? null
     }
 
+    // Passo 3 — regiao_tarifaria_id só é gravado na CRIAÇÃO da unidade,
+    // nunca sobrescrito numa unidade já existente. O mesmo prestador
+    // físico aparece em PDFs de regiões diferentes (confirmado: "H
+    // Paulo Sacramento" em Jundiaí aparece tanto no arquivo de SP quanto
+    // no de Jundiaí) — a região aqui reflete "de qual import foi
+    // descoberta primeiro", não uma "região caseira" real do prestador.
+    // Ambiguidade conhecida, não resolvida aqui — sinalizada pro Raphael.
     const { data: unidadeExistente } = await db.from('prestadores_unidade').select('id').eq('nome', l.prestador).eq('municipio', l.municipio ?? null).maybeSingle()
     let unidadeId = unidadeExistente?.id ?? null
     if (!unidadeId) {
       const { data: unidadeNova } = await db
         .from('prestadores_unidade')
-        .insert({ marca_id: marcaId, nome: l.prestador, municipio: l.municipio ?? null, regiao: l.regiao ?? null })
+        .insert({ marca_id: marcaId, nome: l.prestador, municipio: l.municipio ?? null, regiao_tarifaria_id: regiaoTarifariaId ?? null })
         .select('id')
         .single()
       unidadeId = unidadeNova?.id ?? null
