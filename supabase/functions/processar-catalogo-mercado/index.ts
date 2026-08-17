@@ -92,11 +92,34 @@ Deno.serve(async (req: Request) => {
       if (!produtoPadrao) throw new Error('Nenhum produto cadastrado no catálogo institucional para o módulo saúde — cadastre ao menos um Produto antes de importar Planos.')
       divergencias = await processarDominioPlanos(texto, lote.operadora_id, operadora?.razao_social ?? '', produtoPadrao.id, institucionalDb)
     } else if (lote.dominio === 'precos') {
-      divergencias = await processarDominioPrecos(texto, lote.operadora_id, institucionalDb)
+      divergencias = await processarDominioPrecos(texto, lote.operadora_id, institucionalDb, lote.regiao_tarifaria_id)
+      // Passo 3 (Documento Mestre) — região é propriedade do lote inteiro
+      // (confirmado nos PDFs de referência Porto Seguro SP/Jundiaí: o
+      // título já diz a região, nunca precisa extrair do texto). Carimba
+      // aqui, na saída, como rede de segurança: garante
+      // regiao_tarifaria_id correto em toda regras_precificacao mesmo
+      // que motor-mercado/index.ts ainda não use o parâmetro novo
+      // internamente (arquivo ainda não revisado nesta sessão). A
+      // decisão de status (vigente/regra_insuficiente) continua sendo
+      // do motor-mercado — se ele ainda validar pela chave antiga
+      // 'regiao' (texto), vai marcar regra_insuficiente até ser
+      // atualizado. Isso é seguro (nunca vira vigente por engano), só
+      // não fecha o Passo 3 por completo.
+      divergencias = divergencias.map((d) =>
+        d.tabela_afetada === 'regras_precificacao'
+          ? { ...d, dado_novo: { ...(d.dado_novo as Record<string, unknown>), regiao_tarifaria_id: lote.regiao_tarifaria_id } }
+          : d
+      )
     } else if (['carencia', 'coparticipacao', 'reembolso', 'regra_comercial'].includes(lote.dominio)) {
       divergencias = await processarDominioRegraMercado(texto, lote.dominio, lote.operadora_id, institucionalDb)
     } else if (lote.dominio === 'rede') {
-      divergencias = await processarDominioRede(texto, lote.operadora_id, institucionalDb)
+      // prestadores_unidade é criado por get-or-create dentro de
+      // processarDominioRede, antes de qualquer divergência voltar pra
+      // cá — não dá pra corrigir região por fora, só editando
+      // motor-mercado/index.ts diretamente (pendente, arquivo não
+      // recebido ainda). Parâmetro passado já, forward-compatible, sem
+      // efeito até lá.
+      divergencias = await processarDominioRede(texto, lote.operadora_id, institucionalDb, lote.regiao_tarifaria_id)
     } else {
       throw new Error(`Domínio desconhecido: ${lote.dominio}`)
     }
