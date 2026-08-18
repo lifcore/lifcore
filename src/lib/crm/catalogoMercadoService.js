@@ -308,7 +308,14 @@ export async function uploadMaterialMercado({ file, dominio, operadoraId, regiao
     })
     .select()
     .single()
-  if (erroLote) throw new Error(`Erro ao registrar o lote: ${erroLote.message}`)
+  if (erroLote) {
+    // Rollback do upload — sem isso, uma falha aqui (ex: constraint de
+    // dominio, como acabamos de ver) deixa o arquivo órfão no Storage,
+    // bloqueando qualquer nova tentativa com o mesmo arquivo (mesmo hash =
+    // mesmo caminho = "already exists" na próxima vez).
+    await supabase.storage.from(BUCKET).remove([caminho]).catch(() => {})
+    throw new Error(`Erro ao registrar o lote: ${erroLote.message}`)
+  }
 
   try {
     await dispararProcessamentoMercado(lote.id)
