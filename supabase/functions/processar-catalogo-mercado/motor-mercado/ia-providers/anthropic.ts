@@ -31,9 +31,11 @@ function limparEExtrairJSON(textoResposta: string, contexto: string) {
   }
 }
 
-async function chamarAnthropic(systemPrompt: string, mensagemUsuario: string, contexto: string) {
+async function chamarAnthropic(systemPrompt: string, mensagemUsuario: string, contexto: string, tentativa = 1): Promise<unknown> {
   const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
   if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada.')
+
+  const MAX_TENTATIVAS = 3
 
   const resposta = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -46,7 +48,21 @@ async function chamarAnthropic(systemPrompt: string, mensagemUsuario: string, co
       messages: [{ role: 'user', content: mensagemUsuario }],
     }),
   })
-  if (!resposta.ok) throw new Error(`Erro na API Anthropic (${contexto}): ${resposta.status} ${await resposta.text()}`)
+
+  if (!resposta.ok) {
+    const corpoErro = await resposta.text()
+    // 5xx = problema do lado do servidor/infra (ex: Cloudflare 520 visto em produção) — quase
+    // sempre transitório, vale tentar de novo automaticamente. 4xx = erro do próprio pedido
+    // (auth, formato, etc.) — repetir não muda o resultado, desiste na hora.
+    const ehTransitorio = resposta.status >= 500
+    if (ehTransitorio && tentativa < MAX_TENTATIVAS) {
+      const esperaMs = 2000 * tentativa
+      console.error(`[${contexto}] Erro ${resposta.status} da API Anthropic (tentativa ${tentativa}/${MAX_TENTATIVAS}) — tentando de novo em ${esperaMs}ms.`)
+      await new Promise((resolve) => setTimeout(resolve, esperaMs))
+      return chamarAnthropic(systemPrompt, mensagemUsuario, contexto, tentativa + 1)
+    }
+    throw new Error(`Erro na API Anthropic (${contexto}): ${resposta.status} ${corpoErro}`)
+  }
 
   const dados = await resposta.json()
   const texto = dados.content?.find((b: { type: string }) => b.type === 'text')?.text
