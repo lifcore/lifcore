@@ -19,14 +19,16 @@ async function calcularHashArquivo(file) {
 }
 
 /**
- * SPEC-002 — Connect Center, Peça 1.
+ * SPEC-002 — Connect Center, Peça 1. Arquitetura v2 (18/08/2026).
  *
- * Regra fixa deste arquivo: nenhuma função aqui grava direto em
- * `planos_variantes`, `regras_precificacao`, `regras_mercado` ou
- * `rede_credenciada` a partir de importação — só via
- * `aprovarDivergencia`. Cadastro manual direto (`criarPlanoManual` etc.)
- * é a exceção deliberada: dado digitado pelo próprio corretor não passa
- * por fila de reconciliação, porque não há "existente" pra comparar.
+ * Mudança de princípio: não existe mais fila de aprovação humana
+ * bloqueante. A Edge Function `processar-catalogo-mercado` grava direto
+ * nas tabelas de domínio (`planos_variantes`, `regras_precificacao`,
+ * `regras_mercado`, `rede_credenciada`), com sinal de confiança no
+ * próprio registro (`status`) em vez de esconder o dado numa fila que
+ * ninguém teria como revisar linha a linha em volume real. Cadastro
+ * manual direto (`criarPlanoManual` etc.) continua a mesma exceção
+ * deliberada de sempre: dado digitado pelo próprio corretor.
  */
 
 // ============================================================
@@ -144,6 +146,16 @@ export async function listarRegrasMercado({ planoVarianteId, operadoraId, domini
   return data ?? []
 }
 
+/** Regras de mercado sem vínculo de plano confirmado — a IA citou um plano no texto e não achou correspondência. Simétrico a listarRegrasInsuficientes (Preços). */
+export async function listarRegrasMercadoSemVinculo({ operadoraId, dominio } = {}) {
+  let query = institucional.from('regras_mercado').select('*').eq('status', 'sem_vinculo').order('criado_em', { ascending: false })
+  if (operadoraId) query = query.eq('operadora_id', operadoraId)
+  if (dominio) query = query.eq('dominio', dominio)
+  const { data, error } = await query
+  if (error) throw new Error(`Erro ao listar regras de mercado sem vínculo: ${error.message}`)
+  return data ?? []
+}
+
 export async function criarRegraMercadoManual(dados) {
   const { data, error } = await institucional
     .from('regras_mercado')
@@ -205,6 +217,16 @@ export async function listarRedeCredenciada({ planoVarianteId, regiao } = {}) {
   return resultado
 }
 
+/** Vínculos de rede sem plano confirmado — a IA não achou correspondência de plano pra essa linha. Simétrico a listarRegrasInsuficientes (Preços). Sem filtro por operadora aqui: prestadores_marca não tem esse campo confirmado no schema que já vi — não vou supor. */
+export async function listarRedeSemVinculo() {
+  const { data, error } = await institucional
+    .from('rede_credenciada')
+    .select('*, prestadores_unidade(*, prestadores_marca(*))')
+    .eq('status', 'sem_vinculo')
+  if (error) throw new Error(`Erro ao listar rede sem vínculo: ${error.message}`)
+  return data ?? []
+}
+
 // ============================================================
 // Lotes de importação
 // ============================================================
@@ -222,85 +244,16 @@ export async function listarLotesImportacaoMercado({ dominio, operadoraId } = {}
 }
 
 // ============================================================
-// Reconciliação — SPEC-002 §5: nada vira vigente sem aprovação humana
+// Reconciliação — REMOVIDO na v2 (18/08). Não existe mais fila de
+// aprovação humana bloqueante: listarDivergenciasPendentes,
+// aprovarDivergencia, rejeitarDivergencia e
+// aprovarTodasDivergenciasDoLote foram removidas daqui porque nada mais
+// escreve em divergencias_reconciliacao durante a importação automática
+// (a Edge Function grava direto nas tabelas de domínio agora). Se algum
+// outro arquivo ainda importar esses 4 nomes, essa importação vai
+// quebrar — rode `grep -rn "aprovarDivergencia\|rejeitarDivergencia\|listarDivergenciasPendentes\|aprovarTodasDivergenciasDoLote" src/`
+// antes do deploy pra confirmar que não sobrou nenhum outro chamador.
 // ============================================================
-
-export async function listarDivergenciasPendentes(loteImportacaoId = null) {
-  let query = institucional
-    .from('divergencias_reconciliacao')
-    .select('*')
-    .eq('status', 'pendente')
-    .order('criado_em', { ascending: true })
-  if (loteImportacaoId) query = query.eq('lote_importacao_id', loteImportacaoId)
-  const { data, error } = await query
-  if (error) throw new Error(`Erro ao listar divergências pendentes: ${error.message}`)
-  return data ?? []
-}
-
-const TABELA_POR_NOME = {
-  planos_variantes: 'planos_variantes',
-  regras_precificacao: 'regras_precificacao',
-  regras_mercado: 'regras_mercado',
-  rede_credenciada: 'rede_credenciada',
-}
-
-/**
- * Aprova uma divergência — só aqui os dados de importação entram de
- * fato nas tabelas de domínio. Se `registro_existente_id` estiver
- * presente, faz update; senão, insert.
- */
-export async function aprovarDivergencia(divergenciaId, usuarioId) {
-  const { data: divergencia, error: erroDivergencia } = await institucional
-    .from('divergencias_reconciliacao')
-    .select('*')
-    .eq('id', divergenciaId)
-    .single()
-  if (erroDivergencia) throw new Error(`Erro ao buscar divergência: ${erroDivergencia.message}`)
-  if (divergencia.status !== 'pendente') {
-    throw new Error(`Divergência já foi ${divergencia.status === 'aprovado' ? 'aprovada' : 'rejeitada'} antes.`)
-  }
-
-  const tabela = TABELA_POR_NOME[divergencia.tabela_afetada]
-  if (!tabela) throw new Error(`Tabela afetada desconhecida: ${divergencia.tabela_afetada}`)
-
-  if (divergencia.registro_existente_id) {
-    const { error } = await institucional.from(tabela).update(divergencia.dado_novo).eq('id', divergencia.registro_existente_id)
-    if (error) throw new Error(`Erro ao aplicar atualização em ${tabela}: ${error.message}`)
-  } else {
-    const { error } = await institucional.from(tabela).insert(divergencia.dado_novo)
-    if (error) throw new Error(`Erro ao aplicar inserção em ${tabela}: ${error.message}`)
-  }
-
-  const { error: erroUpdate } = await institucional
-    .from('divergencias_reconciliacao')
-    .update({ status: 'aprovado', aprovado_por: usuarioId, aprovado_em: new Date().toISOString() })
-    .eq('id', divergenciaId)
-  if (erroUpdate) throw new Error(`Erro ao marcar divergência como aprovada: ${erroUpdate.message}`)
-}
-
-export async function rejeitarDivergencia(divergenciaId, usuarioId) {
-  const { error } = await institucional
-    .from('divergencias_reconciliacao')
-    .update({ status: 'rejeitado', aprovado_por: usuarioId, aprovado_em: new Date().toISOString() })
-    .eq('id', divergenciaId)
-  if (error) throw new Error(`Erro ao rejeitar divergência: ${error.message}`)
-}
-
-/** Aprova em lote — mesmo cuidado de nunca aplicar direto, só via aprovarDivergencia individual (mantém rastreabilidade por item). */
-export async function aprovarTodasDivergenciasDoLote(loteImportacaoId, usuarioId) {
-  const pendentes = await listarDivergenciasPendentes(loteImportacaoId)
-  const resultados = { aprovadas: 0, comErro: 0, erros: [] }
-  for (const d of pendentes) {
-    try {
-      await aprovarDivergencia(d.id, usuarioId)
-      resultados.aprovadas++
-    } catch (e) {
-      resultados.comErro++
-      resultados.erros.push(e.message)
-    }
-  }
-  return resultados
-}
 
 // ============================================================
 // Upload e disparo de processamento — Peça 2 (SPEC-002 §5)
@@ -309,8 +262,8 @@ export async function aprovarTodasDivergenciasDoLote(loteImportacaoId, usuarioId
 // ============================================================
 
 /**
- * Upload de material de mercado (Planos, Preços, Carência,
- * Coparticipação, Reembolso, Regra Comercial ou Rede) pra uma
+ * Upload de material de mercado (Preços, Rede Credenciada, Regras Gerais
+ * ou Completo) pra uma
  * operadora. Região é sempre propriedade do arquivo inteiro — nunca
  * extraída do texto do documento (confirmado nos PDFs de referência
  * Porto Seguro SP/Jundiaí: o título já diz a região, e cada arquivo é
@@ -320,7 +273,7 @@ export async function aprovarTodasDivergenciasDoLote(loteImportacaoId, usuarioId
  */
 export async function uploadMaterialMercado({ file, dominio, operadoraId, regiaoTarifariaId, enviadoPor }) {
   if (!file) throw new Error('Selecione um arquivo.')
-  if (!dominio) throw new Error('Selecione o domínio do material (Planos, Preços, Carência...).')
+  if (!dominio) throw new Error('Selecione o domínio do material (Preços, Rede Credenciada, Regras Gerais ou Completo).')
   if (!operadoraId) throw new Error('Operadora não identificada.')
   if (!regiaoTarifariaId) throw new Error('Selecione a região tarifária deste arquivo — cada tabela de preço vale para uma região só.')
 
@@ -372,18 +325,25 @@ export async function dispararProcessamentoMercado(loteId) {
   return data
 }
 
-/** Reprocessa um lote — apaga as divergências pendentes geradas antes (nunca mexe no que já foi aprovado/rejeitado) e roda de novo. */
+/**
+ * Reprocessa um lote. v2 (18/08): não mexe mais em divergencias_reconciliacao
+ * (nada escreve lá durante importação automática) — reseta o status pra
+ * disparar a Edge Function de novo, que sozinha decide se é execução nova
+ * (sem blocos ainda) ou retomada (blocos de uma tentativa anterior já
+ * persistidos em lotes_importacao_blocos, só os pendentes/com erro rodam
+ * de novo).
+ */
 export async function reprocessarLoteMercado(loteId) {
-  const { error: erroDivergencias } = await institucional
-    .from('divergencias_reconciliacao')
-    .delete()
-    .eq('lote_importacao_id', loteId)
-    .eq('status', 'pendente')
-  if (erroDivergencias) throw new Error(`Erro ao limpar divergências pendentes anteriores: ${erroDivergencias.message}`)
-
   const { error: erroUpdate } = await institucional
     .from('lotes_importacao_mercado')
-    .update({ status: 'recebido', quantidade_registros_processados: null, quantidade_registros_insuficientes: null, receita_extracao: null, erro: null, processado_em: null })
+    .update({
+      status: 'recebido',
+      quantidade_registros_processados: null,
+      quantidade_registros_insuficientes: null,
+      resumo_execucao: null,
+      erro: null,
+      processado_em: null,
+    })
     .eq('id', loteId)
   if (erroUpdate) throw new Error(`Erro ao reiniciar o lote: ${erroUpdate.message}`)
 
@@ -403,11 +363,8 @@ export async function excluirLoteMercado(loteId) {
 }
 
 export const DOMINIOS_MERCADO = [
-  { valor: 'planos', label: 'Planos / Variantes' },
   { valor: 'precos', label: 'Preços / Tabelas' },
-  { valor: 'carencia', label: 'Carências' },
-  { valor: 'coparticipacao', label: 'Coparticipação' },
-  { valor: 'reembolso', label: 'Reembolso' },
-  { valor: 'regra_comercial', label: 'Regras Comerciais' },
   { valor: 'rede', label: 'Rede Credenciada' },
+  { valor: 'regras_gerais', label: 'Regras Gerais (Planos, Carências, Coparticipação, Reembolso, Regras Comerciais)' },
+  { valor: 'completo', label: 'Completo (PDF único — ainda não implementado)' },
 ]

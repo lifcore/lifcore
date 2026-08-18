@@ -201,7 +201,13 @@ export async function processarDominioRegraMercado(texto: string, dominio: strin
   const divergencias: Divergencia[] = []
 
   for (const r of resultado.regras) {
-    const planoVarianteId = r.plano_texto ? encontrarPlanoIdPorTexto(r.plano_texto as string, mapaPlanos) : null
+    // Distinção importante: r.plano_texto ausente = regra é da operadora
+    // inteira, de propósito (ex: "a partir de 30 vidas, isenção de
+    // carência") — não é falha de vínculo. Só é falha real quando a IA
+    // devolveu um plano_texto e não achamos correspondência pra ele.
+    const temPlanoTexto = Boolean(r.plano_texto)
+    const planoVarianteId = temPlanoTexto ? encontrarPlanoIdPorTexto(r.plano_texto as string, mapaPlanos) : null
+    const vinculoResolvido = !temPlanoTexto || planoVarianteId != null // operadora-wide OU achou o plano = confiável
 
     const { data: existente } = planoVarianteId
       ? await db.from('regras_mercado').select('*').eq('plano_variante_id', planoVarianteId).eq('dominio', dominio).eq('chave', r.chave).maybeSingle()
@@ -215,7 +221,9 @@ export async function processarDominioRegraMercado(texto: string, dominio: strin
       conteudo: r.conteudo,
       vigencia_inicio: r.vigencia_inicio ?? null,
       fonte: 'documento',
-      status: planoVarianteId ? 'vinculo_confirmado' : 'sem_vinculo',
+      // 'vigente' aqui de propósito — mesmo vocabulário de regras_precificacao,
+      // e o que listarRegrasMercado() já espera (filtra por status=vigente).
+      status: vinculoResolvido ? 'vigente' : 'sem_vinculo',
     }
 
     divergencias.push({
