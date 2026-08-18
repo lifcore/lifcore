@@ -220,6 +220,7 @@ Deno.serve(async (req: Request) => {
     // ============================================================
     if (acao === 'teste_bloco_real') {
       const inicio = Date.now()
+      console.log('[teste_bloco_real] início')
       try {
         const numeroBlocoTeste = numeroBloco ?? 1
         const SUPABASE_URL_TESTE = Deno.env.get('SUPABASE_URL')!
@@ -227,6 +228,7 @@ Deno.serve(async (req: Request) => {
         const dbTeste = createClient(SUPABASE_URL_TESTE, SERVICE_ROLE_KEY_TESTE, { db: { schema: 'institucional' } })
 
         const { data: loteTeste, error: erroLoteTeste } = await dbTeste.from('lotes_importacao_mercado').select('*').eq('id', loteId).single()
+        console.log(`[teste_bloco_real] lote carregado: ${loteTeste?.id ?? 'ERRO'} dominio=${loteTeste?.dominio}`)
         if (erroLoteTeste || !loteTeste) {
           return new Response(
             JSON.stringify({ ok: false, etapa: 'buscar_lote', error: erroLoteTeste?.message ?? 'Lote não encontrado', duracao_ms: Date.now() - inicio }),
@@ -240,6 +242,7 @@ Deno.serve(async (req: Request) => {
           .eq('lote_importacao_id', loteId)
           .eq('numero_bloco', numeroBlocoTeste)
           .single()
+        console.log(`[teste_bloco_real] bloco carregado, tamanho_texto=${blocoTeste?.texto_bloco?.length ?? 'ERRO'}`)
         if (erroBlocoTeste || !blocoTeste) {
           return new Response(
             JSON.stringify({ ok: false, etapa: 'buscar_bloco', error: erroBlocoTeste?.message ?? 'Bloco não encontrado', duracao_ms: Date.now() - inicio }),
@@ -247,14 +250,15 @@ Deno.serve(async (req: Request) => {
           )
         }
 
+        console.log('[teste_bloco_real] chamando processarBlocoPorDominio')
         const divergencias = await processarBlocoPorDominio(loteTeste.dominio, blocoTeste.texto_bloco, loteTeste, dbTeste)
+        console.log(`[teste_bloco_real] processarBlocoPorDominio retornou ${divergencias.length} registros`)
         return new Response(
           JSON.stringify({ ok: true, tamanho_texto_bloco: blocoTeste.texto_bloco.length, registros_extraidos: divergencias.length, duracao_ms: Date.now() - inicio }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       } catch (e) {
-        // Captura QUALQUER coisa que quebre nessa ação de teste, com stack
-        // completo — o objetivo aqui é diagnóstico, não só "deu erro".
+        console.error(`[teste_bloco_real] EXCEÇÃO: ${(e as Error)?.message ?? String(e)}`)
         return new Response(
           JSON.stringify({
             ok: false,
