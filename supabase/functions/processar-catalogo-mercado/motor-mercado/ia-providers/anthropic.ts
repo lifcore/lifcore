@@ -17,7 +17,17 @@ function limparEExtrairJSON(textoResposta: string, contexto: string) {
   try {
     return JSON.parse(textoLimpo)
   } catch (e) {
-    throw new Error(`IA não devolveu JSON válido (${contexto}): ${(e as Error).message}`)
+    const mensagemErro = (e as Error).message
+    const posicaoEncontrada = mensagemErro.match(/position (\d+)/)
+    let trecho = ''
+    if (posicaoEncontrada) {
+      const posicao = parseInt(posicaoEncontrada[1], 10)
+      const inicio = Math.max(0, posicao - 150)
+      const fim = Math.min(textoLimpo.length, posicao + 150)
+      trecho = ` Trecho ao redor do erro: ...${textoLimpo.slice(inicio, fim)}...`
+    }
+    console.error(`[${contexto}] JSON inválido. ${mensagemErro}.${trecho} Tamanho total: ${textoLimpo.length} chars.`)
+    throw new Error(`IA não devolveu JSON válido (${contexto}): ${mensagemErro}.${trecho}`)
   }
 }
 
