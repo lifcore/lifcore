@@ -1,16 +1,18 @@
 /**
  * CONNECT CENTER (Edge Function) — Orquestração central.
- * SPEC-002 §5: identifica formato → extrai (IA, sempre — material de
- * mercado é heterogêneo demais pra determinístico nesta fase) →
- * normaliza → compara com o existente → toda divergência vai pra fila
- * de aprovação. NENHUMA função aqui grava direto nas tabelas de
- * domínio (planos_variantes, regras_precificacao, regras_mercado,
- * rede_credenciada) — só em `divergencias_reconciliacao`.
+ * SPEC-002 §5, revisado 18/08 (Arquitetura v2): identifica formato →
+ * extrai (IA, sempre — material de mercado é heterogêneo demais pra
+ * determinístico nesta fase) → normaliza → grava DIRETO nas tabelas de
+ * domínio, com sinal de confiança em vez de fila de aprovação humana
+ * bloqueante (decisão de 18/08 — aprovação nesse volume não valida nada
+ * de verdade, e escondia dado real do banco).
  *
- * Exceção deliberada: `prestadores_marca`/`prestadores_unidade` (nível
- * de identidade de prestador, não "conhecimento de mercado" contestável)
- * são resolvidos/criados diretamente — só o vínculo plano×unidade
- * (rede_credenciada) passa pela fila.
+ * Divisão em blocos de texto NÃO acontece mais aqui dentro — subiu pro
+ * orquestrador de nível mais alto (processar-catalogo-mercado/index.ts),
+ * que agora persiste cada bloco antes de processar (tabela
+ * lotes_importacao_blocos) e chama cada processarDominio<X> uma vez por
+ * bloco. Por isso cada função aqui volta a receber só 1 texto por vez —
+ * mais simples, e a resiliência por bloco fica centralizada num lugar só.
  */
 
 import { interpretarPlanosComIA, interpretarPrecosComIA, interpretarRegraMercadoComIA, interpretarRedeComIA } from './ia-providers/index.ts'
@@ -30,17 +32,16 @@ interface Divergencia {
 function comparar(existente: Record<string, unknown> | null, novo: Record<string, unknown>): 'novo' | 'alterado' | 'conflito' {
   if (!existente) return 'novo'
   const mudou = Object.keys(novo).some((k) => novo[k] != null && JSON.stringify(novo[k]) !== JSON.stringify(existente[k]))
-  return mudou ? 'alterado' : 'novo' // 'novo' aqui = sem diferença real, tratado como no-op na aprovação (update idempotente)
+  return mudou ? 'alterado' : 'novo' // 'novo' aqui = sem diferença real, tratado como no-op na aplicação (update idempotente)
 }
 
 // Divide texto longo em blocos por tamanho de caracteres, nunca cortando uma
-// linha ao meio. Genérico de propósito — não usa nenhum marcador específico
-// de formato de operadora (ex: "Linha Pró"), porque material de mercado é
-// heterogêneo demais entre operadoras (mesmo princípio do cabeçalho deste
-// arquivo). Existe porque documentos de tabela de preços completos podem
-// gerar centenas de regras — mais do que uma única resposta de IA comporta
-// dentro do orçamento de max_tokens de saída.
-function dividirEmBlocos(texto: string, tamanhoMaximoCaracteres: number): string[] {
+// linha ao meio. Genérico de propósito — nenhum marcador específico de
+// formato de operadora. Usado agora pelo orquestrador de nível mais alto,
+// não mais internamente por processarDominioPrecos (ver cabeçalho do
+// arquivo) — mas a função mora aqui porque é utilitário puro de texto,
+// sem dependência de banco.
+export function dividirEmBlocos(texto: string, tamanhoMaximoCaracteres: number): string[] {
   const linhas = texto.split('\n')
   const blocos: string[] = []
   let atual: string[] = []
@@ -57,6 +58,37 @@ function dividirEmBlocos(texto: string, tamanhoMaximoCaracteres: number): string
   }
   if (atual.length > 0) blocos.push(atual.join('\n'))
   return blocos
+}
+
+// Grava as divergências DIRETO na tabela de domínio — substitui o antigo
+// caminho de "acumular pra divergencias_reconciliacao, esperar aprovação".
+// registro_existente_id presente = update; ausente = insert. O sinal de
+// confiança (status: vigente/regra_insuficiente/vinculo_confirmado/
+// sem_vinculo, dependendo da tabela) já vem calculado dentro de dado_novo
+// por cada processarDominio<X> — esta função só decide COMO gravar, nunca
+// decide SE o dado é confiável.
+export async function aplicarDivergenciasDireto(divergencias: Divergencia[], db: Db): Promise<{ sucesso: number; erro: number; erros: string[] }> {
+  let sucesso = 0
+  let erro = 0
+  const erros: string[] = []
+
+  for (const d of divergencias) {
+    try {
+      if (d.registro_existente_id) {
+        const { error } = await db.from(d.tabela_afetada).update(d.dado_novo).eq('id', d.registro_existente_id)
+        if (error) throw new Error(error.message)
+      } else {
+        const { error } = await db.from(d.tabela_afetada).insert(d.dado_novo)
+        if (error) throw new Error(error.message)
+      }
+      sucesso++
+    } catch (e) {
+      erro++
+      erros.push(`${d.tabela_afetada}: ${(e as Error).message}`)
+    }
+  }
+
+  return { sucesso, erro, erros }
 }
 
 // ----------------------------------------------------------------------
@@ -104,33 +136,23 @@ export async function processarDominioPlanos(texto: string, operadoraId: string,
 }
 
 // ----------------------------------------------------------------------
-// Domínio: Regras de Precificação (a correção de 17/08 aplicada aqui)
+// Domínio: Regras de Precificação
 // ----------------------------------------------------------------------
 export async function processarDominioPrecos(texto: string, operadoraId: string, db: Db, regiaoTarifariaId: string | null): Promise<Divergencia[]> {
   const { data: planosExistentes } = await db.from('planos_variantes').select('id, nome_plano, variante').eq('operadora_id', operadoraId)
   const mapaPlanos = new Map((planosExistentes ?? []).map((p: Record<string, unknown>) => [`${p.nome_plano}|${p.variante ?? ''}`, p.id]))
   const nomesConhecidos = (planosExistentes ?? []).map((p: Record<string, unknown>) => `${p.nome_plano}${p.variante ? ' - ' + p.variante : ''}`)
 
-  // Tabelas de preço completas podem gerar centenas de regras — mais do que
-  // cabe no orçamento de saída de uma única chamada de IA (confirmado em
-  // teste real: PDF com ~770 combinações estourava max_tokens mesmo em
-  // 16000). Divide em blocos e funde os resultados antes de seguir.
-  const blocosTexto = dividirEmBlocos(texto, 6000)
-  const todasRegras: Record<string, unknown>[] = []
-  for (const bloco of blocosTexto) {
-    const resultadoBloco = (await interpretarPrecosComIA(bloco, nomesConhecidos)) as { regras: Record<string, unknown>[] }
-    todasRegras.push(...resultadoBloco.regras)
-  }
-
+  // Volta a processar 1 texto por chamada — divisão em blocos agora é
+  // responsabilidade do orquestrador de nível mais alto (ver cabeçalho).
+  const resultado = (await interpretarPrecosComIA(texto, nomesConhecidos)) as { regras: Record<string, unknown>[] }
   const divergencias: Divergencia[] = []
 
-  for (const r of todasRegras) {
+  for (const r of resultado.regras) {
     const planoVarianteId = encontrarPlanoIdPorTexto(r.plano_texto as string, mapaPlanos)
 
-    // Passo 3 (Documento Mestre) — região não é mais extraída do texto:
-    // é propriedade do arquivo inteiro, vem do lote (confirmado nos
-    // PDFs de referência Porto Seguro SP/Jundiaí — o título já diz a
-    // região). Sem regiaoTarifariaId, a regra nunca fecha como vigente.
+    // Região não é extraída do texto: é propriedade do arquivo inteiro,
+    // vem do lote (confirmado nos PDFs de referência).
     const dimensoesPresentes = ['tipo_contratacao', 'segmento', 'faixa_vidas_min', 'faixa_etaria'].filter((d) => r[d] != null)
     const statusSugerido = r.valor == null || !regiaoTarifariaId || dimensoesPresentes.length === 0 ? 'regra_insuficiente' : 'vigente'
     const motivo =
@@ -157,7 +179,7 @@ export async function processarDominioPrecos(texto: string, operadoraId: string,
 
     divergencias.push({
       tabela_afetada: 'regras_precificacao',
-      registro_existente_id: null, // preço sempre entra como novo registro — não faz sentido "atualizar" uma regra comercial passada, ela é revogada e substituída
+      registro_existente_id: null, // preço sempre entra como novo registro — nunca "atualiza" uma regra comercial passada
       dado_novo: dadoNovo,
       dado_existente: null,
       tipo_divergencia: 'novo',
@@ -193,6 +215,7 @@ export async function processarDominioRegraMercado(texto: string, dominio: strin
       conteudo: r.conteudo,
       vigencia_inicio: r.vigencia_inicio ?? null,
       fonte: 'documento',
+      status: planoVarianteId ? 'vinculo_confirmado' : 'sem_vinculo',
     }
 
     divergencias.push({
@@ -208,8 +231,12 @@ export async function processarDominioRegraMercado(texto: string, dominio: strin
 }
 
 // ----------------------------------------------------------------------
-// Domínio: Rede Credenciada — marca/unidade resolvidos direto, só o
-// vínculo plano×unidade vai pra fila (ver nota no topo do arquivo).
+// Domínio: Rede Credenciada — marca/unidade resolvidos direto (identidade
+// determinística, não é "conhecimento de mercado" contestável). O vínculo
+// plano×unidade agora É SEMPRE gravado — antes (até 17/08) era descartado
+// silenciosamente quando o plano não batia com nenhum conhecido; a partir
+// de 18/08, grava com status: 'sem_vinculo' e plano_variante_id null,
+// visível pra conferência, em vez de simplesmente sumir.
 // ----------------------------------------------------------------------
 export async function processarDominioRede(texto: string, operadoraId: string, db: Db, regiaoTarifariaId: string | null): Promise<Divergencia[]> {
   const { data: planosExistentes } = await db.from('planos_variantes').select('id, nome_plano, variante').eq('operadora_id', operadoraId)
@@ -221,9 +248,9 @@ export async function processarDominioRede(texto: string, operadoraId: string, d
 
   for (const l of resultado.linhas) {
     const planoVarianteId = encontrarPlanoIdPorTexto(l.plano_texto as string, mapaPlanos)
-    if (!planoVarianteId) continue // sem plano conhecido, não arrisca vínculo às cegas
+    // ANTES: if (!planoVarianteId) continue — descartava a linha inteira, sem rastro.
+    // AGORA: segue e grava, só marcando a confiança do vínculo.
 
-    // Marca/unidade: identidade determinística por (nome, município) — resolve ou cria direto (unique constraint garante idempotência).
     let marcaId: string | null = null
     const { data: marcaExistente } = await db.from('prestadores_marca').select('id').eq('nome', l.prestador).eq('tipo', l.tipo ?? 'hospital').maybeSingle()
     if (marcaExistente) {
@@ -233,13 +260,14 @@ export async function processarDominioRede(texto: string, operadoraId: string, d
       marcaId = marcaNova?.id ?? null
     }
 
-    // Passo 3 — regiao_tarifaria_id só é gravado na CRIAÇÃO da unidade,
-    // nunca sobrescrito numa unidade já existente. O mesmo prestador
-    // físico aparece em PDFs de regiões diferentes (confirmado: "H
-    // Paulo Sacramento" em Jundiaí aparece tanto no arquivo de SP quanto
-    // no de Jundiaí) — a região aqui reflete "de qual import foi
-    // descoberta primeiro", não uma "região caseira" real do prestador.
-    // Ambiguidade conhecida, não resolvida aqui — sinalizada pro Raphael.
+    // regiao_tarifaria_id só é gravado na CRIAÇÃO da unidade, nunca
+    // sobrescrito. Ambiguidade conhecida (Passo 3): reflete "de qual
+    // import foi descoberta primeiro", não uma região real do prestador.
+    // Achado de 18/08 (não generalizado ainda): pode ser que Rede nem
+    // varie por região nalgumas operadoras — se confirmado, essa
+    // obrigatoriedade de região tarifária no upload deste domínio pode
+    // deixar de fazer sentido. Não alterado aqui até confirmar em mais
+    // operadoras.
     const { data: unidadeExistente } = await db.from('prestadores_unidade').select('id').eq('nome', l.prestador).eq('municipio', l.municipio ?? null).maybeSingle()
     let unidadeId = unidadeExistente?.id ?? null
     if (!unidadeId) {
@@ -250,15 +278,18 @@ export async function processarDominioRede(texto: string, operadoraId: string, d
         .single()
       unidadeId = unidadeNova?.id ?? null
     }
-    if (!unidadeId) continue
+    if (!unidadeId) continue // isso aqui é falha real de identidade de prestador, não falha de vínculo de plano — mantém o skip
 
-    const { data: existente } = await db.from('rede_credenciada').select('*').eq('plano_variante_id', planoVarianteId).eq('unidade_id', unidadeId).maybeSingle()
+    const { data: existente } = planoVarianteId
+      ? await db.from('rede_credenciada').select('*').eq('plano_variante_id', planoVarianteId).eq('unidade_id', unidadeId).maybeSingle()
+      : { data: null } // sem plano confirmado não dá pra checar duplicidade por plano — sempre insere como novo
 
     const dadoNovo = {
-      plano_variante_id: planoVarianteId,
+      plano_variante_id: planoVarianteId, // pode ser null agora — coluna precisa aceitar (ver migração 001)
       unidade_id: unidadeId,
       codigo_bruto: l.codigo_bruto ?? null,
       fonte: 'documento',
+      status: planoVarianteId ? 'vinculo_confirmado' : 'sem_vinculo',
     }
 
     divergencias.push({

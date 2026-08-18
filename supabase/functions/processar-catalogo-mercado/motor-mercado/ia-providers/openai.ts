@@ -127,4 +127,15 @@ Devolva APENAS JSON:
   return chamarOpenAI(prompt, `Trecho a interpretar:\n\n${texto}`, 'Rede Credenciada')
 }
 
-export default { nome: 'openai', interpretarPlanos, interpretarPrecos, interpretarRegraMercado, interpretarRede }
+async function validarConsistencia(textoOriginal: string, resumoGravado: string) {
+  const prompt = `Você está validando se dados extraídos de um trecho de documento fonte foram gravados corretamente no banco de dados.
+${REGRAS_ABSOLUTAS}
+
+Compare o texto original com o resumo do que foi gravado. Aponte SOMENTE discrepâncias reais de conteúdo — valores que deveriam ter sido extraídos e não aparecem no resumo, contagem visivelmente incompatível com o que o texto contém, ou sinal de que algo relevante foi ignorado. Não aponte diferença de formatação ou reorganização.
+
+Devolva APENAS JSON:
+{"discrepancias": [{"descricao": string}], "conclusao": "consistente"|"discrepancias_encontradas"}`
+  return chamarOpenAI(prompt, `TEXTO ORIGINAL DO BLOCO:\n\n${textoOriginal}\n\n---\n\nRESUMO DO QUE FOI GRAVADO NO BANCO PARA ESSE BLOCO:\n\n${resumoGravado}`, 'Validação Cruzada')
+}
+
+export default { nome: 'openai', interpretarPlanos, interpretarPrecos, interpretarRegraMercado, interpretarRede, validarConsistencia }

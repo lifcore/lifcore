@@ -3,6 +3,14 @@
  * Mesmo padrão do Motor de Estudo de Mercado (`IA_PROVIDER` no
  * ambiente). Adicionar provider novo = arquivo novo aqui registrado,
  * nenhum outro módulo precisa mudar.
+ *
+ * v2 (18/08): adiciona validarConsistencia (usado pela validação cruzada
+ * por segunda IA) e obterProviderPorNome/validarConsistenciaComIA, que
+ * permitem pedir um provedor ESPECÍFICO por nome — diferente de
+ * obterProviderAtivo(), que só devolve o que estiver configurado em
+ * IA_PROVIDER. Necessário porque a validação cruzada sempre usa o
+ * provedor secundário fixo (OpenAI, conforme diretriz), independente de
+ * qual estiver ativo pra extração.
  */
 
 import { validarSaidaPlanos, validarSaidaPrecos, validarSaidaRegraMercado, validarSaidaRede } from './contrato.ts'
@@ -16,6 +24,7 @@ interface ProviderIA {
   interpretarPrecos: (texto: string, planosConhecidos: string[]) => Promise<unknown>
   interpretarRegraMercado: (texto: string, dominio: string, planosConhecidos: string[]) => Promise<unknown>
   interpretarRede: (texto: string, planosConhecidos: string[]) => Promise<unknown>
+  validarConsistencia: (textoOriginal: string, resumoGravado: string) => Promise<unknown>
 }
 
 const PROVIDERS: Record<string, ProviderIA> = { anthropic, openai, gemini }
@@ -25,6 +34,14 @@ function obterProviderAtivo(): ProviderIA {
   const provider = PROVIDERS[nomeProvider]
   if (!provider) {
     throw new Error(`Provider de IA "${nomeProvider}" não registrado. Disponíveis: ${Object.keys(PROVIDERS).join(', ')}.`)
+  }
+  return provider
+}
+
+export function obterProviderPorNome(nome: string): ProviderIA {
+  const provider = PROVIDERS[nome]
+  if (!provider) {
+    throw new Error(`Provider de IA "${nome}" não registrado. Disponíveis: ${Object.keys(PROVIDERS).join(', ')}.`)
   }
   return provider
 }
@@ -55,4 +72,11 @@ export async function interpretarRedeComIA(texto: string, planosConhecidos: stri
   const resultado = await provider.interpretarRede(texto, planosConhecidos)
   validarSaidaRede(resultado, provider.nome)
   return { ...(resultado as Record<string, unknown>), providerUsado: provider.nome }
+}
+
+// Não passa pelo validarSaida* (contrato de extração) — validação cruzada
+// tem formato de saída próprio, não é um dos 4 domínios de extração.
+export async function validarConsistenciaComIA(nomeProvider: string, textoOriginal: string, resumoGravado: string) {
+  const provider = obterProviderPorNome(nomeProvider)
+  return provider.validarConsistencia(textoOriginal, resumoGravado)
 }
