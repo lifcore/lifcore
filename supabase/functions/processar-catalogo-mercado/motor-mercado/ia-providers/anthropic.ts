@@ -28,7 +28,13 @@ async function chamarAnthropic(systemPrompt: string, mensagemUsuario: string, co
   const resposta = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: MODELO, max_tokens: 8000, system: systemPrompt, messages: [{ role: 'user', content: mensagemUsuario }] }),
+    body: JSON.stringify({
+      model: MODELO,
+      max_tokens: 8000,
+      thinking: { type: 'disabled' },
+      system: systemPrompt,
+      messages: [{ role: 'user', content: mensagemUsuario }],
+    }),
   })
   if (!resposta.ok) throw new Error(`Erro na API Anthropic (${contexto}): ${resposta.status} ${await resposta.text()}`)
 
