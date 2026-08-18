@@ -30,7 +30,7 @@ async function chamarAnthropic(systemPrompt: string, mensagemUsuario: string, co
     headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
       model: MODELO,
-      max_tokens: 8000,
+      max_tokens: 16000,
       thinking: { type: 'disabled' },
       system: systemPrompt,
       messages: [{ role: 'user', content: mensagemUsuario }],
