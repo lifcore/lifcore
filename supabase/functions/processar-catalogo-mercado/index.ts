@@ -185,7 +185,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const { loteId, acao } = await req.json()
+    const { loteId, acao, numeroBloco } = await req.json()
 
     // ============================================================
     // Teste A (diretriz do Chief, 18/08): isola o caminho mínimo
@@ -205,6 +205,56 @@ Deno.serve(async (req: Request) => {
       } catch (e) {
         return new Response(
           JSON.stringify({ ok: false, provider: nomeProvider, error: (e as Error).message, duracao_ms: Date.now() - inicio }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
+    // ============================================================
+    // Teste B (diretriz do Chief): pega o texto REAL de um bloco já
+    // persistido (nenhum download/extração de arquivo aqui) e manda pro
+    // prompt de verdade do domínio — mede quanto tempo a IA leva pra
+    // responder com o conteúdo real, sem nenhuma orquestração ao redor
+    // (sem telemetria por etapa, sem gravação no banco, sem lease). Só
+    // precisa de loteId; numeroBloco é opcional, default 1.
+    // ============================================================
+    if (acao === 'teste_bloco_real') {
+      const inicio = Date.now()
+      const numeroBlocoTeste = numeroBloco ?? 1
+      const SUPABASE_URL_TESTE = Deno.env.get('SUPABASE_URL')!
+      const SERVICE_ROLE_KEY_TESTE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      const dbTeste = createClient(SUPABASE_URL_TESTE, SERVICE_ROLE_KEY_TESTE, { db: { schema: 'institucional' } })
+
+      const { data: loteTeste, error: erroLoteTeste } = await dbTeste.from('lotes_importacao_mercado').select('*').eq('id', loteId).single()
+      if (erroLoteTeste) {
+        return new Response(JSON.stringify({ ok: false, error: `Erro ao buscar lote: ${erroLoteTeste.message}`, duracao_ms: Date.now() - inicio }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const { data: blocoTeste, error: erroBlocoTeste } = await dbTeste
+        .from('lotes_importacao_blocos')
+        .select('texto_bloco')
+        .eq('lote_importacao_id', loteId)
+        .eq('numero_bloco', numeroBlocoTeste)
+        .single()
+      if (erroBlocoTeste) {
+        return new Response(JSON.stringify({ ok: false, error: `Erro ao buscar bloco: ${erroBlocoTeste.message}`, duracao_ms: Date.now() - inicio }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      try {
+        const divergencias = await processarBlocoPorDominio(loteTeste.dominio, blocoTeste.texto_bloco, loteTeste, dbTeste)
+        return new Response(
+          JSON.stringify({ ok: true, tamanho_texto_bloco: blocoTeste.texto_bloco.length, registros_extraidos: divergencias.length, duracao_ms: Date.now() - inicio }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ ok: false, tamanho_texto_bloco: blocoTeste.texto_bloco.length, error: (e as Error).message, duracao_ms: Date.now() - inicio }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
