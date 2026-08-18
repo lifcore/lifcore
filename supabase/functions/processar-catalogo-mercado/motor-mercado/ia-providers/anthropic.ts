@@ -34,7 +34,12 @@ async function chamarAnthropic(systemPrompt: string, mensagemUsuario: string, co
 
   const dados = await resposta.json()
   const texto = dados.content?.find((b: { type: string }) => b.type === 'text')?.text
-  if (!texto) throw new Error(`Resposta da IA sem texto (${contexto}).`)
+  if (!texto) {
+    const tiposBlocos = Array.isArray(dados.content) ? dados.content.map((b: { type: string }) => b.type).join(', ') : 'content ausente'
+    const detalhe = `stop_reason=${dados.stop_reason ?? 'desconhecido'}, blocos=[${tiposBlocos || 'nenhum'}]`
+    console.error(`[${contexto}] Resposta da IA sem bloco de texto. ${detalhe}. Corpo completo: ${JSON.stringify(dados)}`)
+    throw new Error(`Resposta da IA sem texto (${contexto}). ${detalhe}`)
+  }
   return limparEExtrairJSON(texto, contexto)
 }
 
