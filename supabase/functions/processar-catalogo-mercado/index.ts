@@ -220,41 +220,49 @@ Deno.serve(async (req: Request) => {
     // ============================================================
     if (acao === 'teste_bloco_real') {
       const inicio = Date.now()
-      const numeroBlocoTeste = numeroBloco ?? 1
-      const SUPABASE_URL_TESTE = Deno.env.get('SUPABASE_URL')!
-      const SERVICE_ROLE_KEY_TESTE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      const dbTeste = createClient(SUPABASE_URL_TESTE, SERVICE_ROLE_KEY_TESTE, { db: { schema: 'institucional' } })
-
-      const { data: loteTeste, error: erroLoteTeste } = await dbTeste.from('lotes_importacao_mercado').select('*').eq('id', loteId).single()
-      if (erroLoteTeste) {
-        return new Response(JSON.stringify({ ok: false, error: `Erro ao buscar lote: ${erroLoteTeste.message}`, duracao_ms: Date.now() - inicio }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-
-      const { data: blocoTeste, error: erroBlocoTeste } = await dbTeste
-        .from('lotes_importacao_blocos')
-        .select('texto_bloco')
-        .eq('lote_importacao_id', loteId)
-        .eq('numero_bloco', numeroBlocoTeste)
-        .single()
-      if (erroBlocoTeste) {
-        return new Response(JSON.stringify({ ok: false, error: `Erro ao buscar bloco: ${erroBlocoTeste.message}`, duracao_ms: Date.now() - inicio }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-
       try {
+        const numeroBlocoTeste = numeroBloco ?? 1
+        const SUPABASE_URL_TESTE = Deno.env.get('SUPABASE_URL')!
+        const SERVICE_ROLE_KEY_TESTE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+        const dbTeste = createClient(SUPABASE_URL_TESTE, SERVICE_ROLE_KEY_TESTE, { db: { schema: 'institucional' } })
+
+        const { data: loteTeste, error: erroLoteTeste } = await dbTeste.from('lotes_importacao_mercado').select('*').eq('id', loteId).single()
+        if (erroLoteTeste || !loteTeste) {
+          return new Response(
+            JSON.stringify({ ok: false, etapa: 'buscar_lote', error: erroLoteTeste?.message ?? 'Lote não encontrado', duracao_ms: Date.now() - inicio }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        const { data: blocoTeste, error: erroBlocoTeste } = await dbTeste
+          .from('lotes_importacao_blocos')
+          .select('texto_bloco')
+          .eq('lote_importacao_id', loteId)
+          .eq('numero_bloco', numeroBlocoTeste)
+          .single()
+        if (erroBlocoTeste || !blocoTeste) {
+          return new Response(
+            JSON.stringify({ ok: false, etapa: 'buscar_bloco', error: erroBlocoTeste?.message ?? 'Bloco não encontrado', duracao_ms: Date.now() - inicio }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
         const divergencias = await processarBlocoPorDominio(loteTeste.dominio, blocoTeste.texto_bloco, loteTeste, dbTeste)
         return new Response(
           JSON.stringify({ ok: true, tamanho_texto_bloco: blocoTeste.texto_bloco.length, registros_extraidos: divergencias.length, duracao_ms: Date.now() - inicio }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       } catch (e) {
+        // Captura QUALQUER coisa que quebre nessa ação de teste, com stack
+        // completo — o objetivo aqui é diagnóstico, não só "deu erro".
         return new Response(
-          JSON.stringify({ ok: false, tamanho_texto_bloco: blocoTeste.texto_bloco.length, error: (e as Error).message, duracao_ms: Date.now() - inicio }),
+          JSON.stringify({
+            ok: false,
+            etapa: 'excecao_nao_tratada',
+            error: (e as Error)?.message ?? String(e),
+            stack: (e as Error)?.stack ?? null,
+            duracao_ms: Date.now() - inicio,
+          }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
