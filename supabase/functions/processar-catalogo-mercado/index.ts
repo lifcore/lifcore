@@ -50,7 +50,7 @@ import { validarBlocoComSegundaIA } from './motor-mercado/validacao-cruzada.ts'
 const pdfParse = pdfParseModule as (buffer: Uint8Array) => Promise<{ text: string }>
 
 const BUCKET = 'anexos'
-const TAMANHO_MAXIMO_BLOCO = 6000 // caracteres
+const TAMANHO_MAXIMO_BLOCO = 3000 // caracteres — reduzido de 6000 em 18/08 após confirmar que um bloco de 5985 chars (arquivo denso da Amil, 12 colunas) estourava o limite de CPU (546/WORKER_RESOURCE_LIMIT). Dá margem real, não só "um pouco menor".
 const TAMANHO_CONTEXTO_ANTERIOR = 800 // caracteres do final do bloco anterior, carregados como referência — não como dado novo (diretriz §1/§5)
 const LEASE_TIMEOUT_MS = 120000 // 120s — a própria Edge Function morre aos 150s de IDLE_TIMEOUT; 120s de margem é seguro pra considerar um bloco "processando" como órfão.
 
@@ -176,7 +176,17 @@ async function recalcularResumoLote(db: Db, loteId: string) {
   }
 
   const statusFinal = blocosPendentes > 0 ? 'processando_parcial' : blocosErro === 0 ? 'concluido' : 'concluido_com_erros'
-  await db.from('lotes_importacao_mercado').update({ status: statusFinal, resumo_execucao: resumoExecucao, processado_em: new Date().toISOString() }).eq('id', loteId)
+  const { error: erroAtualizarLote } = await db
+    .from('lotes_importacao_mercado')
+    .update({ status: statusFinal, resumo_execucao: resumoExecucao, processado_em: new Date().toISOString() })
+    .eq('id', loteId)
+  if (erroAtualizarLote) {
+    // Isso NUNCA deve falhar silenciosamente — se a gravação do status do
+    // lote falhar, a resposta HTTP precisa refletir isso, não devolver
+    // "sucesso" com o banco desatualizado por baixo.
+    console.error(`[recalcularResumoLote] Falha ao atualizar lotes_importacao_mercado ${loteId}: ${erroAtualizarLote.message}`)
+    throw new Error(`Falha ao gravar status final do lote: ${erroAtualizarLote.message}`)
+  }
 
   return resumoExecucao
 }
