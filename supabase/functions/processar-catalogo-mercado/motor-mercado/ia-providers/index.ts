@@ -7,6 +7,8 @@
 
 import { validarSaidaPlanos, validarSaidaPrecos, validarSaidaRegraMercado, validarSaidaRede } from './contrato.ts'
 import anthropic from './anthropic.ts'
+import openai from './openai.ts'
+import gemini from './gemini.ts'
 
 interface ProviderIA {
   nome: string
@@ -16,7 +18,7 @@ interface ProviderIA {
   interpretarRede: (texto: string, planosConhecidos: string[]) => Promise<unknown>
 }
 
-const PROVIDERS: Record<string, ProviderIA> = { anthropic }
+const PROVIDERS: Record<string, ProviderIA> = { anthropic, openai, gemini }
 
 function obterProviderAtivo(): ProviderIA {
   const nomeProvider = Deno.env.get('IA_PROVIDER') || 'anthropic'
