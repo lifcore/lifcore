@@ -318,7 +318,11 @@ export async function uploadMaterialMercado({ file, dominio, operadoraId, regiao
   }
 
   try {
-    await dispararProcessamentoMercado(lote.id)
+    // Só dispara 1 chamada (cria os blocos, ou processa o primeiro) — não
+    // espera o lote inteiro terminar aqui. O resto roda pelo botão
+    // "Reprocessar"/"Continuar processamento" na tela, que já sabe
+    // encadear quantas chamadas forem precisas.
+    await dispararProcessamentoMercado(lote.id, { maxIteracoes: 1 })
   } catch (e) {
     console.error('Processamento automático falhou, lote ficará como "recebido":', e.message)
   }
@@ -326,21 +330,62 @@ export async function uploadMaterialMercado({ file, dominio, operadoraId, regiao
   return lote
 }
 
-export async function dispararProcessamentoMercado(loteId) {
-  const { data, error } = await supabase.functions.invoke('processar-catalogo-mercado', { body: { loteId } })
-  if (error) throw new Error(`Erro ao processar o material: ${error.message}`)
-  return data
+/**
+ * Dispara o processamento de um lote. v3 (18/08, diretriz do Chief): a
+ * Edge Function agora processa NO MÁXIMO 1 bloco por chamada — nenhuma
+ * requisição fica esperando o lote inteiro (era isso que causava
+ * IDLE_TIMEOUT). Essa função chama de novo, em loop, até não sobrar
+ * bloco pendente — cada chamada individual é rápida e fica bem dentro
+ * do limite de tempo da Edge Function.
+ *
+ * onProgresso, se passado, roda depois de CADA chamada individual com o
+ * resultado parcial — usado pra mostrar "processando bloco X..." em
+ * tempo real na tela, em vez de um "processando..." genérico e opaco.
+ */
+export async function dispararProcessamentoMercado(loteId, { onProgresso, maxIteracoes = 300 } = {}) {
+  let ultimoResultado = null
+  for (let i = 0; i < maxIteracoes; i++) {
+    const { data, error } = await supabase.functions.invoke('processar-catalogo-mercado', { body: { loteId } })
+    if (error) throw new Error(`Erro ao processar o material: ${error.message}`)
+    ultimoResultado = data
+    if (onProgresso) onProgresso(data)
+
+    // Fase de setup (criação de blocos) só retorna 'fase', sem contagem —
+    // continua o loop direto pro primeiro bloco de verdade.
+    if (data?.fase === 'blocos_criados') continue
+
+    // Sem bloco pendente = terminou (com ou sem erro em algum bloco).
+    if ((data?.blocos_pendentes ?? 0) === 0) break
+  }
+  return ultimoResultado
 }
 
 /**
- * Reprocessa um lote. v2 (18/08): não mexe mais em divergencias_reconciliacao
+ * Validação cruzada por segunda IA — v3, TOTALMENTE separada da
+ * ingestão (diretriz §8). Roda por fora, sob demanda, nunca afeta o
+ * dado já gravado. Mesmo padrão de loop: 1 bloco por chamada.
+ */
+export async function validarLoteComSegundaIA(loteId, { onProgresso, maxIteracoes = 300 } = {}) {
+  let ultimoResultado = null
+  for (let i = 0; i < maxIteracoes; i++) {
+    const { data, error } = await supabase.functions.invoke('processar-catalogo-mercado', { body: { loteId, acao: 'validar' } })
+    if (error) throw new Error(`Erro ao validar: ${error.message}`)
+    ultimoResultado = data
+    if (onProgresso) onProgresso(data)
+    if (data?.motivo === 'Nenhum bloco concluído pendente de validação cruzada.') break
+  }
+  return ultimoResultado
+}
+
+/**
+ * Reprocessa um lote. v3 (18/08): não mexe mais em divergencias_reconciliacao
  * (nada escreve lá durante importação automática) — reseta o status pra
  * disparar a Edge Function de novo, que sozinha decide se é execução nova
  * (sem blocos ainda) ou retomada (blocos de uma tentativa anterior já
  * persistidos em lotes_importacao_blocos, só os pendentes/com erro rodam
- * de novo).
+ * de novo — nunca volta pro bloco 1).
  */
-export async function reprocessarLoteMercado(loteId) {
+export async function reprocessarLoteMercado(loteId, { onProgresso } = {}) {
   const { error: erroUpdate } = await institucional
     .from('lotes_importacao_mercado')
     .update({
@@ -354,7 +399,7 @@ export async function reprocessarLoteMercado(loteId) {
     .eq('id', loteId)
   if (erroUpdate) throw new Error(`Erro ao reiniciar o lote: ${erroUpdate.message}`)
 
-  return dispararProcessamentoMercado(loteId)
+  return dispararProcessamentoMercado(loteId, { onProgresso })
 }
 
 export async function excluirLoteMercado(loteId) {

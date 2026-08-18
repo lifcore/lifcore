@@ -1,45 +1,35 @@
 /**
  * EDGE FUNCTION: processar-catalogo-mercado
- * SPEC-002 — Connect Center. Arquitetura v2 (18/08/2026), reescrita
- * completa desta camada a partir da diretriz do Chief + ajustes
- * discutidos com o Raphael no mesmo dia. Mudanças em relação à versão
- * anterior:
+ * SPEC-002 — Connect Center. Arquitetura v3 (18/08/2026) — correção de
+ * execução, diretriz do Chief.
  *
- * 1. Divisão em blocos SOBE pra cá (antes só existia dentro de
- *    processarDominioPrecos) — agora vale pra todos os domínios, e cada
- *    bloco é PERSISTIDO (tabela lotes_importacao_blocos) antes de
- *    qualquer chamada de IA. Falha num bloco nunca mais derruba os
- *    blocos anteriores já concluídos; reprocessar retoma do bloco que
- *    falhou, não do arquivo inteiro.
- * 2. Fim da fila de aprovação bloqueante. Resultado vai direto pra
- *    tabela de domínio (via aplicarDivergenciasDireto), com sinal de
- *    confiança no próprio registro (status: vigente/regra_insuficiente
- *    ou vinculo_confirmado/sem_vinculo, dependendo da tabela) — nunca
- *    mais escondido numa fila que ninguém teria como revisar linha a
- *    linha em volume real.
- * 3. Domínio novo 'regras_gerais': 1 upload dispara as 5 extrações
- *    (Planos, Carências, Coparticipação, Reembolso, Regras Comerciais)
- *    automaticamente, por bloco.
- * 4. Domínio novo 'completo': registrado, mas ainda NÃO implementado —
- *    depende da segmentação automática por IA (Fase 2, deliberadamente
- *    adiada). Responde com mensagem clara em vez de tentar processar
- *    pela metade.
- * 5. Relatório simples de execução (resumo_execucao) gravado no lote ao
- *    final — total de blocos, sucesso, erro, com número do bloco e
- *    mensagem de cada erro.
- * 6. Validação cruzada por uma segunda IA, best-effort, depois que todos
- *    os blocos terminam — não bloqueia a resposta principal.
+ * Mudança de princípio em relação à v2: NENHUMA requisição fica esperando
+ * o lote inteiro (nem 5, nem 2 blocos) — cada chamada processa NO MÁXIMO
+ * 1 bloco e termina. O cliente (frontend) chama de novo pra cada bloco
+ * seguinte, até não sobrar pendente. Isso elimina de vez a dependência
+ * entre "tempo total do processamento" e "timeout de uma requisição HTTP"
+ * — era exatamente isso que causava o IDLE_TIMEOUT visto em produção.
  *
- * LACUNA CONHECIDA, não resolvida aqui: página real de PDF vs. bloco de
- * caracteres. pdf-parse (biblioteca já em uso) extrai texto concatenado,
- * sem preservar limite de página por padrão — pagina_inicio/pagina_fim
- * ficam null pra fontes PDF até isso ser resolvido à parte (precisa
- * confirmar a API de extração por página da própria biblioteca antes de
- * prometer número de página real no relatório).
+ * Duas ações possíveis no corpo da requisição ({ loteId, acao }):
+ * - acao omitida ou 'processar' (padrão): extrai e grava 1 bloco.
+ * - acao: 'validar': roda a validação cruzada por segunda IA em 1 bloco já
+ *   concluído que ainda não foi validado. Completamente separada da
+ *   gravação — nunca bloqueia nem atrasa a ingestão principal (diretriz §8).
  *
- * IMPORTANTE (mesma transparência de sempre): escrita e revisada com
- * cuidado, sem runtime Deno disponível neste processo para teste ao
- * vivo. Teste real só após deploy.
+ * Recuperação de bloco travado (lease/timeout, diretriz §5): antes de
+ * escolher um bloco pra processar, qualquer bloco em 'processando' há mais
+ * de LEASE_TIMEOUT_MS volta pra 'pendente' — cobre o caso do worker
+ * anterior ter morrido por IDLE_TIMEOUT no meio do trabalho.
+ *
+ * Failover por bloco (diretriz §7): se o provedor ativo falhar num bloco
+ * (mesmo depois do retry interno em erro 5xx, já embutido em cada
+ * provider), tenta o provedor secundário só nesse bloco — nunca reinicia
+ * o lote inteiro.
+ *
+ * Telemetria por etapa (diretriz §13): cada bloco registra em qual etapa
+ * exata parou (START/IA_REQUEST/FAILOVER/IA_RESPONSE/JSON_VALIDADO/
+ * NORMALIZACAO/DB_WRITE/DB_SUCCESS/CONCLUIDO), gravado no banco — não
+ * depende só de console.error pra diagnosticar.
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
@@ -54,13 +44,15 @@ import {
   dividirEmBlocos,
   calcularAssinaturaEstrutural,
 } from './motor-mercado/index.ts'
+import { obterNomeProviderFailover } from './motor-mercado/ia-providers/index.ts'
 import { validarBlocoComSegundaIA } from './motor-mercado/validacao-cruzada.ts'
 
 const pdfParse = pdfParseModule as (buffer: Uint8Array) => Promise<{ text: string }>
 
 const BUCKET = 'anexos'
-const TAMANHO_MAXIMO_BLOCO = 6000 // caracteres — mesmo valor já validado hoje para Preços
-const LIMITE_BLOCOS_POR_EXECUCAO = 5 // achado 18/08: acumular muitos blocos (extração + validação cruzada = 2 chamadas de IA cada) numa única execução estoura WORKER_RESOURCE_LIMIT mesmo com blocos pequenos individualmente. Processa só esse tanto por chamada e para sozinho — "Reprocessar" retoma do próximo pendente.
+const TAMANHO_MAXIMO_BLOCO = 6000 // caracteres
+const TAMANHO_CONTEXTO_ANTERIOR = 800 // caracteres do final do bloco anterior, carregados como referência — não como dado novo (diretriz §1/§5)
+const LEASE_TIMEOUT_MS = 120000 // 120s — a própria Edge Function morre aos 150s de IDLE_TIMEOUT; 120s de margem é seguro pra considerar um bloco "processando" como órfão.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -108,50 +100,92 @@ function carimbarRegiao(divergencias: Divergencia[], regiaoTarifariaId: string |
   )
 }
 
-// Centraliza o roteamento por domínio — cada chamada processa 1 bloco só.
-// 'regras_gerais' é o único caso que dispara mais de uma extração por bloco.
-async function processarBlocoPorDominio(dominio: string, texto: string, lote: Record<string, unknown>, db: Db): Promise<Divergencia[]> {
+async function processarBlocoPorDominio(dominio: string, texto: string, lote: Record<string, unknown>, db: Db, nomeProviderForcado?: string): Promise<Divergencia[]> {
   const operadoraId = lote.operadora_id as string
   const regiaoTarifariaId = (lote.regiao_tarifaria_id as string) ?? null
 
   if (dominio === 'planos') {
     const { operadoraNome, produtoPadraoId } = await obterContextoPlanos(operadoraId, db)
-    return processarDominioPlanos(texto, operadoraId, operadoraNome, produtoPadraoId, db)
+    return processarDominioPlanos(texto, operadoraId, operadoraNome, produtoPadraoId, db, nomeProviderForcado)
   }
-
   if (dominio === 'precos') {
-    const divergencias = await processarDominioPrecos(texto, operadoraId, db, regiaoTarifariaId)
+    const divergencias = await processarDominioPrecos(texto, operadoraId, db, regiaoTarifariaId, nomeProviderForcado)
     return carimbarRegiao(divergencias, regiaoTarifariaId)
   }
-
   if (['carencia', 'coparticipacao', 'reembolso', 'regra_comercial'].includes(dominio)) {
-    return processarDominioRegraMercado(texto, dominio, operadoraId, db)
+    return processarDominioRegraMercado(texto, dominio, operadoraId, db, nomeProviderForcado)
   }
-
   if (dominio === 'rede') {
-    return processarDominioRede(texto, operadoraId, db, regiaoTarifariaId)
+    return processarDominioRede(texto, operadoraId, db, regiaoTarifariaId, nomeProviderForcado)
   }
-
   if (dominio === 'regras_gerais') {
     const { operadoraNome, produtoPadraoId } = await obterContextoPlanos(operadoraId, db)
-    let todas: Divergencia[] = await processarDominioPlanos(texto, operadoraId, operadoraNome, produtoPadraoId, db)
-    // Sequencial de propósito, não Promise.all — mesma lição de hoje: preferir
-    // confiabilidade a velocidade quando são várias chamadas de IA em sequência.
+    let todas: Divergencia[] = await processarDominioPlanos(texto, operadoraId, operadoraNome, produtoPadraoId, db, nomeProviderForcado)
     for (const sub of ['carencia', 'coparticipacao', 'reembolso', 'regra_comercial']) {
-      const parcial = await processarDominioRegraMercado(texto, sub, operadoraId, db)
+      const parcial = await processarDominioRegraMercado(texto, sub, operadoraId, db, nomeProviderForcado)
       todas = todas.concat(parcial)
     }
     return todas
   }
-
   throw new Error(`Domínio desconhecido: ${dominio}`)
+}
+
+async function atualizarEtapa(db: Db, blocoId: string, etapa: string) {
+  await db.from('lotes_importacao_blocos').update({ etapa }).eq('id', blocoId)
+}
+
+/** Diretriz §5 — bloco travado em 'processando' por mais que o lease volta pra 'pendente'. Cobre worker morto por IDLE_TIMEOUT. */
+async function recuperarBlocosTravados(db: Db, loteId: string) {
+  const limite = new Date(Date.now() - LEASE_TIMEOUT_MS).toISOString()
+  const { data: travados } = await db
+    .from('lotes_importacao_blocos')
+    .select('id, tentativas')
+    .eq('lote_importacao_id', loteId)
+    .eq('status', 'processando')
+    .lt('processando_desde', limite)
+
+  for (const b of travados ?? []) {
+    await db
+      .from('lotes_importacao_blocos')
+      .update({ status: 'pendente', tentativas: ((b.tentativas as number) ?? 0) + 1, etapa: 'RECUPERADO_APOS_LEASE_EXPIRADO' })
+      .eq('id', b.id)
+  }
+}
+
+async function recalcularResumoLote(db: Db, loteId: string) {
+  const { data: blocosFinal } = await db.from('lotes_importacao_blocos').select('*').eq('lote_importacao_id', loteId).order('numero_bloco')
+  const listaBlocos = blocosFinal ?? []
+  const blocosSucesso = listaBlocos.filter((b: Record<string, unknown>) => b.status === 'concluido').length
+  const blocosErro = listaBlocos.filter((b: Record<string, unknown>) => b.status === 'erro').length
+  const blocosPendentes = listaBlocos.filter((b: Record<string, unknown>) => b.status === 'pendente' || b.status === 'processando').length
+
+  const resumoExecucao = {
+    total_blocos: listaBlocos.length,
+    blocos_sucesso: blocosSucesso,
+    blocos_erro: blocosErro,
+    blocos_pendentes: blocosPendentes,
+    erros: listaBlocos
+      .filter((b: Record<string, unknown>) => b.status === 'erro')
+      .map((b: Record<string, unknown>) => ({
+        numero_bloco: b.numero_bloco,
+        pagina_inicio: b.pagina_inicio,
+        pagina_fim: b.pagina_fim,
+        mensagem: b.erro,
+        etapa: b.etapa,
+      })),
+  }
+
+  const statusFinal = blocosPendentes > 0 ? 'processando_parcial' : blocosErro === 0 ? 'concluido' : 'concluido_com_erros'
+  await db.from('lotes_importacao_mercado').update({ status: statusFinal, resumo_execucao: resumoExecucao, processado_em: new Date().toISOString() }).eq('id', loteId)
+
+  return resumoExecucao
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const { loteId } = await req.json()
+    const { loteId, acao } = await req.json()
     if (!loteId) {
       return new Response(JSON.stringify({ ok: false, error: 'loteId é obrigatório' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
@@ -163,27 +197,59 @@ Deno.serve(async (req: Request) => {
     const { data: lote, error: erroLote } = await institucionalDb.from('lotes_importacao_mercado').select('*').eq('id', loteId).single()
     if (erroLote) throw new Error(`Erro ao buscar lote: ${erroLote.message}`)
 
-    // 'completo' (PDF único, auto-segmentado) é Fase 2 — registrado, não implementado.
     if (lote.dominio === 'completo') {
       const motivo =
         'Processamento de arquivo completo (domínio "completo") ainda não implementado — depende da segmentação automática por IA, que é a Fase 2 do desenho, deliberadamente adiada até os domínios separados (Preços/Rede/Regras Gerais) estarem provados em volume real.'
-      // Sem isso o lote fica preso em "recebido" pra sempre — a resposta é
-      // rápida de propósito (não gasta IA à toa), mas precisa atualizar o
-      // status mesmo assim, senão a tela nunca sai de "processando...".
       await institucionalDb.from('lotes_importacao_mercado').update({ status: 'nao_implementado', erro: motivo }).eq('id', loteId)
       return new Response(JSON.stringify({ ok: false, motivo }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // Blocos já existentes = retomada. Vazio = primeira execução deste lote.
-    const { data: blocosExistentes } = await institucionalDb
-      .from('lotes_importacao_blocos')
-      .select('*')
-      .eq('lote_importacao_id', loteId)
-      .order('numero_bloco')
+    // ============================================================
+    // acao: 'validar' — validação cruzada, TOTALMENTE separada da
+    // ingestão. Nunca roda na mesma chamada que extrai/grava (diretriz §8).
+    // ============================================================
+    if (acao === 'validar') {
+      const { data: blocoParaValidar } = await institucionalDb
+        .from('lotes_importacao_blocos')
+        .select('*')
+        .eq('lote_importacao_id', loteId)
+        .eq('status', 'concluido')
+        .is('validacao_cruzada', null)
+        .order('numero_bloco')
+        .limit(1)
+        .maybeSingle()
 
-    let blocos: Array<Record<string, unknown>> = blocosExistentes ?? []
+      if (!blocoParaValidar) {
+        return new Response(JSON.stringify({ ok: true, motivo: 'Nenhum bloco concluído pendente de validação cruzada.' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
 
-    if (blocos.length === 0) {
+      try {
+        const resultado = await validarBlocoComSegundaIA(blocoParaValidar.texto_bloco, blocoParaValidar.resultado_resumo ?? {})
+        await institucionalDb.from('lotes_importacao_blocos').update({ validacao_cruzada: resultado }).eq('id', blocoParaValidar.id)
+        return new Response(JSON.stringify({ ok: true, bloco_validado: blocoParaValidar.numero_bloco, resultado }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      } catch (e) {
+        // Falha na validação nunca afeta o dado já gravado — só registra
+        // que essa tentativa de validar não deu certo.
+        await institucionalDb.from('lotes_importacao_blocos').update({ validacao_cruzada: { erro: (e as Error).message } }).eq('id', blocoParaValidar.id)
+        return new Response(JSON.stringify({ ok: false, bloco_validado: blocoParaValidar.numero_bloco, error: (e as Error).message }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
+    // ============================================================
+    // Fase de setup — só roda se ainda não existe nenhum bloco pra esse
+    // lote. Extrai, divide, persiste todos como 'pendente', e ENCERRA —
+    // não processa nenhum bloco ainda nesta mesma chamada (diretriz §2).
+    // ============================================================
+    const { data: blocosExistentes } = await institucionalDb.from('lotes_importacao_blocos').select('id').eq('lote_importacao_id', loteId).limit(1)
+
+    if (!blocosExistentes || blocosExistentes.length === 0) {
       if (lote.status === 'concluido') {
         return new Response(JSON.stringify({ ok: true, motivo: 'Lote já concluído anteriormente, sem blocos pendentes. Nada a fazer.' }), {
           status: 200,
@@ -202,125 +268,128 @@ Deno.serve(async (req: Request) => {
       const novosBlocos = textosBlocos.map((textoBloco: string, i: number) => ({
         lote_importacao_id: loteId,
         numero_bloco: i + 1,
-        pagina_inicio: null, // ver nota de lacuna conhecida no cabeçalho do arquivo
+        pagina_inicio: null, // lacuna conhecida: pdf-parse não preserva página real
         pagina_fim: null,
         texto_bloco: textoBloco,
+        // Contexto entre blocos (diretriz §1 e §5): o final do bloco
+        // anterior vai junto, só como referência — cobre cabeçalho de
+        // tabela ou estrutura comercial cortada no meio de um corte
+        // técnico. Nunca extraído como dado novo, só ajuda a IA a
+        // entender o que está vendo.
+        contexto_anterior: i > 0 ? textosBlocos[i - 1].slice(-TAMANHO_CONTEXTO_ANTERIOR) : null,
         status: 'pendente',
       }))
 
-      const { data: blocosInseridos, error: erroInsercaoBlocos } = await institucionalDb
-        .from('lotes_importacao_blocos')
-        .insert(novosBlocos)
-        .select('*')
+      const { error: erroInsercaoBlocos } = await institucionalDb.from('lotes_importacao_blocos').insert(novosBlocos)
       if (erroInsercaoBlocos) throw new Error(`Erro ao persistir blocos: ${erroInsercaoBlocos.message}`)
 
-      blocos = blocosInseridos ?? []
-
-      // Assinatura estrutural calculada sobre o texto completo, como sempre foi.
       const linhas = texto.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0)
       const assinatura = await calcularAssinaturaEstrutural(linhas)
-      await institucionalDb.from('lotes_importacao_mercado').update({ receita_extracao: { assinatura_estrutural: assinatura.hash } }).eq('id', loteId)
+      await institucionalDb
+        .from('lotes_importacao_mercado')
+        .update({ receita_extracao: { assinatura_estrutural: assinatura.hash }, status: 'processando_parcial' })
+        .eq('id', loteId)
+
+      // ENCERRA aqui, sem processar nenhum bloco ainda — a próxima chamada
+      // já pega o bloco 1 normalmente.
+      return new Response(JSON.stringify({ ok: true, fase: 'blocos_criados', total_blocos: novosBlocos.length }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    // Processa só os blocos que ainda não terminaram com sucesso — e só até
-    // LIMITE_BLOCOS_POR_EXECUCAO por chamada, de propósito (ver constante).
-    const elegiveisNoInicio = blocos.filter((b: Record<string, unknown>) => b.status !== 'concluido').length
-    let blocosProcessadosNestaExecucao = 0
-    for (const bloco of blocos) {
-      if (bloco.status === 'concluido') continue
-      if (blocosProcessadosNestaExecucao >= LIMITE_BLOCOS_POR_EXECUCAO) break
-      blocosProcessadosNestaExecucao++
+    // ============================================================
+    // Fase de processamento — exatamente 1 bloco por chamada.
+    // ============================================================
+    await recuperarBlocosTravados(institucionalDb, loteId)
 
-      await institucionalDb.from('lotes_importacao_blocos').update({ status: 'processando' }).eq('id', bloco.id)
-
-      try {
-        const divergencias = await processarBlocoPorDominio(lote.dominio, bloco.texto_bloco as string, lote, institucionalDb)
-        const resultadoAplicacao = await aplicarDivergenciasDireto(divergencias, institucionalDb)
-
-        const resumoBloco = {
-          registros_gerados: divergencias.length,
-          aplicados_sucesso: resultadoAplicacao.sucesso,
-          aplicados_erro: resultadoAplicacao.erro,
-          erros_aplicacao: resultadoAplicacao.erros,
-        }
-
-        await institucionalDb
-          .from('lotes_importacao_blocos')
-          .update({
-            status: 'concluido',
-            tentativas: ((bloco.tentativas as number) ?? 0) + 1,
-            ia_utilizada: Deno.env.get('IA_PROVIDER') || 'anthropic',
-            resultado_resumo: resumoBloco,
-            processado_em: new Date().toISOString(),
-          })
-          .eq('id', bloco.id)
-
-        // Validação cruzada por bloco — best-effort, nunca derruba o bloco
-        // que já concluiu com sucesso, mesmo se essa parte falhar.
-        try {
-          const resultadoValidacao = await validarBlocoComSegundaIA(bloco.texto_bloco as string, resumoBloco)
-          await institucionalDb.from('lotes_importacao_blocos').update({ validacao_cruzada: resultadoValidacao }).eq('id', bloco.id)
-        } catch (erroValidacao) {
-          console.error(`[bloco ${bloco.numero_bloco}] Validação cruzada não concluída (não bloqueia): ${(erroValidacao as Error).message}`)
-        }
-      } catch (e) {
-        // Falha localizada neste bloco — NÃO derruba os blocos anteriores já
-        // concluídos, e o loop continua pros próximos blocos normalmente.
-        await institucionalDb
-          .from('lotes_importacao_blocos')
-          .update({
-            status: 'erro',
-            tentativas: ((bloco.tentativas as number) ?? 0) + 1,
-            erro: (e as Error).message,
-            processado_em: new Date().toISOString(),
-          })
-          .eq('id', bloco.id)
-      }
-    }
-
-    // Relê o estado final dos blocos pra montar o relatório simples.
-    const { data: blocosFinal } = await institucionalDb
+    const { data: bloco } = await institucionalDb
       .from('lotes_importacao_blocos')
       .select('*')
       .eq('lote_importacao_id', loteId)
+      .in('status', ['pendente', 'erro'])
       .order('numero_bloco')
+      .limit(1)
+      .maybeSingle()
 
-    const listaBlocos = blocosFinal ?? []
-    const blocosSucesso = listaBlocos.filter((b: Record<string, unknown>) => b.status === 'concluido').length
-    const blocosErro = listaBlocos.filter((b: Record<string, unknown>) => b.status === 'erro').length
-    const blocosPendentes = listaBlocos.filter((b: Record<string, unknown>) => b.status === 'pendente').length
-
-    const resumoExecucao = {
-      total_blocos: listaBlocos.length,
-      blocos_sucesso: blocosSucesso,
-      blocos_erro: blocosErro,
-      blocos_pendentes: blocosPendentes,
-      erros: listaBlocos
-        .filter((b: Record<string, unknown>) => b.status === 'erro')
-        .map((b: Record<string, unknown>) => ({
-          numero_bloco: b.numero_bloco,
-          pagina_inicio: b.pagina_inicio,
-          pagina_fim: b.pagina_fim,
-          mensagem: b.erro,
-        })),
+    if (!bloco) {
+      const resumo = await recalcularResumoLote(institucionalDb, loteId)
+      return new Response(JSON.stringify({ ok: true, motivo: 'Nenhum bloco pendente.', ...resumo }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // 'processando_parcial': o limite por execução foi atingido antes de
-    // esgotar tudo que precisava rodar — clicar em Reprocessar retoma, não
-    // reinicia. Baseado em quantos ELEGÍVEIS existiam no início desta
-    // chamada vs quantos essa chamada conseguiu tentar — não em contar
-    // status 'pendente' sozinho, porque isso ignora bloco que já tinha
-    // dado erro antes e nem chegou a ser retentado por causa do limite.
-    // 'concluido_com_erros': rodou tudo que tinha, mas algum bloco falhou de verdade.
-    // 'concluido': rodou tudo, sem erro nenhum.
-    const statusFinal = blocosProcessadosNestaExecucao < elegiveisNoInicio ? 'processando_parcial' : blocosErro === 0 ? 'concluido' : 'concluido_com_erros'
-
+    const executionId = crypto.randomUUID()
+    const inicioProcessamento = Date.now()
     await institucionalDb
-      .from('lotes_importacao_mercado')
-      .update({ status: statusFinal, resumo_execucao: resumoExecucao, processado_em: new Date().toISOString() })
-      .eq('id', loteId)
+      .from('lotes_importacao_blocos')
+      .update({ status: 'processando', processando_desde: new Date().toISOString(), execution_id: executionId, etapa: 'START' })
+      .eq('id', bloco.id)
 
-    return new Response(JSON.stringify({ ok: true, ...resumoExecucao }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    // Contexto entre blocos (diretriz §1/§5): junta o final do bloco
+    // anterior como referência, claramente delimitado, antes de mandar
+    // pra IA — nunca é extraído como dado novo, só ajuda a interpretar
+    // cabeçalho/estrutura que um corte técnico possa ter cortado no meio.
+    const textoParaProcessar = bloco.contexto_anterior
+      ? `[CONTEXTO DO TRECHO ANTERIOR — só para referência, NÃO extraia dados repetidos daqui, use apenas pra entender cabeçalhos, colunas ou estrutura que podem continuar do trecho anterior]\n${bloco.contexto_anterior}\n\n[TRECHO ATUAL — extraia os dados daqui]\n${bloco.texto_bloco}`
+      : bloco.texto_bloco
+
+    try {
+      await atualizarEtapa(institucionalDb, bloco.id, 'IA_REQUEST')
+
+      const nomeProviderAtivo = Deno.env.get('IA_PROVIDER') || 'anthropic'
+      let providerUsado = nomeProviderAtivo
+      let divergencias: Divergencia[]
+      try {
+        divergencias = await processarBlocoPorDominio(lote.dominio, textoParaProcessar, lote, institucionalDb)
+      } catch (erroPrimario) {
+        // Failover — só neste bloco, nunca reinicia o lote (diretriz §7).
+        await atualizarEtapa(institucionalDb, bloco.id, 'FAILOVER')
+        providerUsado = obterNomeProviderFailover(nomeProviderAtivo)
+        console.error(`[bloco ${bloco.numero_bloco}] Provedor ${nomeProviderAtivo} falhou (${(erroPrimario as Error).message}) — tentando ${providerUsado}.`)
+        divergencias = await processarBlocoPorDominio(lote.dominio, textoParaProcessar, lote, institucionalDb, providerUsado)
+      }
+
+      await atualizarEtapa(institucionalDb, bloco.id, 'IA_RESPONSE')
+      await atualizarEtapa(institucionalDb, bloco.id, 'JSON_VALIDADO') // validação de schema já ocorre dentro de interpretarXComIA
+      await atualizarEtapa(institucionalDb, bloco.id, 'NORMALIZACAO') // carimbo de região etc. já ocorre dentro de processarBlocoPorDominio
+
+      await atualizarEtapa(institucionalDb, bloco.id, 'DB_WRITE')
+      // blocoId aqui garante idempotência (diretriz §4) — ver aplicarDivergenciasDireto.
+      const resultadoAplicacao = await aplicarDivergenciasDireto(divergencias, institucionalDb, bloco.id)
+      await atualizarEtapa(institucionalDb, bloco.id, 'DB_SUCCESS')
+
+      const resumoBloco = {
+        registros_gerados: divergencias.length,
+        aplicados_sucesso: resultadoAplicacao.sucesso,
+        aplicados_erro: resultadoAplicacao.erro,
+        erros_aplicacao: resultadoAplicacao.erros,
+      }
+
+      await institucionalDb
+        .from('lotes_importacao_blocos')
+        .update({
+          status: 'concluido',
+          tentativas: ((bloco.tentativas as number) ?? 0) + 1,
+          ia_utilizada: providerUsado,
+          resultado_resumo: resumoBloco,
+          processado_em: new Date().toISOString(),
+          duracao_ms: Date.now() - inicioProcessamento,
+          etapa: 'CONCLUIDO',
+        })
+        .eq('id', bloco.id)
+    } catch (e) {
+      await institucionalDb
+        .from('lotes_importacao_blocos')
+        .update({
+          status: 'erro',
+          tentativas: ((bloco.tentativas as number) ?? 0) + 1,
+          erro: (e as Error).message,
+          processado_em: new Date().toISOString(),
+          duracao_ms: Date.now() - inicioProcessamento,
+        })
+        .eq('id', bloco.id)
+    }
+
+    const resumo = await recalcularResumoLote(institucionalDb, loteId)
+    return new Response(JSON.stringify({ ok: true, bloco_processado: bloco.numero_bloco, ...resumo }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }

@@ -11,6 +11,12 @@
  * IA_PROVIDER. Necessário porque a validação cruzada sempre usa o
  * provedor secundário fixo (OpenAI, conforme diretriz), independente de
  * qual estiver ativo pra extração.
+ *
+ * v3 (18/08, correção de arquitetura): as 4 funções de extração agora
+ * aceitam um `nomeProviderForcado` opcional — necessário pro failover por
+ * bloco (diretriz do Chief §7): se o provedor ativo falhar num bloco, o
+ * orquestrador tenta o secundário só naquele bloco, sem depender de trocar
+ * IA_PROVIDER globalmente.
  */
 
 import { validarSaidaPlanos, validarSaidaPrecos, validarSaidaRegraMercado, validarSaidaRede } from './contrato.ts'
@@ -29,8 +35,12 @@ interface ProviderIA {
 
 const PROVIDERS: Record<string, ProviderIA> = { anthropic, openai, gemini }
 
+function nomeProviderAtivo(): string {
+  return Deno.env.get('IA_PROVIDER') || 'anthropic'
+}
+
 function obterProviderAtivo(): ProviderIA {
-  const nomeProvider = Deno.env.get('IA_PROVIDER') || 'anthropic'
+  const nomeProvider = nomeProviderAtivo()
   const provider = PROVIDERS[nomeProvider]
   if (!provider) {
     throw new Error(`Provider de IA "${nomeProvider}" não registrado. Disponíveis: ${Object.keys(PROVIDERS).join(', ')}.`)
@@ -46,29 +56,38 @@ export function obterProviderPorNome(nome: string): ProviderIA {
   return provider
 }
 
-export async function interpretarPlanosComIA(texto: string, operadoraNome: string) {
-  const provider = obterProviderAtivo()
+/** Par fixo de failover: Anthropic é o padrão primário/OpenAI secundário (diretriz do Chief §11). Se o ativo já for outro, cai pra Anthropic como alternativa. */
+export function obterNomeProviderFailover(nomeProviderQueFalhou: string): string {
+  return nomeProviderQueFalhou === 'anthropic' ? 'openai' : 'anthropic'
+}
+
+function resolverProvider(nomeProviderForcado?: string): ProviderIA {
+  return nomeProviderForcado ? obterProviderPorNome(nomeProviderForcado) : obterProviderAtivo()
+}
+
+export async function interpretarPlanosComIA(texto: string, operadoraNome: string, nomeProviderForcado?: string) {
+  const provider = resolverProvider(nomeProviderForcado)
   const resultado = await provider.interpretarPlanos(texto, operadoraNome)
   validarSaidaPlanos(resultado, provider.nome)
   return { ...(resultado as Record<string, unknown>), providerUsado: provider.nome }
 }
 
-export async function interpretarPrecosComIA(texto: string, planosConhecidos: string[]) {
-  const provider = obterProviderAtivo()
+export async function interpretarPrecosComIA(texto: string, planosConhecidos: string[], nomeProviderForcado?: string) {
+  const provider = resolverProvider(nomeProviderForcado)
   const resultado = await provider.interpretarPrecos(texto, planosConhecidos)
   validarSaidaPrecos(resultado, provider.nome)
   return { ...(resultado as Record<string, unknown>), providerUsado: provider.nome }
 }
 
-export async function interpretarRegraMercadoComIA(texto: string, dominio: string, planosConhecidos: string[]) {
-  const provider = obterProviderAtivo()
+export async function interpretarRegraMercadoComIA(texto: string, dominio: string, planosConhecidos: string[], nomeProviderForcado?: string) {
+  const provider = resolverProvider(nomeProviderForcado)
   const resultado = await provider.interpretarRegraMercado(texto, dominio, planosConhecidos)
   validarSaidaRegraMercado(resultado, provider.nome)
   return { ...(resultado as Record<string, unknown>), providerUsado: provider.nome }
 }
 
-export async function interpretarRedeComIA(texto: string, planosConhecidos: string[]) {
-  const provider = obterProviderAtivo()
+export async function interpretarRedeComIA(texto: string, planosConhecidos: string[], nomeProviderForcado?: string) {
+  const provider = resolverProvider(nomeProviderForcado)
   const resultado = await provider.interpretarRede(texto, planosConhecidos)
   validarSaidaRede(resultado, provider.nome)
   return { ...(resultado as Record<string, unknown>), providerUsado: provider.nome }

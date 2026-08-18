@@ -3,14 +3,16 @@ import {
   DOMINIOS_MERCADO,
   uploadMaterialMercado,
   reprocessarLoteMercado,
+  validarLoteComSegundaIA,
   excluirLoteMercado,
   listarLotesImportacaoMercado,
 } from '../../lib/crm/catalogoMercadoService'
 import { listarRegioesTarifarias } from '../../lib/crm/catalogoInstitucionalService'
 
-// v2 (18/08) — sem aprovação bloqueante. Status refletem o resultado direto
-// da gravação: concluido = tudo certo, concluido_com_erros = alguns blocos
-// falharam (revisáveis pelo relatório abaixo, retomável com Reprocessar).
+// v3 (18/08, correção de arquitetura) — sem aprovação bloqueante, e sem
+// requisição única esperando o lote inteiro: cada chamada processa 1
+// bloco, o frontend encadeia as chamadas (dispararProcessamentoMercado
+// já faz isso) e mostra progresso ao vivo via onProgresso.
 const STATUS_LOTE_LABEL = {
   recebido: 'Recebido — processando...',
   processando_parcial: '🔵 Em andamento — clique em Continuar',
@@ -21,14 +23,16 @@ const STATUS_LOTE_LABEL = {
 }
 
 /**
- * SPEC-002 §5, revisado 18/08 (Arquitetura v2) — importação de material de
- * mercado por domínio. Grava direto nas tabelas de domínio, com sinal de
- * confiança no próprio registro (vigente/regra_insuficiente,
- * vinculo_confirmado/sem_vinculo) — não existe mais fila de aprovação
- * humana bloqueante: em volume real (60-80 arquivos) aprovar linha a linha
- * não valida nada de verdade, só escondia o dado do banco sem necessidade.
- * Vive dentro do PainelInstitucional (MasterCenterSeguradoras.jsx), porque
- * importação é sempre por operadora — nunca cria tela nova.
+ * SPEC-002 §5, revisado 18/08 (Arquitetura v3 — correção de execução,
+ * diretriz do Chief) — importação de material de mercado por domínio.
+ * Grava direto nas tabelas de domínio, com sinal de confiança no próprio
+ * registro — sem fila de aprovação. Cada chamada à Edge Function processa
+ * no máximo 1 bloco (nunca o lote inteiro numa requisição só, pra nunca
+ * mais depender de timeout de HTTP); o frontend encadeia as chamadas
+ * necessárias e mostra progresso em tempo real. Validação cruzada por
+ * segunda IA é ação totalmente separada, sob demanda, nunca bloqueia a
+ * ingestão. Vive dentro do PainelInstitucional (MasterCenterSeguradoras.jsx),
+ * porque importação é sempre por operadora — nunca cria tela nova.
  */
 export default function PainelImportacaoMercado({ operadoraId, usuarioId = null }) {
   const [dominio, setDominio] = useState(DOMINIOS_MERCADO[0].valor)
@@ -37,6 +41,8 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
   const [lotes, setLotes] = useState([])
   const [enviando, setEnviando] = useState(false)
   const [processandoLoteId, setProcessandoLoteId] = useState(null)
+  const [validandoLoteId, setValidandoLoteId] = useState(null)
+  const [progressoPorLote, setProgressoPorLote] = useState({})
   const [erro, setErro] = useState(null)
 
   useEffect(() => {
@@ -78,12 +84,33 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
     setProcessandoLoteId(loteId)
     setErro(null)
     try {
-      await reprocessarLoteMercado(loteId)
+      await reprocessarLoteMercado(loteId, {
+        onProgresso: (resultado) => {
+          setProgressoPorLote((atual) => ({ ...atual, [loteId]: resultado }))
+        },
+      })
       await carregar()
     } catch (err) {
       setErro(err.message)
     } finally {
       setProcessandoLoteId(null)
+      setProgressoPorLote((atual) => {
+        const { [loteId]: _descartado, ...resto } = atual
+        return resto
+      })
+    }
+  }
+
+  async function handleValidar(loteId) {
+    setValidandoLoteId(loteId)
+    setErro(null)
+    try {
+      await validarLoteComSegundaIA(loteId)
+      await carregar()
+    } catch (err) {
+      setErro(err.message)
+    } finally {
+      setValidandoLoteId(null)
     }
   }
 
@@ -150,6 +177,8 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
           {lotes.map((lote) => {
             const resumo = lote.resumo_execucao
             const podeReprocessar = lote.status === 'recebido' || lote.status === 'erro' || lote.status === 'concluido_com_erros' || lote.status === 'processando_parcial'
+            const podeValidar = (resumo?.blocos_sucesso ?? 0) > 0
+            const progresso = progressoPorLote[lote.id]
             return (
               <div key={lote.id} className="ls-card" style={{ padding: '0.7rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
@@ -175,9 +204,27 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
                               : 'Reprocessar'}
                       </button>
                     )}
+                    {podeValidar && (
+                      <button className="cliente-tabela-btn" onClick={() => handleValidar(lote.id)} disabled={validandoLoteId === lote.id}>
+                        {validandoLoteId === lote.id ? 'Validando...' : 'Validar com 2ª IA'}
+                      </button>
+                    )}
                     <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(lote.id)}>Excluir</button>
                   </div>
                 </div>
+
+                {/* Progresso ao vivo — só aparece durante o loop de processamento
+                    desse lote específico. Cada bloco processado atualiza aqui,
+                    em vez de um "processando..." genérico e opaco. */}
+                {processandoLoteId === lote.id && progresso && (
+                  <p style={{ marginTop: '0.4rem', fontSize: '0.85em', opacity: 0.8 }}>
+                    {progresso.fase === 'blocos_criados'
+                      ? `Preparando ${progresso.total_blocos} bloco(s)...`
+                      : progresso.bloco_processado != null
+                        ? `Bloco ${progresso.bloco_processado} processado — ${progresso.blocos_sucesso ?? 0} de ${progresso.total_blocos ?? '?'} concluído(s) até agora.`
+                        : 'Processando...'}
+                  </p>
+                )}
 
                 {/* Relatório simples de execução — substitui a antiga fila de aprovação.
                     Vem direto de lotes_importacao_mercado.resumo_execucao, sem query extra. */}
@@ -196,7 +243,7 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
                             <li key={i}>
                               Bloco {e.numero_bloco}
                               {e.pagina_inicio ? ` (página ${e.pagina_inicio}${e.pagina_fim && e.pagina_fim !== e.pagina_inicio ? `–${e.pagina_fim}` : ''})` : ''}
-                              : {e.mensagem}
+                              {e.etapa ? ` [parou em ${e.etapa}]` : ''}: {e.mensagem}
                             </li>
                           ))}
                         </ul>

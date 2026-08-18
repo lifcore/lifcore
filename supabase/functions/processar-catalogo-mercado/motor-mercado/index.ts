@@ -67,10 +67,28 @@ export function dividirEmBlocos(texto: string, tamanhoMaximoCaracteres: number):
 // sem_vinculo, dependendo da tabela) já vem calculado dentro de dado_novo
 // por cada processarDominio<X> — esta função só decide COMO gravar, nunca
 // decide SE o dado é confiável.
-export async function aplicarDivergenciasDireto(divergencias: Divergencia[], db: Db): Promise<{ sucesso: number; erro: number; erros: string[] }> {
+//
+// Idempotência (diretriz do Chief §4): recebe o id do bloco que está
+// gravando. Antes de inserir qualquer linha nova, apaga tudo que ESSE
+// MESMO bloco já tenha gravado antes (bloco_origem_id) — cobre retry após
+// timeout, failover pra provedor secundário, ou recuperação de lease.
+// Resultado líquido de um bloco nunca duplica, não importa quantas vezes
+// ele for reprocessado. Nunca toca em linha de outro bloco ou de outra
+// fonte (updates em registro existente já são naturalmente idempotentes,
+// não precisam desse tratamento).
+export async function aplicarDivergenciasDireto(divergencias: Divergencia[], db: Db, blocoId: string): Promise<{ sucesso: number; erro: number; erros: string[] }> {
   let sucesso = 0
   let erro = 0
   const erros: string[] = []
+
+  const tabelasComInsercaoNova = [...new Set(divergencias.filter((d) => !d.registro_existente_id).map((d) => d.tabela_afetada))]
+  for (const tabela of tabelasComInsercaoNova) {
+    const { error } = await db.from(tabela).delete().eq('bloco_origem_id', blocoId)
+    if (error) {
+      erro++
+      erros.push(`Limpeza de idempotência falhou em ${tabela}: ${error.message}`)
+    }
+  }
 
   for (const d of divergencias) {
     try {
@@ -78,7 +96,7 @@ export async function aplicarDivergenciasDireto(divergencias: Divergencia[], db:
         const { error } = await db.from(d.tabela_afetada).update(d.dado_novo).eq('id', d.registro_existente_id)
         if (error) throw new Error(error.message)
       } else {
-        const { error } = await db.from(d.tabela_afetada).insert(d.dado_novo)
+        const { error } = await db.from(d.tabela_afetada).insert({ ...d.dado_novo, bloco_origem_id: blocoId })
         if (error) throw new Error(error.message)
       }
       sucesso++
@@ -94,8 +112,8 @@ export async function aplicarDivergenciasDireto(divergencias: Divergencia[], db:
 // ----------------------------------------------------------------------
 // Domínio: Planos/Variantes
 // ----------------------------------------------------------------------
-export async function processarDominioPlanos(texto: string, operadoraId: string, operadoraNome: string, produtoId: string, db: Db): Promise<Divergencia[]> {
-  const resultado = (await interpretarPlanosComIA(texto, operadoraNome)) as { planos: Record<string, unknown>[] }
+export async function processarDominioPlanos(texto: string, operadoraId: string, operadoraNome: string, produtoId: string, db: Db, nomeProviderForcado?: string): Promise<Divergencia[]> {
+  const resultado = (await interpretarPlanosComIA(texto, operadoraNome, nomeProviderForcado)) as { planos: Record<string, unknown>[] }
   const divergencias: Divergencia[] = []
 
   for (const p of resultado.planos) {
@@ -138,14 +156,14 @@ export async function processarDominioPlanos(texto: string, operadoraId: string,
 // ----------------------------------------------------------------------
 // Domínio: Regras de Precificação
 // ----------------------------------------------------------------------
-export async function processarDominioPrecos(texto: string, operadoraId: string, db: Db, regiaoTarifariaId: string | null): Promise<Divergencia[]> {
+export async function processarDominioPrecos(texto: string, operadoraId: string, db: Db, regiaoTarifariaId: string | null, nomeProviderForcado?: string): Promise<Divergencia[]> {
   const { data: planosExistentes } = await db.from('planos_variantes').select('id, nome_plano, variante').eq('operadora_id', operadoraId)
   const mapaPlanos = new Map((planosExistentes ?? []).map((p: Record<string, unknown>) => [`${p.nome_plano}|${p.variante ?? ''}`, p.id]))
   const nomesConhecidos = (planosExistentes ?? []).map((p: Record<string, unknown>) => `${p.nome_plano}${p.variante ? ' - ' + p.variante : ''}`)
 
   // Volta a processar 1 texto por chamada — divisão em blocos agora é
   // responsabilidade do orquestrador de nível mais alto (ver cabeçalho).
-  const resultado = (await interpretarPrecosComIA(texto, nomesConhecidos)) as { regras: Record<string, unknown>[] }
+  const resultado = (await interpretarPrecosComIA(texto, nomesConhecidos, nomeProviderForcado)) as { regras: Record<string, unknown>[] }
   const divergencias: Divergencia[] = []
 
   for (const r of resultado.regras) {
@@ -192,12 +210,12 @@ export async function processarDominioPrecos(texto: string, operadoraId: string,
 // ----------------------------------------------------------------------
 // Domínio: Regras de Mercado (carência / coparticipação / reembolso / regra comercial)
 // ----------------------------------------------------------------------
-export async function processarDominioRegraMercado(texto: string, dominio: string, operadoraId: string, db: Db): Promise<Divergencia[]> {
+export async function processarDominioRegraMercado(texto: string, dominio: string, operadoraId: string, db: Db, nomeProviderForcado?: string): Promise<Divergencia[]> {
   const { data: planosExistentes } = await db.from('planos_variantes').select('id, nome_plano, variante').eq('operadora_id', operadoraId)
   const mapaPlanos = new Map((planosExistentes ?? []).map((p: Record<string, unknown>) => [`${p.nome_plano}|${p.variante ?? ''}`, p.id]))
   const nomesConhecidos = (planosExistentes ?? []).map((p: Record<string, unknown>) => `${p.nome_plano}${p.variante ? ' - ' + p.variante : ''}`)
 
-  const resultado = (await interpretarRegraMercadoComIA(texto, dominio, nomesConhecidos)) as { regras: Record<string, unknown>[] }
+  const resultado = (await interpretarRegraMercadoComIA(texto, dominio, nomesConhecidos, nomeProviderForcado)) as { regras: Record<string, unknown>[] }
   const divergencias: Divergencia[] = []
 
   for (const r of resultado.regras) {
@@ -246,12 +264,12 @@ export async function processarDominioRegraMercado(texto: string, dominio: strin
 // de 18/08, grava com status: 'sem_vinculo' e plano_variante_id null,
 // visível pra conferência, em vez de simplesmente sumir.
 // ----------------------------------------------------------------------
-export async function processarDominioRede(texto: string, operadoraId: string, db: Db, regiaoTarifariaId: string | null): Promise<Divergencia[]> {
+export async function processarDominioRede(texto: string, operadoraId: string, db: Db, regiaoTarifariaId: string | null, nomeProviderForcado?: string): Promise<Divergencia[]> {
   const { data: planosExistentes } = await db.from('planos_variantes').select('id, nome_plano, variante').eq('operadora_id', operadoraId)
   const mapaPlanos = new Map((planosExistentes ?? []).map((p: Record<string, unknown>) => [`${p.nome_plano}|${p.variante ?? ''}`, p.id]))
   const nomesConhecidos = (planosExistentes ?? []).map((p: Record<string, unknown>) => `${p.nome_plano}${p.variante ? ' - ' + p.variante : ''}`)
 
-  const resultado = (await interpretarRedeComIA(texto, nomesConhecidos)) as { linhas: Record<string, unknown>[] }
+  const resultado = (await interpretarRedeComIA(texto, nomesConhecidos, nomeProviderForcado)) as { linhas: Record<string, unknown>[] }
   const divergencias: Divergencia[] = []
 
   for (const l of resultado.linhas) {
