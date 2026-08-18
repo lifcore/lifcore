@@ -172,16 +172,24 @@ export async function processarDominioPrecos(texto: string, operadoraId: string,
     // Região não é extraída do texto: é propriedade do arquivo inteiro,
     // vem do lote (confirmado nos PDFs de referência).
     const dimensoesPresentes = ['tipo_contratacao', 'segmento', 'faixa_vidas_min', 'faixa_etaria'].filter((d) => r[d] != null)
-    const statusSugerido = r.valor == null || !regiaoTarifariaId || dimensoesPresentes.length === 0 ? 'regra_insuficiente' : 'vigente'
+    // Achado 18/08: plano não vinculado precisa contar como insuficiente
+    // também — antes só checava dimensão/região/valor, e uma regra sem
+    // plano confirmado tentava gravar com plano_variante_id nulo (batia
+    // em constraint not-null). Mesmo padrão já usado em Rede/Regras de
+    // Mercado: grava sempre, sinaliza confiança, nunca esconde o dado.
+    const statusSugerido =
+      r.valor == null || !regiaoTarifariaId || dimensoesPresentes.length === 0 || !planoVarianteId ? 'regra_insuficiente' : 'vigente'
     const motivo =
       statusSugerido === 'regra_insuficiente'
-        ? !regiaoTarifariaId
-          ? 'Preço identificado, mas o lote não tem região tarifária definida — regra não pode virar vigente sem saber a qual tabela de venda ela pertence.'
-          : 'Preço identificado, mas regra comercial insuficiente para registro no catálogo — nenhuma dimensão comercial pôde ser determinada.'
+        ? !planoVarianteId
+          ? 'Preço identificado, mas não foi possível vincular a um plano cadastrado — verifique se os Planos/Variantes dessa operadora já foram importados.'
+          : !regiaoTarifariaId
+            ? 'Preço identificado, mas o lote não tem região tarifária definida — regra não pode virar vigente sem saber a qual tabela de venda ela pertence.'
+            : 'Preço identificado, mas regra comercial insuficiente para registro no catálogo — nenhuma dimensão comercial pôde ser determinada.'
         : null
 
     const dadoNovo = {
-      plano_variante_id: planoVarianteId,
+      plano_variante_id: planoVarianteId, // pode ser null agora — coluna precisa aceitar (ver migração)
       regiao_tarifaria_id: regiaoTarifariaId ?? null,
       tipo_contratacao: r.tipo_contratacao ?? null,
       segmento: r.segmento ?? null,
