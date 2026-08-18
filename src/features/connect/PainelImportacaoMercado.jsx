@@ -16,6 +16,7 @@ const STATUS_LOTE_LABEL = {
   concluido: '🟢 Concluído',
   concluido_com_erros: '🟡 Concluído com erros — ver relatório',
   erro: '🔴 Erro no processamento',
+  nao_implementado: '⚪ Domínio ainda não implementado',
 }
 
 /**

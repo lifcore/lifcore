@@ -164,13 +164,13 @@ Deno.serve(async (req: Request) => {
 
     // 'completo' (PDF único, auto-segmentado) é Fase 2 — registrado, não implementado.
     if (lote.dominio === 'completo') {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          motivo: 'Processamento de arquivo completo (domínio "completo") ainda não implementado — depende da segmentação automática por IA, que é a Fase 2 do desenho, deliberadamente adiada até os domínios separados (Preços/Rede/Regras Gerais) estarem provados em volume real.',
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      const motivo =
+        'Processamento de arquivo completo (domínio "completo") ainda não implementado — depende da segmentação automática por IA, que é a Fase 2 do desenho, deliberadamente adiada até os domínios separados (Preços/Rede/Regras Gerais) estarem provados em volume real.'
+      // Sem isso o lote fica preso em "recebido" pra sempre — a resposta é
+      // rápida de propósito (não gasta IA à toa), mas precisa atualizar o
+      // status mesmo assim, senão a tela nunca sai de "processando...".
+      await institucionalDb.from('lotes_importacao_mercado').update({ status: 'nao_implementado', erro: motivo }).eq('id', loteId)
+      return new Response(JSON.stringify({ ok: false, motivo }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // Blocos já existentes = retomada. Vazio = primeira execução deste lote.
