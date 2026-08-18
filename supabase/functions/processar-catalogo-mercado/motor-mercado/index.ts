@@ -33,6 +33,32 @@ function comparar(existente: Record<string, unknown> | null, novo: Record<string
   return mudou ? 'alterado' : 'novo' // 'novo' aqui = sem diferença real, tratado como no-op na aprovação (update idempotente)
 }
 
+// Divide texto longo em blocos por tamanho de caracteres, nunca cortando uma
+// linha ao meio. Genérico de propósito — não usa nenhum marcador específico
+// de formato de operadora (ex: "Linha Pró"), porque material de mercado é
+// heterogêneo demais entre operadoras (mesmo princípio do cabeçalho deste
+// arquivo). Existe porque documentos de tabela de preços completos podem
+// gerar centenas de regras — mais do que uma única resposta de IA comporta
+// dentro do orçamento de max_tokens de saída.
+function dividirEmBlocos(texto: string, tamanhoMaximoCaracteres: number): string[] {
+  const linhas = texto.split('\n')
+  const blocos: string[] = []
+  let atual: string[] = []
+  let tamanhoAtual = 0
+
+  for (const linha of linhas) {
+    if (tamanhoAtual + linha.length > tamanhoMaximoCaracteres && atual.length > 0) {
+      blocos.push(atual.join('\n'))
+      atual = []
+      tamanhoAtual = 0
+    }
+    atual.push(linha)
+    tamanhoAtual += linha.length + 1
+  }
+  if (atual.length > 0) blocos.push(atual.join('\n'))
+  return blocos
+}
+
 // ----------------------------------------------------------------------
 // Domínio: Planos/Variantes
 // ----------------------------------------------------------------------
@@ -85,10 +111,20 @@ export async function processarDominioPrecos(texto: string, operadoraId: string,
   const mapaPlanos = new Map((planosExistentes ?? []).map((p: Record<string, unknown>) => [`${p.nome_plano}|${p.variante ?? ''}`, p.id]))
   const nomesConhecidos = (planosExistentes ?? []).map((p: Record<string, unknown>) => `${p.nome_plano}${p.variante ? ' - ' + p.variante : ''}`)
 
-  const resultado = (await interpretarPrecosComIA(texto, nomesConhecidos)) as { regras: Record<string, unknown>[] }
+  // Tabelas de preço completas podem gerar centenas de regras — mais do que
+  // cabe no orçamento de saída de uma única chamada de IA (confirmado em
+  // teste real: PDF com ~770 combinações estourava max_tokens mesmo em
+  // 16000). Divide em blocos e funde os resultados antes de seguir.
+  const blocosTexto = dividirEmBlocos(texto, 6000)
+  const todasRegras: Record<string, unknown>[] = []
+  for (const bloco of blocosTexto) {
+    const resultadoBloco = (await interpretarPrecosComIA(bloco, nomesConhecidos)) as { regras: Record<string, unknown>[] }
+    todasRegras.push(...resultadoBloco.regras)
+  }
+
   const divergencias: Divergencia[] = []
 
-  for (const r of resultado.regras) {
+  for (const r of todasRegras) {
     const planoVarianteId = encontrarPlanoIdPorTexto(r.plano_texto as string, mapaPlanos)
 
     // Passo 3 (Documento Mestre) — região não é mais extraída do texto:
