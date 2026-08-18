@@ -60,6 +60,7 @@ const pdfParse = pdfParseModule as (buffer: Uint8Array) => Promise<{ text: strin
 
 const BUCKET = 'anexos'
 const TAMANHO_MAXIMO_BLOCO = 6000 // caracteres — mesmo valor já validado hoje para Preços
+const LIMITE_BLOCOS_POR_EXECUCAO = 5 // achado 18/08: acumular muitos blocos (extração + validação cruzada = 2 chamadas de IA cada) numa única execução estoura WORKER_RESOURCE_LIMIT mesmo com blocos pequenos individualmente. Processa só esse tanto por chamada e para sozinho — "Reprocessar" retoma do próximo pendente.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -221,9 +222,14 @@ Deno.serve(async (req: Request) => {
       await institucionalDb.from('lotes_importacao_mercado').update({ receita_extracao: { assinatura_estrutural: assinatura.hash } }).eq('id', loteId)
     }
 
-    // Processa só os blocos que ainda não terminaram com sucesso.
+    // Processa só os blocos que ainda não terminaram com sucesso — e só até
+    // LIMITE_BLOCOS_POR_EXECUCAO por chamada, de propósito (ver constante).
+    const elegiveisNoInicio = blocos.filter((b: Record<string, unknown>) => b.status !== 'concluido').length
+    let blocosProcessadosNestaExecucao = 0
     for (const bloco of blocos) {
       if (bloco.status === 'concluido') continue
+      if (blocosProcessadosNestaExecucao >= LIMITE_BLOCOS_POR_EXECUCAO) break
+      blocosProcessadosNestaExecucao++
 
       await institucionalDb.from('lotes_importacao_blocos').update({ status: 'processando' }).eq('id', bloco.id)
 
@@ -282,11 +288,13 @@ Deno.serve(async (req: Request) => {
     const listaBlocos = blocosFinal ?? []
     const blocosSucesso = listaBlocos.filter((b: Record<string, unknown>) => b.status === 'concluido').length
     const blocosErro = listaBlocos.filter((b: Record<string, unknown>) => b.status === 'erro').length
+    const blocosPendentes = listaBlocos.filter((b: Record<string, unknown>) => b.status === 'pendente').length
 
     const resumoExecucao = {
       total_blocos: listaBlocos.length,
       blocos_sucesso: blocosSucesso,
       blocos_erro: blocosErro,
+      blocos_pendentes: blocosPendentes,
       erros: listaBlocos
         .filter((b: Record<string, unknown>) => b.status === 'erro')
         .map((b: Record<string, unknown>) => ({
@@ -297,7 +305,15 @@ Deno.serve(async (req: Request) => {
         })),
     }
 
-    const statusFinal = blocosErro === 0 ? 'concluido' : 'concluido_com_erros'
+    // 'processando_parcial': o limite por execução foi atingido antes de
+    // esgotar tudo que precisava rodar — clicar em Reprocessar retoma, não
+    // reinicia. Baseado em quantos ELEGÍVEIS existiam no início desta
+    // chamada vs quantos essa chamada conseguiu tentar — não em contar
+    // status 'pendente' sozinho, porque isso ignora bloco que já tinha
+    // dado erro antes e nem chegou a ser retentado por causa do limite.
+    // 'concluido_com_erros': rodou tudo que tinha, mas algum bloco falhou de verdade.
+    // 'concluido': rodou tudo, sem erro nenhum.
+    const statusFinal = blocosProcessadosNestaExecucao < elegiveisNoInicio ? 'processando_parcial' : blocosErro === 0 ? 'concluido' : 'concluido_com_erros'
 
     await institucionalDb
       .from('lotes_importacao_mercado')

@@ -13,6 +13,7 @@ import { listarRegioesTarifarias } from '../../lib/crm/catalogoInstitucionalServ
 // falharam (revisáveis pelo relatório abaixo, retomável com Reprocessar).
 const STATUS_LOTE_LABEL = {
   recebido: 'Recebido — processando...',
+  processando_parcial: '🔵 Em andamento — clique em Continuar',
   concluido: '🟢 Concluído',
   concluido_com_erros: '🟡 Concluído com erros — ver relatório',
   erro: '🔴 Erro no processamento',
@@ -148,7 +149,7 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
         <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
           {lotes.map((lote) => {
             const resumo = lote.resumo_execucao
-            const podeReprocessar = lote.status === 'recebido' || lote.status === 'erro' || lote.status === 'concluido_com_erros'
+            const podeReprocessar = lote.status === 'recebido' || lote.status === 'erro' || lote.status === 'concluido_com_erros' || lote.status === 'processando_parcial'
             return (
               <div key={lote.id} className="ls-card" style={{ padding: '0.7rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
@@ -167,9 +168,11 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
                       <button className="cliente-tabela-btn" onClick={() => handleReprocessar(lote.id)} disabled={processandoLoteId === lote.id}>
                         {processandoLoteId === lote.id
                           ? 'Processando...'
-                          : lote.status === 'concluido_com_erros'
-                            ? 'Retomar blocos com erro'
-                            : 'Reprocessar'}
+                          : lote.status === 'processando_parcial'
+                            ? 'Continuar processamento'
+                            : lote.status === 'concluido_com_erros'
+                              ? 'Retomar blocos com erro'
+                              : 'Reprocessar'}
                       </button>
                     )}
                     <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(lote.id)}>Excluir</button>
@@ -183,6 +186,7 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
                     {resumo.blocos_erro === 0 ? (
                       <p style={{ opacity: 0.75, fontSize: '0.9em' }}>
                         ✓ {resumo.blocos_sucesso} de {resumo.total_blocos} bloco(s) processados com sucesso.
+                        {resumo.blocos_pendentes > 0 && ` ${resumo.blocos_pendentes} ainda pendente(s) — clique em Continuar processamento.`}
                       </p>
                     ) : (
                       <div className="ls-modal-erro">
