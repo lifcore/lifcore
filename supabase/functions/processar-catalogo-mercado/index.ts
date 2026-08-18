@@ -44,7 +44,7 @@ import {
   dividirEmBlocos,
   calcularAssinaturaEstrutural,
 } from './motor-mercado/index.ts'
-import { obterNomeProviderFailover } from './motor-mercado/ia-providers/index.ts'
+import { obterNomeProviderFailover, validarConsistenciaComIA } from './motor-mercado/ia-providers/index.ts'
 import { validarBlocoComSegundaIA } from './motor-mercado/validacao-cruzada.ts'
 
 const pdfParse = pdfParseModule as (buffer: Uint8Array) => Promise<{ text: string }>
@@ -186,6 +186,30 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { loteId, acao } = await req.json()
+
+    // ============================================================
+    // Teste A (diretriz do Chief, 18/08): isola o caminho mínimo
+    // Worker → provedor de IA → resposta, SEM arquivo, SEM lote, SEM
+    // banco. Não precisa de loteId. Objetivo: confirmar se o travamento
+    // (execution_time_ms = 150512, praticamente o teto de 150s) está no
+    // caminho até a IA, ou em algo antes disso (preparo do arquivo/bloco).
+    // ============================================================
+    if (acao === 'teste_ia') {
+      const inicio = Date.now()
+      const nomeProvider = Deno.env.get('IA_PROVIDER') || 'anthropic'
+      try {
+        const resultado = await validarConsistenciaComIA(nomeProvider, 'teste mínimo, sem arquivo', '{"teste": true}')
+        return new Response(JSON.stringify({ ok: true, provider: nomeProvider, resultado, duracao_ms: Date.now() - inicio }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ ok: false, provider: nomeProvider, error: (e as Error).message, duracao_ms: Date.now() - inicio }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     if (!loteId) {
       return new Response(JSON.stringify({ ok: false, error: 'loteId é obrigatório' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
