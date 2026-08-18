@@ -5,59 +5,34 @@ import {
   reprocessarLoteMercado,
   excluirLoteMercado,
   listarLotesImportacaoMercado,
-  listarDivergenciasPendentes,
-  aprovarDivergencia,
-  rejeitarDivergencia,
-  aprovarTodasDivergenciasDoLote,
 } from '../../lib/crm/catalogoMercadoService'
 import { listarRegioesTarifarias } from '../../lib/crm/catalogoInstitucionalService'
 
+// v2 (18/08) — sem aprovação bloqueante. Status refletem o resultado direto
+// da gravação: concluido = tudo certo, concluido_com_erros = alguns blocos
+// falharam (revisáveis pelo relatório abaixo, retomável com Reprocessar).
 const STATUS_LOTE_LABEL = {
   recebido: 'Recebido — processando...',
-  aguardando_aprovacao: '🟡 Aguardando aprovação',
-  aprovado: '🟢 Aprovado',
-  rejeitado: '🔴 Rejeitado',
+  concluido: '🟢 Concluído',
+  concluido_com_erros: '🟡 Concluído com erros — ver relatório',
   erro: '🔴 Erro no processamento',
 }
 
-const TIPO_DIVERGENCIA_LABEL = { novo: '🆕 Novo', alterado: '✏️ Alterado', conflito: '⚠️ Conflito' }
-
-/** Prévia legível de um dado_novo, conforme a tabela afetada — só os campos que importam pra decisão humana. */
-function resumoDivergencia(d) {
-  const dado = d.dado_novo
-  if (d.tabela_afetada === 'planos_variantes') {
-    return `${dado.nome_plano}${dado.variante ? ` — ${dado.variante}` : ''}`
-  }
-  if (d.tabela_afetada === 'regras_precificacao') {
-    const dims = [
-      dado.regiao && `região: ${dado.regiao}`,
-      dado.segmento && `segmento: ${dado.segmento}`,
-      dado.faixa_vidas_min != null && `vidas: ${dado.faixa_vidas_min}${dado.faixa_vidas_max ? `-${dado.faixa_vidas_max}` : '+'}`,
-      dado.faixa_etaria && `faixa: ${dado.faixa_etaria}`,
-    ].filter(Boolean).join(', ')
-    return `R$ ${dado.valor ?? '—'} (${dims || 'sem dimensão comercial'})`
-  }
-  if (d.tabela_afetada === 'regras_mercado') {
-    return `${dado.chave} — ${JSON.stringify(dado.conteudo).slice(0, 80)}...`
-  }
-  if (d.tabela_afetada === 'rede_credenciada') {
-    return `código: ${dado.codigo_bruto ?? '—'}`
-  }
-  return JSON.stringify(dado).slice(0, 80)
-}
-
 /**
- * SPEC-002 §5 — importação de material de mercado por domínio, com
- * fila de aprovação humana. Vive dentro do PainelInstitucional
- * (MasterCenterSeguradoras.jsx), porque importação é sempre por
- * operadora — nunca cria tela nova.
+ * SPEC-002 §5, revisado 18/08 (Arquitetura v2) — importação de material de
+ * mercado por domínio. Grava direto nas tabelas de domínio, com sinal de
+ * confiança no próprio registro (vigente/regra_insuficiente,
+ * vinculo_confirmado/sem_vinculo) — não existe mais fila de aprovação
+ * humana bloqueante: em volume real (60-80 arquivos) aprovar linha a linha
+ * não valida nada de verdade, só escondia o dado do banco sem necessidade.
+ * Vive dentro do PainelInstitucional (MasterCenterSeguradoras.jsx), porque
+ * importação é sempre por operadora — nunca cria tela nova.
  */
 export default function PainelImportacaoMercado({ operadoraId, usuarioId = null }) {
   const [dominio, setDominio] = useState(DOMINIOS_MERCADO[0].valor)
   const [regioes, setRegioes] = useState([])
   const [regiaoTarifariaId, setRegiaoTarifariaId] = useState('')
   const [lotes, setLotes] = useState([])
-  const [divergenciasPorLote, setDivergenciasPorLote] = useState({})
   const [enviando, setEnviando] = useState(false)
   const [processandoLoteId, setProcessandoLoteId] = useState(null)
   const [erro, setErro] = useState(null)
@@ -71,14 +46,6 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
     try {
       const lotesCarregados = await listarLotesImportacaoMercado({ operadoraId })
       setLotes(lotesCarregados)
-
-      const mapa = {}
-      for (const lote of lotesCarregados) {
-        if (lote.status === 'aguardando_aprovacao') {
-          mapa[lote.id] = await listarDivergenciasPendentes(lote.id)
-        }
-      }
-      setDivergenciasPorLote(mapa)
     } catch (err) {
       setErro(err.message)
     }
@@ -119,36 +86,9 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
   }
 
   async function handleExcluir(loteId) {
-    if (!confirm('Excluir este lote de importação? Divergências pendentes dele também serão descartadas.')) return
+    if (!confirm('Excluir este lote de importação? Os dados já gravados por ele no catálogo não serão desfeitos automaticamente.')) return
     try {
       await excluirLoteMercado(loteId)
-      await carregar()
-    } catch (err) {
-      setErro(err.message)
-    }
-  }
-
-  async function handleAprovar(divergenciaId, loteId) {
-    try {
-      await aprovarDivergencia(divergenciaId, usuarioId)
-      setDivergenciasPorLote({ ...divergenciasPorLote, [loteId]: await listarDivergenciasPendentes(loteId) })
-    } catch (err) {
-      setErro(err.message)
-    }
-  }
-
-  async function handleRejeitar(divergenciaId, loteId) {
-    try {
-      await rejeitarDivergencia(divergenciaId, usuarioId)
-      setDivergenciasPorLote({ ...divergenciasPorLote, [loteId]: await listarDivergenciasPendentes(loteId) })
-    } catch (err) {
-      setErro(err.message)
-    }
-  }
-
-  async function handleAprovarTodas(loteId) {
-    try {
-      await aprovarTodasDivergenciasDoLote(loteId, usuarioId)
       await carregar()
     } catch (err) {
       setErro(err.message)
@@ -159,8 +99,9 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
     <div className="ls-card" style={{ padding: '0.85rem', marginTop: '0.6rem' }}>
       <strong>Importação de Material de Mercado</strong>
       <p className="config-instrucao">
-        Envie tabela de preços, carências, coparticipação, reembolso, regras comerciais ou rede — o motor extrai e
-        coloca em fila de aprovação. Nada vira dado vigente sem revisão.
+        Envie tabela de preços, rede credenciada ou regras gerais (planos, carências, coparticipação, reembolso,
+        regras comerciais) — o motor extrai e grava direto no catálogo, com sinal de confiança em cada registro.
+        Sem fila de aprovação: revise pelo relatório de cada lote quando terminar.
       </p>
 
       {erro && <p className="ls-modal-erro">{erro}</p>}
@@ -205,7 +146,8 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
       ) : (
         <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
           {lotes.map((lote) => {
-            const divergencias = divergenciasPorLote[lote.id] ?? []
+            const resumo = lote.resumo_execucao
+            const podeReprocessar = lote.status === 'recebido' || lote.status === 'erro' || lote.status === 'concluido_com_erros'
             return (
               <div key={lote.id} className="ls-card" style={{ padding: '0.7rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
@@ -220,44 +162,41 @@ export default function PainelImportacaoMercado({ operadoraId, usuarioId = null 
                     <span style={{ marginLeft: '0.5rem' }}>{STATUS_LOTE_LABEL[lote.status] ?? lote.status}</span>
                   </div>
                   <div style={{ display: 'flex', gap: '0.4rem' }}>
-                    {(lote.status === 'recebido' || lote.status === 'erro') && (
+                    {podeReprocessar && (
                       <button className="cliente-tabela-btn" onClick={() => handleReprocessar(lote.id)} disabled={processandoLoteId === lote.id}>
-                        {processandoLoteId === lote.id ? 'Reprocessando...' : 'Reprocessar'}
+                        {processandoLoteId === lote.id
+                          ? 'Processando...'
+                          : lote.status === 'concluido_com_erros'
+                            ? 'Retomar blocos com erro'
+                            : 'Reprocessar'}
                       </button>
                     )}
                     <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(lote.id)}>Excluir</button>
                   </div>
                 </div>
 
-                {lote.quantidade_registros_insuficientes > 0 && (
-                  <p className="ls-modal-erro" style={{ marginTop: '0.4rem' }}>
-                    ⚠️ {lote.quantidade_registros_insuficientes} preço(s) identificado(s), mas sem regra comercial suficiente para
-                    registro no catálogo — não entraram na fila, ficam disponíveis só como referência bruta.
-                  </p>
-                )}
-
-                {divergencias.length > 0 && (
-                  <div style={{ marginTop: '0.6rem' }}>
-                    <div className="ls-modal-acoes" style={{ justifyContent: 'flex-start' }}>
-                      <button className="ls-btn ls-btn-ghost" onClick={() => handleAprovarTodas(lote.id)}>
-                        ✓ Aprovar todas ({divergencias.length})
-                      </button>
-                    </div>
-                    <table className="cliente-tabela" style={{ marginTop: '0.4rem' }}>
-                      <thead><tr><th>Tipo</th><th>Registro</th><th>Ações</th></tr></thead>
-                      <tbody>
-                        {divergencias.map((d) => (
-                          <tr key={d.id}>
-                            <td>{TIPO_DIVERGENCIA_LABEL[d.tipo_divergencia]}</td>
-                            <td>{resumoDivergencia(d)}</td>
-                            <td className="cliente-tabela-acoes">
-                              <button className="cliente-tabela-btn" onClick={() => handleAprovar(d.id, lote.id)}>Aprovar</button>
-                              <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleRejeitar(d.id, lote.id)}>Rejeitar</button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {/* Relatório simples de execução — substitui a antiga fila de aprovação.
+                    Vem direto de lotes_importacao_mercado.resumo_execucao, sem query extra. */}
+                {resumo && resumo.total_blocos > 0 && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    {resumo.blocos_erro === 0 ? (
+                      <p style={{ opacity: 0.75, fontSize: '0.9em' }}>
+                        ✓ {resumo.blocos_sucesso} de {resumo.total_blocos} bloco(s) processados com sucesso.
+                      </p>
+                    ) : (
+                      <div className="ls-modal-erro">
+                        ⚠️ {resumo.blocos_erro} de {resumo.total_blocos} bloco(s) com erro — {resumo.blocos_sucesso} concluído(s) normalmente:
+                        <ul style={{ margin: '0.3rem 0 0 1.1rem', padding: 0 }}>
+                          {resumo.erros.map((e, i) => (
+                            <li key={i}>
+                              Bloco {e.numero_bloco}
+                              {e.pagina_inicio ? ` (página ${e.pagina_inicio}${e.pagina_fim && e.pagina_fim !== e.pagina_inicio ? `–${e.pagina_fim}` : ''})` : ''}
+                              : {e.mensagem}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
