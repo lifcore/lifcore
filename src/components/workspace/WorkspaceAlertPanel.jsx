@@ -36,6 +36,6 @@ export default function WorkspaceAlertPanel({ itens = [] }) {
           {itens.length > 6 && <div className="ws-alert-mais">+ {itens.length - 6} outra(s)</div>}
         </div>
       )}
-    </div>
+    </div>  
   )
 }

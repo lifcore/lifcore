@@ -22,6 +22,9 @@ import { gerarResumoCandidato, criarCandidatoConhecimento, aprovarCandidatoComoC
 import { buscarHistoricoChat } from '../../lib/especialista/especialistaSaude'
 import CotacaoForm from './CotacaoForm'
 import ContratoForm from './ContratoForm'
+import PainelCotacao from './PainelCotacao'
+import './cotacoesGrupo.css'
+import { marcarCotacaoRecomendada } from '../../lib/crm/multicalculoCotacaoService'
 import EspecialistaSaude from '../especialista/EspecialistaSaude'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
@@ -627,6 +630,7 @@ const ROTULO_STATUS_COTACAO = {
  */
 function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
   const [mostrarForm, setMostrarForm] = useState(false)
+  const [mostrarMulticalculo, setMostrarMulticalculo] = useState(false)
   const [cotacaoEditando, setCotacaoEditando] = useState(null)
   const [cotacaoFormalizando, setCotacaoFormalizando] = useState(null)
   const [processando, setProcessando] = useState(null)
@@ -654,7 +658,7 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
 
   async function handleDesistir(cotacaoId) {
     const motivo = window.prompt('Motivo da desistência (opcional):')
-    if (motivo === null) return // cancelou o prompt
+    if (motivo === null) return
     setProcessando(cotacaoId)
     setErroWorkflow(null)
     try {
@@ -695,12 +699,65 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
     }
   }
 
+  // NOVO (19/08) — tag manual "Recomendada" (BMR-008). Nunca calculada
+  // sozinha, sempre clique explícito do corretor.
+  async function handleAlternarRecomendada(cotacaoId, valorAtual) {
+    setProcessando(cotacaoId)
+    setErroWorkflow(null)
+    try {
+      await marcarCotacaoRecomendada(cotacaoId, !valorAtual)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
+  }
+
+  // NOVO (19/08) — o Multicálculo (Sprint 3) já cria as Cotações
+  // direto no banco (mesmo grupo_comparacao_id); ao terminar, só fecha
+  // o wizard e recarrega a lista — a UI de baixo (agrupada) já mostra
+  // o resultado.
+  function handleMulticalculoConcluido() {
+    setMostrarMulticalculo(false)
+    onAtualizado()
+  }
+
+  // NOVO (19/08) — agrupa por grupo_comparacao_id (cotações sem grupo
+  // viram "grupo" de 1 item só, comportamento idêntico ao de antes
+  // pra elas — nada muda visualmente pra Cotações registradas do jeito
+  // manual de sempre).
+  const grupos = new Map()
+  for (const cot of cotacoes) {
+    const chave = cot.grupo_comparacao_id ?? cot.id
+    if (!grupos.has(chave)) grupos.set(chave, [])
+    grupos.get(chave).push(cot)
+  }
+
   return (
     <div>
-      {!mostrarForm && !cotacaoEditando && !cotacaoFormalizando && (
-        <button className="ls-btn ls-btn-accent" onClick={() => setMostrarForm(true)}>
-          + Registrar Cotação
-        </button>
+      {!mostrarForm && !cotacaoEditando && !cotacaoFormalizando && !mostrarMulticalculo && (
+        <div style={{ display: 'flex', gap: '0.6rem' }}>
+          <button className="ls-btn ls-btn-accent" onClick={() => setMostrarForm(true)}>
+            + Registrar Cotação
+          </button>
+          <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarMulticalculo(true)}>
+            🔍 Multicálculo (Biblioteca de Mercado)
+          </button>
+        </div>
+      )}
+
+      {mostrarMulticalculo && (
+        <div>
+          <button
+            className="ls-btn ls-btn-ghost"
+            style={{ marginBottom: '0.75rem' }}
+            onClick={() => setMostrarMulticalculo(false)}
+          >
+            ✕ Fechar Multicálculo
+          </button>
+          <PainelCotacao clienteProspectId={clienteId} onConcluido={handleMulticalculoConcluido} />
+        </div>
       )}
 
       {(mostrarForm || cotacaoEditando) && (
@@ -751,70 +808,102 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
         <p className="cliente-vazio">Nenhuma cotação registrada ainda.</p>
       ) : (
         <div className="cotacoes-historico" style={{ marginTop: '1rem' }}>
-          {cotacoes.map((cot) => {
-            const status = ROTULO_STATUS_COTACAO[cot.status ?? 'em_negociacao'] ?? ROTULO_STATUS_COTACAO.em_negociacao
-            const podeFechar = (cot.status ?? 'em_negociacao') === 'em_negociacao'
-            const podeFormalizar = cot.status === 'emissao'
-            const podeDesistirOuExpirar = ['em_negociacao', 'emissao'].includes(cot.status ?? 'em_negociacao')
-            const hoje = new Date().toISOString().slice(0, 10)
-            const venceu = cot.validade && cot.validade < hoje
+          {[...grupos.entries()].map(([chaveGrupo, cotacoesDoGrupo]) => (
+            <div key={chaveGrupo} className={cotacoesDoGrupo.length > 1 ? 'cotacoes-grupo-comparacao' : undefined}>
+              {cotacoesDoGrupo.length > 1 && (
+                <p className="cotacoes-grupo-titulo">{cotacoesDoGrupo.length} opções nesta rodada de comparação</p>
+              )}
 
-            return (
-              <div key={cot.id} className="ls-card cotacao-item">
-                <div className="cotacao-item-header">
-                  <strong>{cot.operadora_nome_livre}</strong>
-                  <span className="ls-badge ls-badge-prospect">{cot.porte}</span>
-                  <span>{cot.numero_vidas} vidas</span>
-                  <span>{formatarDataBR(cot.data_cotacao)}</span>
-                  <span style={{ fontWeight: 600, color: status.cor }}>{status.texto}</span>
-                </div>
-                {cot.itens_cotacao?.length > 0 && (
-                  <div className="cotacao-item-valores">
-                    {cot.itens_cotacao.map((item) => (
-                      <span key={item.id} className="cotacao-item-valor">
-                        {item.faixa_etaria}: R$ {Number(item.valor).toFixed(2)}
-                      </span>
-                    ))}
+              {cotacoesDoGrupo.map((cot) => {
+                const status = ROTULO_STATUS_COTACAO[cot.status ?? 'em_negociacao'] ?? ROTULO_STATUS_COTACAO.em_negociacao
+                const podeFechar = (cot.status ?? 'em_negociacao') === 'em_negociacao'
+                const podeFormalizar = cot.status === 'emissao'
+                const podeDesistirOuExpirar = ['em_negociacao', 'emissao'].includes(cot.status ?? 'em_negociacao')
+                const hoje = new Date().toISOString().slice(0, 10)
+                const venceu = cot.validade && cot.validade < hoje
+
+                return (
+                  <div key={cot.id} className={`ls-card cotacao-item${cot.recomendada ? ' cotacao-item-recomendada' : ''}`}>
+                    <div className="cotacao-item-header">
+                      <strong>{cot.operadora_nome_livre}</strong>
+                      <span className="ls-badge ls-badge-prospect">{cot.porte}</span>
+                      <span>{cot.numero_vidas} vidas</span>
+                      <span>{formatarDataBR(cot.data_cotacao)}</span>
+                      <span style={{ fontWeight: 600, color: status.cor }}>{status.texto}</span>
+                      {cot.recomendada && <span className="ls-badge cotacao-badge-recomendada">★ Recomendada</span>}
+                    </div>
+                    {cot.itens_cotacao?.length > 0 && (
+                      <div className="cotacao-item-valores">
+                        {cot.itens_cotacao.map((item) => (
+                          <span key={item.id} className="cotacao-item-valor">
+                            {item.faixa_etaria}: R$ {Number(item.valor).toFixed(2)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {cot.contrato_id && (
+                      <div className="kpi-detalhe" style={{ margin: '0.25rem 0 0' }}>
+                        Contrato gerado — veja em Contratos
+                      </div>
+                    )}
+                    <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
+                      {podeFechar && (
+                        <button
+                          className="cliente-tabela-btn"
+                          disabled={processando === cot.id}
+                          onClick={() => handleFechar(cot.id)}
+                        >
+                          {processando === cot.id ? '...' : 'Fechar com esta (ir pra Emissão)'}
+                        </button>
+                      )}
+                      {podeFormalizar && (
+                        <button
+                          className="cliente-tabela-btn"
+                          disabled={processando === cot.id}
+                          onClick={() => setCotacaoFormalizando(cot)}
+                        >
+                          {processando === cot.id ? '...' : 'Formalizar Contrato'}
+                        </button>
+                      )}
+                      {podeDesistirOuExpirar && venceu && (
+                        <button
+                          className="cliente-tabela-btn"
+                          disabled={processando === cot.id}
+                          onClick={() => handleExpirar(cot.id)}
+                        >
+                          {processando === cot.id ? '...' : 'Marcar Expirada'}
+                        </button>
+                      )}
+                      {podeDesistirOuExpirar && (
+                        <button
+                          className="cliente-tabela-btn cliente-tabela-btn-perigo"
+                          disabled={processando === cot.id}
+                          onClick={() => handleDesistir(cot.id)}
+                        >
+                          {processando === cot.id ? '...' : 'Cliente Desistiu'}
+                        </button>
+                      )}
+                      {podeFechar && (
+                        <button
+                          className="cliente-tabela-btn"
+                          disabled={processando === cot.id}
+                          onClick={() => handleAlternarRecomendada(cot.id, cot.recomendada)}
+                        >
+                          {cot.recomendada ? '★ Desmarcar recomendada' : '☆ Marcar como recomendada'}
+                        </button>
+                      )}
+                      <button className="cliente-tabela-btn" onClick={() => setCotacaoEditando(cot)}>
+                        Editar
+                      </button>
+                      <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(cot.id)}>
+                        Excluir
+                      </button>
+                    </div>
                   </div>
-                )}
-                {cot.contrato_id && (
-                  <div className="kpi-detalhe" style={{ margin: '0.25rem 0 0' }}>Contrato gerado — veja em Contratos</div>
-                )}
-                <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
-                  {podeFechar && (
-                    <button
-                      className="cliente-tabela-btn"
-                      disabled={processando === cot.id}
-                      onClick={() => handleFechar(cot.id)}
-                    >
-                      {processando === cot.id ? '...' : 'Fechar com esta (ir pra Emissão)'}
-                    </button>
-                  )}
-                  {podeFormalizar && (
-                    <button
-                      className="cliente-tabela-btn"
-                      disabled={processando === cot.id}
-                      onClick={() => setCotacaoFormalizando(cot)}
-                    >
-                      {processando === cot.id ? '...' : 'Formalizar Contrato'}
-                    </button>
-                  )}
-                  {podeDesistirOuExpirar && venceu && (
-                    <button className="cliente-tabela-btn" disabled={processando === cot.id} onClick={() => handleExpirar(cot.id)}>
-                      {processando === cot.id ? '...' : 'Marcar Expirada'}
-                    </button>
-                  )}
-                  {podeDesistirOuExpirar && (
-                    <button className="cliente-tabela-btn cliente-tabela-btn-perigo" disabled={processando === cot.id} onClick={() => handleDesistir(cot.id)}>
-                      {processando === cot.id ? '...' : 'Cliente Desistiu'}
-                    </button>
-                  )}
-                  <button className="cliente-tabela-btn" onClick={() => setCotacaoEditando(cot)}>Editar</button>
-                  <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(cot.id)}>Excluir</button>
-                </div>
-              </div>
-            )
-          })}
+                )
+              })}
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -1,0 +1,140 @@
+/* Sprint 2D — Seleção de planos (Multicálculo)
+   Reescrito usando as variáveis reais de lcds-tokens.css (confirmado
+   via App.jsx: data-theme="lcds" cobre o app inteiro, não só o
+   Finance Center) — nada de hex/rgba chutado. */
+
+.selecao-planos-status {
+  color: var(--lcds-text-secondary);
+  font-size: 0.9rem;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+.selecao-planos-operadora {
+  margin-bottom: 2rem;
+}
+
+.selecao-planos-operadora-titulo {
+  font-family: var(--lcds-font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--lcds-text-primary);
+  margin: 0 0 0.85rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--lcds-border-strong);
+}
+
+.selecao-planos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.85rem;
+}
+
+.selecao-plano-card {
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border);
+  border-radius: var(--lcds-radius-sm);
+  padding: 0.9rem;
+  transition: border-color var(--lcds-dur) var(--lcds-ease), background var(--lcds-dur) var(--lcds-ease);
+}
+
+.selecao-plano-card:hover {
+  background: var(--lcds-surface-card-hover);
+  border-color: var(--lcds-border-strong);
+}
+
+.selecao-plano-card-ativo {
+  border-color: var(--lcds-gold);
+  background: var(--lcds-gold-soft);
+}
+
+.selecao-plano-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+}
+
+.selecao-plano-card-header input[type='checkbox'] {
+  margin-top: 0.2rem;
+  accent-color: var(--lcds-gold);
+  cursor: pointer;
+}
+
+.selecao-plano-card-segmentacao {
+  width: 100%;
+  background: var(--lcds-bg);
+  border: 1px solid var(--lcds-gold);
+  border-radius: var(--lcds-radius-sm);
+  color: var(--lcds-text-primary);
+  height: 32px;
+  padding: 0 0.5rem;
+  font-size: 0.78rem;
+  margin-bottom: 0.75rem;
+}
+
+.selecao-plano-card-segmentacao:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--lcds-gold-soft);
+}
+
+.selecao-plano-card-nome {
+  color: var(--lcds-text-primary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.selecao-plano-card-sub {
+  color: var(--lcds-text-muted);
+  font-size: 0.78rem;
+  margin: 0.15rem 0 0;
+}
+
+.selecao-plano-card-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--lcds-border);
+}
+
+.selecao-plano-card-linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.8rem;
+}
+
+.selecao-plano-card-linha span {
+  color: var(--lcds-text-muted);
+}
+
+.selecao-plano-card-linha strong {
+  color: var(--lcds-text-primary);
+  font-weight: 600;
+}
+
+.selecao-planos-rodape {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--lcds-bg);
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--lcds-border-strong);
+  margin-top: 1rem;
+}
+
+.selecao-planos-contador {
+  color: var(--lcds-text-secondary);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 700px) {
+  .selecao-planos-grid {
+    grid-template-columns: 1fr;
+  }
+}

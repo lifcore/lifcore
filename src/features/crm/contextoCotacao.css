@@ -1,0 +1,85 @@
+/* Sprint 3, Passo 1 — Contexto da Cotação. Variáveis reais de
+   lcds-tokens.css. */
+
+.contexto-cotacao-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  max-width: 480px;
+}
+
+.contexto-cotacao-linha label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--lcds-text-secondary);
+}
+
+.contexto-cotacao-linha input {
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border-strong);
+  border-radius: var(--lcds-radius-sm);
+  color: var(--lcds-text-primary);
+  height: 36px;
+  padding: 0 0.7rem;
+}
+
+.contexto-cotacao-linha input:focus {
+  outline: none;
+  border-color: var(--lcds-gold);
+  box-shadow: 0 0 0 3px var(--lcds-gold-soft);
+}
+
+.contexto-cotacao-vidas-cabecalho {
+  font-size: 0.82rem;
+  color: var(--lcds-text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.contexto-cotacao-vida-linha {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.contexto-cotacao-vida-numero {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--lcds-surface-card);
+  color: var(--lcds-text-muted);
+  font-size: 0.72rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.contexto-cotacao-vida-linha select {
+  flex: 1;
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border-strong);
+  border-radius: var(--lcds-radius-sm);
+  color: var(--lcds-text-primary);
+  height: 36px;
+  padding: 0 0.6rem;
+}
+
+.contexto-cotacao-vida-linha select:focus {
+  outline: none;
+  border-color: var(--lcds-gold);
+}
+
+.contexto-cotacao-remover-vida {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.contexto-cotacao-add-vida {
+  margin-top: 0.35rem;
+  align-self: flex-start;
+}

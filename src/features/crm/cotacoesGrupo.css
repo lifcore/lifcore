@@ -1,0 +1,35 @@
+/* Sprint 3 — agrupamento visual de Cotações da mesma rodada de
+   comparação (grupo_comparacao_id) + tag "Recomendada" (BMR-008).
+   Mesmos tokens de sempre (lcds-tokens.css). */
+
+.cotacoes-grupo-comparacao {
+  border: 1px dashed var(--lcds-border-strong);
+  border-radius: var(--lcds-radius);
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.cotacoes-grupo-titulo {
+  font-size: 0.78rem;
+  color: var(--lcds-text-muted);
+  margin: 0 0 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cotacoes-grupo-comparacao .cotacao-item {
+  margin-bottom: 0.6rem;
+}
+
+.cotacoes-grupo-comparacao .cotacao-item:last-child {
+  margin-bottom: 0;
+}
+
+.cotacao-item-recomendada {
+  border-color: var(--lcds-gold) !important;
+}
+
+.cotacao-badge-recomendada {
+  background: var(--lcds-gold-soft);
+  color: var(--lcds-gold);
+}
