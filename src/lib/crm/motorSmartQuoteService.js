@@ -1,4 +1,4 @@
-import { institucional } from './supabaseSchemas'
+import { institucional } from '../supabaseSchemas'
 
 /**
  * Sprint 2A — Motor determinístico do Smart Quote.
