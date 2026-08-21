@@ -56,6 +56,7 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
   const [carregandoRegioes, setCarregandoRegioes] = useState(true)
   const [erro, setErro] = useState(null)
   const [rascunhoRestaurado, setRascunhoRestaurado] = useState(false)
+  const [erroSalvandoRascunho, setErroSalvandoRascunho] = useState(false)
 
   // Só liga o autosave DEPOIS da tentativa de restaurar terminar — sem
   // isso, o primeiro render (formulário vazio) salvaria por cima de um
@@ -85,6 +86,17 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
     buscarRascunhoMulticalculo(clienteProspectId)
       .then((rascunho) => {
         if (rascunho?.contexto?.faixasEtariasDasVidas?.length) {
+          // ACHADO (21/08): se clienteProspectId chegar atrasado (cliente
+          // ainda carregando no componente pai), esse efeito roda de novo
+          // quando o ID "chega de verdade" — e sem essa trava, sobrescrevia
+          // o que o corretor já tinha digitado nesse meio-tempo com o
+          // rascunho salvo antes ("mudou sozinho"). Só restaura se o
+          // formulário ainda estiver intocado (nada digitado ainda) —
+          // depois que o corretor mexeu em algo, a restauração nunca mais
+          // pisa em cima.
+          const formularioAindaIntocado = !regiaoId && quantidadesPorFaixa.size === 0
+          if (!formularioAindaIntocado) return
+
           // Rascunhos antigos (antes de 21/08) só têm regiaoNome salvo,
           // não regiaoId — restaura pelo nome nesse caso, sem quebrar
           // rascunhos já existentes.
@@ -105,6 +117,7 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
       .finally(() => {
         prontoParaAutosave.current = true
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteProspectId])
 
   useEffect(() => {
@@ -122,7 +135,16 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
           regiaoNome: regiaoEscolhida?.nome ?? null,
           faixasEtariasDasVidas: expandirParaArrayPlano(quantidadesPorFaixa),
         },
-      }).catch((err) => console.error('Erro salvando rascunho do contexto:', err.message))
+      })
+        .then(() => setErroSalvandoRascunho(false))
+        .catch((err) => {
+          // ACHADO (21/08): antes, uma falha aqui era 100% silenciosa (só
+          // console.error) — o corretor digitava, achava que tinha salvo,
+          // e só descobria que não salvou ao dar F5 depois. Agora mostra
+          // um aviso discreto sem interromper o preenchimento.
+          console.error('Erro salvando rascunho do contexto:', err.message)
+          setErroSalvandoRascunho(true)
+        })
     }, 800)
 
     return () => clearTimeout(timeoutAutosave.current)
@@ -163,6 +185,12 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
     <div className="contexto-cotacao-form">
       {rascunhoRestaurado && (
         <p className="contexto-cotacao-rascunho-aviso">Rascunho salvo restaurado — confira antes de continuar.</p>
+      )}
+      {erroSalvandoRascunho && (
+        <p className="ls-modal-erro">
+          Não consegui salvar o rascunho agora — seu preenchimento continua na tela, mas pode se perder se você sair sem
+          concluir. Pode continuar preenchendo.
+        </p>
       )}
 
       <div className="contexto-cotacao-linha">
