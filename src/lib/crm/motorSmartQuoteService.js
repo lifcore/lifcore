@@ -107,11 +107,101 @@ export async function buscarPlanosElegiveis({ regiaoId = null, regiaoNome = null
 }
 
 /**
+ * Sprint 3b (21/08) — versão EM LOTE de `buscarCotacaoDoPlano`, usada só
+ * por `montarCotacaoEstruturada`. Achado real de performance (21/08):
+ * com as 12 operadoras aparecendo de verdade agora (região corrigida +
+ * BMR-006 completo), o número de planos elegíveis numa cotação saltou
+ * de ~4 (só as 4 operadoras que tinham região certa) pra ~150+ — e o
+ * código buscava cada plano em SEQUÊNCIA, com 4 consultas próprias
+ * cada um (preços, contagem de rede, amostra de rede, regras). A
+ * lentidão sentida é exatamente isso: centenas de idas ao banco, uma
+ * atrás da outra, quando antes eram só ~16 (4 planos × 4 consultas).
+ *
+ * Dois achados que tornam essa versão MUITO mais rápida sem perder
+ * nada: (1) regras são as MESMAS pra todos os planos da MESMA
+ * operadora — buscar 1x por operadora em vez de 1x por plano evita
+ * repetir a consulta idêntica dezenas de vezes; (2) "amostra" (10
+ * prestadores de exemplo) nunca é usada pelo resultado final de
+ * `montarCotacaoEstruturada` — só `totalPrestadores` é — então parei de
+ * buscar amostra aqui (continua existindo em `buscarCotacaoDoPlano`,
+ * pra quem realmente precisa dela numa tela de detalhe de 1 plano só).
+ *
+ * Resultado: ~3 consultas TOTAIS por chamada, não 4×N. Mesmo formato de
+ * retorno de sempre (por plano_id) — quem consome não percebe diferença
+ * nenhuma no dado, só na velocidade.
+ */
+async function buscarCotacoesEmLote(planosBase) {
+  const planoIds = planosBase.map((p) => p.plano_id)
+  if (planoIds.length === 0) return new Map()
+
+  const [{ data: todosPrecos, error: erroPrecos }, { data: todaRede, error: erroRede }] = await Promise.all([
+    institucional
+      .from('mercado_saude_precos')
+      .select(
+        'plano_id, segmentacao, familia_tarifaria, faixa_etaria, valor, vidas_min, vidas_max, mei, coparticipacao_tipo, tipo_contratacao'
+      )
+      .in('plano_id', planoIds)
+      .order('plano_id')
+      .order('segmentacao')
+      .order('faixa_etaria'),
+    institucional.from('mercado_saude_rede_cobertura').select('plano_id').in('plano_id', planoIds),
+  ])
+  if (erroPrecos) throw new Error(`Erro buscando preços em lote: ${erroPrecos.message}`)
+  if (erroRede) throw new Error(`Erro buscando rede em lote: ${erroRede.message}`)
+
+  const precosPorPlano = new Map()
+  for (const p of todosPrecos ?? []) {
+    if (!precosPorPlano.has(p.plano_id)) precosPorPlano.set(p.plano_id, [])
+    precosPorPlano.get(p.plano_id).push(p)
+  }
+
+  // Supabase/PostgREST não agrupa COUNT nativamente por essa via — conta
+  // em memória mesmo, ainda assim é 1 consulta só pra todos os planos.
+  const totalPrestadoresPorPlano = new Map()
+  for (const r of todaRede ?? []) {
+    totalPrestadoresPorPlano.set(r.plano_id, (totalPrestadoresPorPlano.get(r.plano_id) ?? 0) + 1)
+  }
+
+  const operadoraIdsUnicos = [...new Set(planosBase.map((p) => p.operadoras?.id).filter(Boolean))]
+  const { data: todasRegras, error: erroRegras } =
+    operadoraIdsUnicos.length > 0
+      ? await institucional
+          .from('mercado_saude_regras')
+          .select('operadora_id, tipo, conteudo')
+          .in('operadora_id', operadoraIdsUnicos)
+          .order('tipo')
+      : { data: [], error: null }
+  if (erroRegras) throw new Error(`Erro buscando regras em lote: ${erroRegras.message}`)
+
+  const regrasPorOperadora = new Map()
+  for (const r of todasRegras ?? []) {
+    if (!regrasPorOperadora.has(r.operadora_id)) regrasPorOperadora.set(r.operadora_id, [])
+    regrasPorOperadora.get(r.operadora_id).push(r)
+  }
+
+  const resultado = new Map()
+  for (const plano of planosBase) {
+    resultado.set(plano.plano_id, {
+      encontrado: true,
+      plano,
+      precosPorSegmentacao: agruparPrecosPorSegmentacao(precosPorPlano.get(plano.plano_id) ?? []),
+      rede: { totalPrestadores: totalPrestadoresPorPlano.get(plano.plano_id) ?? 0 },
+      regras: regrasPorOperadora.get(plano.operadoras?.id) ?? [],
+    })
+  }
+  return resultado
+}
+
+/**
  * Devolve o "pacote de cotação" completo de UM plano — preço (todas as
  * segmentações disponíveis, agrupadas), rede (resumo + amostra) e
  * regras da operadora — tudo cruzado por plano_id, como o Chief pediu
  * no teste ponta a ponta. Sem escolher segmentação sozinho (ver nota
  * no topo do arquivo) — devolve a lista pro corretor decidir.
+ *
+ * Pra buscar VÁRIOS planos de uma vez (ex: a cascata inteira), use
+ * `montarCotacaoEstruturada` — ela usa a versão em lote internamente,
+ * bem mais rápida que chamar esta função várias vezes em sequência.
  *
  * @param {string} planoId
  */
@@ -374,10 +464,16 @@ export async function montarCotacaoEstruturada({
     const { planos, motivo } = await buscarPlanosElegiveis({ regiaoId, regiaoNome, operadoraCodigo: codigo })
     if (motivo) continue // operadora/região não encontrada — pula, não quebra a cotação inteira
 
+    // Achado de performance (21/08): buscar plano por plano em sequência
+    // (4 consultas cada) virou centenas de idas ao banco assim que as 12
+    // operadoras passaram a aparecer de verdade. `buscarCotacoesEmLote`
+    // faz tudo em ~3 consultas totais — ver nota na função.
+    const pacotesPorPlano = await buscarCotacoesEmLote(planos)
+
     for (const planoBase of planos) {
       const nomeOperadora = planoBase.operadoras?.nome ?? 'sem operadora'
-      const pacote = await buscarCotacaoDoPlano(planoBase.plano_id)
-      if (!pacote.encontrado) continue
+      const pacote = pacotesPorPlano.get(planoBase.plano_id)
+      if (!pacote?.encontrado) continue
 
       const precosElegiveis =
         totalVidas != null
