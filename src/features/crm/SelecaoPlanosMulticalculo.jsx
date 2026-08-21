@@ -39,12 +39,28 @@ import './selecaoPlanosMulticalculo.css'
  *
  * Sprint 3, Fase 3b sub-2 (20/08) — blocos visuais (Acomodação/
  * Coparticipação), pedido do Chief: "blocos são navegação, nunca filtro
- * irreversível". Os dois toggles abaixo SÓ decidem o que aparece na
- * tela — nunca tocam em `selecionados`/`segmentacaoPorPlano`. Por isso um
- * plano marcado continua contando pro "Criar Cotações" mesmo escondido
- * atrás de outro bloco, e a segmentação já escolhida nunca some do
- * seletor do card, mesmo que o filtro de coparticipação atual não bata
- * com ela — só entra escondida junto das outras opções que não batem.
+ * irreversível". Os dois toggles SÓ decidem o que aparece na grade
+ * principal — nunca tocam em `selecionados`/`segmentacaoPorPlano`.
+ *
+ * Sprint 3b (21/08) — REDESENHO: operadoras por colapso + carrinho,
+ * ideia do usuário depois de ver 12 operadoras reais na tela (Amil
+ * sozinha já passava de 10 cards, virava parede). Duas mudanças de
+ * comportamento importantes, combinadas explicitamente com o usuário:
+ *
+ *   1. Cada operadora agora é uma seção fechada por padrão — clica no
+ *      cabeçalho pra abrir/fechar. Não é filtro, é só navegação (não
+ *      esconde nada de `selecionados`).
+ *   2. Plano ADICIONADO some da grade principal e vai pro carrinho —
+ *      só volta pra grade se for removido do carrinho. Por causa disso,
+ *      o seletor de segmentação (quando o plano tem mais de 1) MUDOU DE
+ *      LUGAR: antes vivia dentro do card da grade, agora vive dentro do
+ *      item do carrinho — o card já teria sumido antes do corretor
+ *      conseguir escolher, se o seletor continuasse lá.
+ *
+ * O carrinho é só uma forma nova de MOSTRAR o mesmo estado de sempre
+ * (`selecionados` + `segmentacaoPorPlano`) — nenhuma lógica de negócio
+ * nova, nenhuma mudança no que é salvo no rascunho ou enviado pro
+ * `criarCotacoesDoMulticalculo`.
  */
 function classificarAcomodacao(acomodacao) {
   const texto = (acomodacao || '').toLowerCase()
@@ -54,6 +70,7 @@ function classificarAcomodacao(acomodacao) {
 }
 
 const OPCOES_COPARTICIPACAO = ['Todas', 'Sem Coparticipação', 'Parcial', 'Completa']
+
 export default function SelecaoPlanosMulticalculo({
   clienteProspectId,
   regiaoId,
@@ -70,6 +87,7 @@ export default function SelecaoPlanosMulticalculo({
   const [criando, setCriando] = useState(false)
   const [filtroAcomodacao, setFiltroAcomodacao] = useState('Todas')
   const [filtroCoparticipacao, setFiltroCoparticipacao] = useState('Todas')
+  const [operadorasExpandidas, setOperadorasExpandidas] = useState(new Set())
 
   const totalVidas = faixasEtariasDasVidas?.length ?? null
 
@@ -83,10 +101,6 @@ export default function SelecaoPlanosMulticalculo({
     let ativo = true
     setCarregando(true)
     setErro(null)
-    // regiaoId é o caminho preferido (21/08, filtra direto por id, sem
-    // comparação de texto) — regiaoNome só viaja junto pra exibição
-    // ("Nenhum plano elegível para X") e como fallback se por algum
-    // motivo regiaoId não vier.
     montarCotacaoEstruturada({ regiaoId, regiaoNome, operadoraCodigos, totalVidas })
       .then((resultado) => {
         if (ativo) setCotacao(resultado)
@@ -153,31 +167,40 @@ export default function SelecaoPlanosMulticalculo({
     return null
   }
 
-  function alternarSelecao(planoId) {
+  /** Adiciona ao carrinho — plano some da grade principal a partir daqui. */
+  function adicionarAoCarrinho(planoId) {
+    setSelecionados((atual) => new Set(atual).add(planoId))
+    // Auto-seleciona quando existe só 1 segmentação DENTRO DO BLOCO ATUAL
+    // (respeitando o filtro de Coparticipação) — mesma regra de antes.
+    const plano = planoPorId(planoId)
+    const segmentacoesVisiveis =
+      filtroCoparticipacao === 'Todas'
+        ? plano?.precosPorSegmentacao ?? []
+        : (plano?.precosPorSegmentacao ?? []).filter((g) => g.coparticipacaoTipo === filtroCoparticipacao)
+    if (segmentacoesVisiveis.length === 1) {
+      setSegmentacaoPorPlano((mapa) => new Map(mapa).set(planoId, segmentacoesVisiveis[0]))
+    }
+  }
+
+  /** Remove do carrinho — plano volta a aparecer na grade principal. */
+  function removerDoCarrinho(planoId) {
     setSelecionados((atual) => {
       const novo = new Set(atual)
-      if (novo.has(planoId)) {
-        novo.delete(planoId)
-      } else {
-        novo.add(planoId)
-        // Auto-seleciona quando existe só 1 segmentação DENTRO DO BLOCO
-        // ATUAL (respeitando o filtro de Coparticipação) — não a lista
-        // inteira do plano. Achado real (20/08): se o filtro reduzia a
-        // lista visível a 1 item, o card não mostrava seletor (achava
-        // que já era único), mas esta função checava a lista SEM
-        // filtro — se ela tivesse mais de 1, não auto-selecionava nada.
-        // Resultado: plano marcado, sem seletor, sem segmentação presa,
-        // travado pra sempre. Corrigido: agora as duas partes olham
-        // pra MESMA lista (filtrada pela Coparticipação atual).
-        const plano = planoPorId(planoId)
-        const segmentacoesVisiveis =
-          filtroCoparticipacao === 'Todas'
-            ? plano?.precosPorSegmentacao ?? []
-            : (plano?.precosPorSegmentacao ?? []).filter((g) => g.coparticipacaoTipo === filtroCoparticipacao)
-        if (segmentacoesVisiveis.length === 1) {
-          setSegmentacaoPorPlano((mapa) => new Map(mapa).set(planoId, segmentacoesVisiveis[0]))
-        }
-      }
+      novo.delete(planoId)
+      return novo
+    })
+    setSegmentacaoPorPlano((mapa) => {
+      const novo = new Map(mapa)
+      novo.delete(planoId)
+      return novo
+    })
+  }
+
+  function alternarOperadoraExpandida(nomeOperadora) {
+    setOperadorasExpandidas((atual) => {
+      const novo = new Set(atual)
+      if (novo.has(nomeOperadora)) novo.delete(nomeOperadora)
+      else novo.add(nomeOperadora)
       return novo
     })
   }
@@ -212,7 +235,7 @@ export default function SelecaoPlanosMulticalculo({
         clienteProspectId,
         // fluxo de hoje = sempre 1 item só. A Cotação mista (vários
         // itens numa chamada) ainda não tem botão na tela — o service já
-        // suporta, a interface pra isso é a próxima sub-entrega.
+        // suporta, a interface pra isso é uma sub-entrega separada.
         itens: [{ faixasEtariasDasVidas, selecoes }],
       })
       onCotacoesCriadas?.(resultado)
@@ -282,9 +305,23 @@ export default function SelecaoPlanosMulticalculo({
         </div>
       </div>
 
+      <Carrinho
+        selecionados={selecionados}
+        planoPorId={planoPorId}
+        segmentacaoPorPlano={segmentacaoPorPlano}
+        onRemover={removerDoCarrinho}
+        onEscolherSegmentacao={escolherSegmentacao}
+        todasSegmentacoesEscolhidas={todasSegmentacoesEscolhidas}
+        onCriarCotacoes={handlePreparar}
+        criando={criando}
+      />
+
       {nomesOperadoras.map((nomeOperadora) => {
-        // Filtro é só de EXIBIÇÃO — nunca mexe em selecionados/segmentacaoPorPlano.
+        // Filtros são só de EXIBIÇÃO — nunca mexem em selecionados/
+        // segmentacaoPorPlano. Plano JÁ NO CARRINHO nunca aparece aqui,
+        // independente do filtro (é assim que não duplica).
         const planosDoBloco = cotacao.operadoras[nomeOperadora].planos
+          .filter((plano) => !selecionados.has(plano.planoId))
           .filter((plano) => filtroAcomodacao === 'Todas' || classificarAcomodacao(plano.acomodacao) === filtroAcomodacao)
           .map((plano) => {
             const segmentacoesFiltradas =
@@ -297,23 +334,33 @@ export default function SelecaoPlanosMulticalculo({
 
         if (planosDoBloco.length === 0) return null
 
+        const expandida = operadorasExpandidas.has(nomeOperadora)
+
         return (
           <section key={nomeOperadora} className="selecao-planos-operadora">
-            <h3 className="selecao-planos-operadora-titulo">{nomeOperadora}</h3>
+            <button
+              type="button"
+              className="selecao-planos-operadora-titulo selecao-planos-operadora-toggle"
+              onClick={() => alternarOperadoraExpandida(nomeOperadora)}
+              aria-expanded={expandida}
+            >
+              <span className={`selecao-planos-operadora-seta${expandida ? ' selecao-planos-operadora-seta-aberta' : ''}`}>▸</span>
+              {nomeOperadora}
+              <span className="selecao-planos-operadora-contagem">{planosDoBloco.length} plano{planosDoBloco.length === 1 ? '' : 's'}</span>
+            </button>
 
-            <div className="selecao-planos-grid">
-              {planosDoBloco.map(({ plano, segmentacoesFiltradas }) => (
-                <PlanoCard
-                  key={plano.planoId}
-                  plano={plano}
-                  segmentacoesParaMostrar={segmentacoesFiltradas}
-                  selecionado={selecionados.has(plano.planoId)}
-                  onSelecionar={() => alternarSelecao(plano.planoId)}
-                  segmentacaoEscolhida={segmentacaoPorPlano.get(plano.planoId) ?? null}
-                  onEscolherSegmentacao={(texto) => escolherSegmentacao(plano.planoId, texto)}
-                />
-              ))}
-            </div>
+            {expandida && (
+              <div className="selecao-planos-grid">
+                {planosDoBloco.map(({ plano, segmentacoesFiltradas }) => (
+                  <PlanoCardGrade
+                    key={plano.planoId}
+                    plano={plano}
+                    segmentacoesParaMostrar={segmentacoesFiltradas}
+                    onAdicionar={() => adicionarAoCarrinho(plano.planoId)}
+                  />
+                ))}
+              </div>
+            )}
           </section>
         )
       })}
@@ -322,56 +369,34 @@ export default function SelecaoPlanosMulticalculo({
         (nome) =>
           !cotacao.operadoras[nome].planos.some(
             (plano) =>
+              !selecionados.has(plano.planoId) &&
               (filtroAcomodacao === 'Todas' || classificarAcomodacao(plano.acomodacao) === filtroAcomodacao) &&
               (filtroCoparticipacao === 'Todas' || plano.precosPorSegmentacao.some((g) => g.coparticipacaoTipo === filtroCoparticipacao))
           )
-      ) && (
-        <p className="selecao-planos-status">
-          Nenhum plano bate com esse filtro de Acomodação/Coparticipação — os planos elegíveis continuam selecionados,
-          só ajuste os blocos acima pra vê-los de novo.
-        </p>
-      )}
+      ) &&
+        selecionados.size === 0 && (
+          <p className="selecao-planos-status">
+            Nenhum plano bate com esse filtro de Acomodação/Coparticipação — ajuste os blocos acima pra ver mais opções.
+          </p>
+        )}
 
-      <div className="ls-modal-acoes selecao-planos-rodape">
-        <span className="selecao-planos-contador">
-          {selecionados.size} plano{selecionados.size === 1 ? '' : 's'} selecionado{selecionados.size === 1 ? '' : 's'}
-          {selecionados.size > 0 && !todasSegmentacoesEscolhidas && ' — escolha a segmentação de todos antes de continuar'}
-        </span>
-        <button
-          className="ls-btn ls-btn-primary"
-          onClick={handlePreparar}
-          disabled={selecionados.size === 0 || !todasSegmentacoesEscolhidas || criando}
-        >
-          {criando ? 'Criando cotações...' : 'Criar Cotações pra comparação'}
-        </button>
-      </div>
+      {erro && <p className="ls-modal-erro">{erro}</p>}
     </div>
   )
 }
 
-/** 1 card por plano — resumo do que o motor já trouxe, sem calcular nada novo.
- *  `segmentacoesParaMostrar` já vem filtrada pelo bloco de Coparticipação —
- *  mas se a segmentação JÁ escolhida não estiver nela (corretor trocou de
- *  bloco depois de escolher), ela entra igual no seletor, escondida junto
- *  das outras que não batem no filtro atual — nunca some da tela sozinha. */
-function PlanoCard({ plano, segmentacoesParaMostrar, selecionado, onSelecionar, segmentacaoEscolhida, onEscolherSegmentacao }) {
-  const opcoesDoSeletor =
-    segmentacaoEscolhida && !segmentacoesParaMostrar.some((g) => g.segmentacao === segmentacaoEscolhida.segmentacao)
-      ? [segmentacaoEscolhida, ...segmentacoesParaMostrar]
-      : segmentacoesParaMostrar
-
-  const temMultiplasSegmentacoes = opcoesDoSeletor.length > 1
-
-  // "A partir de" = menor valor entre as segmentações visíveis no bloco
-  // atual — só referência visual até uma ser escolhida.
-  const menorValor = opcoesDoSeletor
+/** Card da grade principal — SÓ resumo + botão de adicionar. Não tem mais
+ *  checkbox nem seletor de segmentação (isso mudou de casa pro carrinho,
+ *  ver nota no topo do arquivo) — clicar em qualquer parte do card já
+ *  adiciona ao carrinho, sem passo intermediário. */
+function PlanoCardGrade({ plano, segmentacoesParaMostrar, onAdicionar }) {
+  const menorValor = segmentacoesParaMostrar
     .flatMap((g) => g.faixas.map((f) => f.valor))
     .reduce((min, v) => (min === null || v < min ? v : min), null)
 
   return (
-    <div className={`selecao-plano-card${selecionado ? ' selecao-plano-card-ativo' : ''}`}>
-      <label className="selecao-plano-card-header">
-        <input type="checkbox" checked={selecionado} onChange={onSelecionar} />
+    <button type="button" className="selecao-plano-card selecao-plano-card-clicavel" onClick={onAdicionar}>
+      <div className="selecao-plano-card-header">
         <div>
           <p className="selecao-plano-card-nome">{plano.nome}</p>
           <p className="selecao-plano-card-sub">
@@ -379,22 +404,7 @@ function PlanoCard({ plano, segmentacoesParaMostrar, selecionado, onSelecionar, 
             {plano.linha ? ` · ${plano.linha}` : ''}
           </p>
         </div>
-      </label>
-
-      {selecionado && temMultiplasSegmentacoes && (
-        <select
-          className="selecao-plano-card-segmentacao"
-          value={segmentacaoEscolhida?.segmentacao ?? ''}
-          onChange={(e) => onEscolherSegmentacao(e.target.value)}
-        >
-          <option value="">Escolha a segmentação (vidas/MEI/coparticipação)...</option>
-          {opcoesDoSeletor.map((g) => (
-            <option key={g.segmentacao} value={g.segmentacao}>
-              {descreverSegmentacao(g)}
-            </option>
-          ))}
-        </select>
-      )}
+      </div>
 
       <div className="selecao-plano-card-corpo">
         <div className="selecao-plano-card-linha">
@@ -410,6 +420,89 @@ function PlanoCard({ plano, segmentacoesParaMostrar, selecionado, onSelecionar, 
           <strong>{plano.regrasDisponiveis.length}</strong>
         </div>
       </div>
+
+      <span className="selecao-plano-card-adicionar">+ Adicionar</span>
+    </button>
+  )
+}
+
+/** O carrinho — sempre visível, mesmo vazio (pra não sumir e reaparecer
+ *  de surpresa). É onde o corretor escolhe a segmentação quando o plano
+ *  tem mais de 1 (esse seletor não existe mais na grade principal), e
+ *  onde ele remove um plano (única forma de tirar do carrinho — clicar
+ *  de novo na grade não funciona mais, porque o plano nem aparece lá
+ *  enquanto estiver no carrinho). */
+function Carrinho({
+  selecionados,
+  planoPorId,
+  segmentacaoPorPlano,
+  onRemover,
+  onEscolherSegmentacao,
+  todasSegmentacoesEscolhidas,
+  onCriarCotacoes,
+  criando,
+}) {
+  const itens = [...selecionados].map((planoId) => ({ planoId, plano: planoPorId(planoId) })).filter((i) => i.plano)
+
+  return (
+    <div className="selecao-planos-carrinho">
+      <div className="selecao-planos-carrinho-cabecalho">
+        <span>
+          🛒 {itens.length} plano{itens.length === 1 ? '' : 's'} selecionado{itens.length === 1 ? '' : 's'}
+        </span>
+        <button
+          className="ls-btn ls-btn-primary"
+          onClick={onCriarCotacoes}
+          disabled={itens.length === 0 || !todasSegmentacoesEscolhidas || criando}
+        >
+          {criando ? 'Criando cotações...' : 'Criar Cotações pra comparação'}
+        </button>
+      </div>
+
+      {itens.length === 0 ? (
+        <p className="selecao-planos-carrinho-vazio">Nenhum plano no carrinho ainda — clique num plano na lista abaixo pra adicionar.</p>
+      ) : (
+        <div className="selecao-planos-carrinho-itens">
+          {itens.map(({ planoId, plano }) => {
+            const segmentacaoEscolhida = segmentacaoPorPlano.get(planoId) ?? null
+            const temMultiplasSegmentacoes = plano.precosPorSegmentacao.length > 1
+
+            return (
+              <div key={planoId} className="selecao-planos-carrinho-item">
+                <div className="selecao-planos-carrinho-item-info">
+                  <p className="selecao-planos-carrinho-item-nome">{plano.nome}</p>
+                  <p className="selecao-planos-carrinho-item-sub">
+                    {plano.operadora} · {plano.acomodacao}
+                  </p>
+                </div>
+
+                {temMultiplasSegmentacoes ? (
+                  <select
+                    className="selecao-plano-card-segmentacao"
+                    value={segmentacaoEscolhida?.segmentacao ?? ''}
+                    onChange={(e) => onEscolherSegmentacao(planoId, e.target.value)}
+                  >
+                    <option value="">Escolha a segmentação (vidas/MEI/coparticipação)...</option>
+                    {plano.precosPorSegmentacao.map((g) => (
+                      <option key={g.segmentacao} value={g.segmentacao}>
+                        {descreverSegmentacao(g)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="selecao-planos-carrinho-item-segmentacao">
+                    {segmentacaoEscolhida ? descreverSegmentacao(segmentacaoEscolhida) : '—'}
+                  </span>
+                )}
+
+                <button type="button" className="ls-btn ls-btn-ghost selecao-planos-carrinho-remover" onClick={() => onRemover(planoId)}>
+                  Remover
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
