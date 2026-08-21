@@ -195,8 +195,10 @@ export default function SelecaoPlanosMulticalculo({
     try {
       const resultado = await criarCotacoesDoMulticalculo({
         clienteProspectId,
-        selecoes,
-        faixasEtariasDasVidas,
+        // fluxo de hoje = sempre 1 item só. A Cotação mista (vários
+        // itens numa chamada) ainda não tem botão na tela — o service já
+        // suporta, a interface pra isso é a próxima sub-entrega.
+        itens: [{ faixasEtariasDasVidas, selecoes }],
       })
       onCotacoesCriadas?.(resultado)
     } catch (err) {
