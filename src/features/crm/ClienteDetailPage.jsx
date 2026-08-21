@@ -834,11 +834,25 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                     </div>
                     {cot.itens_cotacao?.length > 0 && (
                       <div className="cotacao-item-valores">
-                        {cot.itens_cotacao.map((item) => (
-                          <span key={item.id} className="cotacao-item-valor">
-                            {item.faixa_etaria}: R$ {Number(item.valor).toFixed(2)}
-                          </span>
-                        ))}
+                        {cot.itens_cotacao.map((item) => {
+                          // ACHADO (21/08): mostrava só o valor unitário por
+                          // vida, nunca multiplicava por quantidade_vidas —
+                          // quem tinha 2+ vidas na mesma faixa via o preço de
+                          // 1 pessoa só. Mesmo padrão de soma já usado pra
+                          // Contratos (totalValor, mais acima neste arquivo).
+                          const subtotalFaixa = (item.quantidade_vidas ?? 0) * Number(item.valor ?? 0)
+                          return (
+                            <span key={item.id} className="cotacao-item-valor">
+                              {item.faixa_etaria} ({item.quantidade_vidas ?? 0}x): R$ {subtotalFaixa.toFixed(2)}
+                            </span>
+                          )
+                        })}
+                        <span className="cotacao-item-valor cotacao-item-valor-total">
+                          Total: R${' '}
+                          {cot.itens_cotacao
+                            .reduce((soma, item) => soma + (item.quantidade_vidas ?? 0) * Number(item.valor ?? 0), 0)
+                            .toFixed(2)}
+                        </span>
                       </div>
                     )}
                     {cot.contrato_id && (
