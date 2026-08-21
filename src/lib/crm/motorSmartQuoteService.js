@@ -177,9 +177,20 @@ async function buscarCotacoesEmLote(planosBase) {
             'plano_id, segmentacao, familia_tarifaria, faixa_etaria, valor, vidas_min, vidas_max, mei, coparticipacao_tipo, tipo_contratacao'
           )
           .in('plano_id', lote)
+          // ACHADO (21/08): sem isso, o Supabase/PostgREST limita a
+          // resposta a 1000 linhas por padrão — silencioso, sem erro.
+          // Operadoras onde o MESMO plano aparece em muitas segmentações
+          // (SulAmérica, Notredame, Porto, Sobam, Unimed — o mesmo plano
+          // repetido em dezenas de combinações de vidas/MEI/coparticipação)
+          // estouravam esse teto dentro de um lote de 40 planos
+          // misturados, cortando o resto sem avisar — e como cada plano
+          // cortado ficava sem NENHUM preço, ele sumia do resultado
+          // inteiro (não só perdia algumas opções). Faixa generosa,
+          // bem acima de qualquer lote real hoje.
+          .range(0, 19999)
       ),
       buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote) =>
-        institucional.from('mercado_saude_rede_cobertura').select('plano_id').in('plano_id', lote)
+        institucional.from('mercado_saude_rede_cobertura').select('plano_id').in('plano_id', lote).range(0, 19999)
       ),
     ])
   } catch (erro) {
