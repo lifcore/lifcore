@@ -130,35 +130,81 @@ export async function buscarPlanosElegiveis({ regiaoId = null, regiaoNome = null
  * retorno de sempre (por plano_id) — quem consome não percebe diferença
  * nenhuma no dado, só na velocidade.
  */
+/** Divide um array em pedaços de até `tamanho` itens — usado pra evitar
+ *  estourar limite de tamanho de URL quando `.in()` recebe uma lista
+ *  grande de valores (alguns `plano_id` passam de 70 caracteres). */
+function dividirEmLotes(array, tamanho) {
+  const lotes = []
+  for (let i = 0; i < array.length; i += tamanho) {
+    lotes.push(array.slice(i, i + tamanho))
+  }
+  return lotes
+}
+
+/** Roda a mesma consulta `.in(coluna, valores)` em vários lotes (em
+ *  paralelo) e junta os resultados — mesma ideia de `buscarCotacoesEmLote`
+ *  só que resiliente a listas grandes. `montarConsulta` recebe o lote e
+ *  devolve a query pronta (com .in() já aplicado). */
+async function buscarEmLotesDeValores(valores, tamanhoDoLote, montarConsulta) {
+  const lotes = dividirEmLotes(valores, tamanhoDoLote)
+  const resultados = await Promise.all(lotes.map((lote) => montarConsulta(lote)))
+  const linhas = []
+  for (const { data, error } of resultados) {
+    if (error) throw error
+    linhas.push(...(data ?? []))
+  }
+  return linhas
+}
+
 async function buscarCotacoesEmLote(planosBase) {
   const planoIds = planosBase.map((p) => p.plano_id)
   if (planoIds.length === 0) return new Map()
 
-  const [{ data: todosPrecos, error: erroPrecos }, { data: todaRede, error: erroRede }] = await Promise.all([
-    institucional
-      .from('mercado_saude_precos')
-      .select(
-        'plano_id, segmentacao, familia_tarifaria, faixa_etaria, valor, vidas_min, vidas_max, mei, coparticipacao_tipo, tipo_contratacao'
-      )
-      .in('plano_id', planoIds)
-      .order('plano_id')
-      .order('segmentacao')
-      .order('faixa_etaria'),
-    institucional.from('mercado_saude_rede_cobertura').select('plano_id').in('plano_id', planoIds),
-  ])
-  if (erroPrecos) throw new Error(`Erro buscando preços em lote: ${erroPrecos.message}`)
-  if (erroRede) throw new Error(`Erro buscando rede em lote: ${erroRede.message}`)
+  // ACHADO (21/08): mandar TODOS os plano_id numa única .in() estourava
+  // o tamanho da URL da consulta com ~150 planos (vários plano_id têm
+  // 70+ caracteres, ex: operadoras com slug técnico longo) — a consulta
+  // falhava e "buscar planos" parava de achar qualquer coisa. Dividir
+  // em lotes de 40 resolve sem perder o ganho de velocidade de ontem
+  // (poucas consultas em paralelo, não uma por plano).
+  const TAMANHO_LOTE = 40
+  let todosPrecos, todaRede
+  try {
+    ;[todosPrecos, todaRede] = await Promise.all([
+      buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote) =>
+        institucional
+          .from('mercado_saude_precos')
+          .select(
+            'plano_id, segmentacao, familia_tarifaria, faixa_etaria, valor, vidas_min, vidas_max, mei, coparticipacao_tipo, tipo_contratacao'
+          )
+          .in('plano_id', lote)
+      ),
+      buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote) =>
+        institucional.from('mercado_saude_rede_cobertura').select('plano_id').in('plano_id', lote)
+      ),
+    ])
+  } catch (erro) {
+    throw new Error(`Erro buscando preços/rede em lote: ${erro.message}`)
+  }
+  // Ordenação que antes vinha do banco (order('plano_id').order('segmentacao')...)
+  // agora é feita aqui, já que os lotes voltam em paralelo sem ordem
+  // garantida entre si.
+  todosPrecos.sort(
+    (a, b) =>
+      a.plano_id.localeCompare(b.plano_id) ||
+      a.segmentacao.localeCompare(b.segmentacao) ||
+      a.faixa_etaria.localeCompare(b.faixa_etaria)
+  )
 
   const precosPorPlano = new Map()
-  for (const p of todosPrecos ?? []) {
+  for (const p of todosPrecos) {
     if (!precosPorPlano.has(p.plano_id)) precosPorPlano.set(p.plano_id, [])
     precosPorPlano.get(p.plano_id).push(p)
   }
 
   // Supabase/PostgREST não agrupa COUNT nativamente por essa via — conta
-  // em memória mesmo, ainda assim é 1 consulta só pra todos os planos.
+  // em memória mesmo, ainda assim é poucas consultas pra todos os planos.
   const totalPrestadoresPorPlano = new Map()
-  for (const r of todaRede ?? []) {
+  for (const r of todaRede) {
     totalPrestadoresPorPlano.set(r.plano_id, (totalPrestadoresPorPlano.get(r.plano_id) ?? 0) + 1)
   }
 
