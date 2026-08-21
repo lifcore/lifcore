@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { buscarFaixasEtariasDisponiveis } from '../../lib/crm/motorSmartQuoteService'
+import { buscarFaixasEtariasDisponiveis, buscarRegioesTarifariasDisponiveis } from '../../lib/crm/motorSmartQuoteService'
 import { buscarRascunhoMulticalculo, salvarContextoRascunho } from '../../lib/crm/multicalculoRascunhoService'
 import './contextoCotacao.css'
 
@@ -35,11 +35,22 @@ import './contextoCotacao.css'
  * foi necessária em `SelecaoPlanosMulticalculo.jsx`,
  * `multicalculoCotacaoService.js` nem no formato salvo no rascunho da
  * Fase 1 — só a forma de PREENCHER esse array mudou aqui dentro.
+ *
+ * Sprint 3b (20/08) — Região virou autocomplete de verdade. Achado real:
+ * corretor digitando "jundiai" de cabeça (sem acento) não batia com
+ * nada, porque a busca usa nome exato. Agora a lista de regiões vem
+ * direto do banco (`buscarRegioesTarifariasDisponiveis`) via
+ * `<datalist>` (autocomplete nativo do navegador), e o texto digitado é
+ * SEMPRE resolvido pro nome exato do banco antes de continuar
+ * (comparação sem acento/maiúscula) — se não bater com nenhuma região
+ * real, mostra erro e não deixa buscar planos com um nome que
+ * garantidamente não ia achar nada.
  */
 export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) {
   const [regiaoNome, setRegiaoNome] = useState('')
   const [quantidadesPorFaixa, setQuantidadesPorFaixa] = useState(new Map())
   const [faixasDisponiveis, setFaixasDisponiveis] = useState([])
+  const [regioesDisponiveis, setRegioesDisponiveis] = useState([])
   const [carregandoFaixas, setCarregandoFaixas] = useState(true)
   const [erro, setErro] = useState(null)
   const [rascunhoRestaurado, setRascunhoRestaurado] = useState(false)
@@ -55,6 +66,12 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
       .then(setFaixasDisponiveis)
       .catch((err) => setErro(`Erro carregando faixas etárias: ${err.message}`))
       .finally(() => setCarregandoFaixas(false))
+  }, [])
+
+  useEffect(() => {
+    buscarRegioesTarifariasDisponiveis()
+      .then(setRegioesDisponiveis)
+      .catch((err) => setErro(`Erro carregando regiões: ${err.message}`))
   }, [])
 
   useEffect(() => {
@@ -116,13 +133,18 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
       setErro('Informe a região da cotação.')
       return
     }
+    const regiaoResolvida = resolverRegiaoExata(regiaoNome, regioesDisponiveis)
+    if (!regiaoResolvida) {
+      setErro('Região não encontrada na lista — escolha uma das sugestões enquanto digita.')
+      return
+    }
     if (totalVidas === 0) {
       setErro('Informe ao menos 1 vida em alguma faixa etária.')
       return
     }
     setErro(null)
     onContinuar({
-      regiaoNome: regiaoNome.trim(),
+      regiaoNome: regiaoResolvida,
       faixasEtariasDasVidas: expandirParaArrayPlano(quantidadesPorFaixa),
     })
   }
@@ -138,10 +160,17 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
           Região
           <input
             type="text"
-            placeholder="Ex: Jundiaí"
+            list="contexto-cotacao-regioes-lista"
+            placeholder="Comece a digitar (ex: Jun...)"
             value={regiaoNome}
             onChange={(e) => setRegiaoNome(e.target.value)}
+            autoComplete="off"
           />
+          <datalist id="contexto-cotacao-regioes-lista">
+            {regioesDisponiveis.map((r) => (
+              <option key={r.id} value={r.nome} />
+            ))}
+          </datalist>
         </label>
       </div>
 
@@ -189,4 +218,22 @@ function expandirParaArrayPlano(quantidadesPorFaixa) {
     for (let i = 0; i < quantidade; i++) array.push(faixa)
   }
   return array
+}
+
+/** Acha, na lista de regiões reais do banco, aquela cujo nome bate com o
+ *  que foi digitado — ignorando acento/maiúscula (achado real: "jundiai"
+ *  sem acento não batia com "Jundiaí" no banco). Devolve o nome EXATO
+ *  como está gravado (nunca o texto digitado), ou null se não achar
+ *  nenhuma correspondência — nesse caso o formulário barra o avanço em
+ *  vez de mandar pro motor um nome que garantidamente não acha nada. */
+function resolverRegiaoExata(textoDigitado, regioesDisponiveis) {
+  const normalizar = (t) =>
+    (t || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+  const alvo = normalizar(textoDigitado)
+  const achada = regioesDisponiveis.find((r) => normalizar(r.nome) === alvo)
+  return achada?.nome ?? null
 }

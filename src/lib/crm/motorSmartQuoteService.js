@@ -231,6 +231,21 @@ export async function buscarFaixasEtariasDisponiveis() {
   return unicas.sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0))
 }
 
+/**
+ * Sprint 3b (20/08) — lista as regiões tarifárias reais cadastradas, pro
+ * autocomplete do Passo 1 (ContextoCotacaoForm). Achado real: corretor
+ * digitando "Jundiaí" de cabeça (sem saber se tem acento/hífen no banco)
+ * batia em nenhuma operadora — a busca (`buscarPlanosElegiveis`) usa nome
+ * exato. Com a lista vindo direto daqui, o formulário sempre manda o
+ * texto EXATO que está no banco, nunca o que o corretor digitou de
+ * memória.
+ */
+export async function buscarRegioesTarifariasDisponiveis() {
+  const { data, error } = await institucional.from('regioes_tarifarias').select('id, nome').order('nome')
+  if (error) throw new Error(`Erro buscando regiões tarifárias: ${error.message}`)
+  return data ?? []
+}
+
 export function calcularMensalidade(grupoSegmentacao, faixasEtariasDasVidas) {
   const porFaixa = new Map(grupoSegmentacao.faixas.map((f) => [f.faixaEtaria, f.valor]))
   const naoEncontradas = []
