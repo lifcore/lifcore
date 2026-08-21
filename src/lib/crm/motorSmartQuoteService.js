@@ -52,11 +52,17 @@ const LIMITE_VIDAS_MULTICALCULO = 99
  * específica) — o primeiro filtro objetivo do funil do Chief:
  * Região tarifária → Operadora → Planos elegíveis.
  *
- * @param {{ regiaoNome?: string, operadoraCodigo?: string }} contexto
- *   regiaoNome: nome exato em institucional.regioes_tarifarias.nome (ex: "Jundiaí")
+ * @param {{ regiaoId?: string, regiaoNome?: string, operadoraCodigo?: string }} contexto
+ *   regiaoId: id real de institucional.regioes_tarifarias — CAMINHO
+ *     PREFERIDO (21/08). Filtra direto, sem nenhuma busca por nome no
+ *     meio — elimina de vez a categoria inteira de bug que já vimos
+ *     (acento, nome duplicado, região órfã) porque nunca compara texto.
+ *   regiaoNome: mantido só por retrocompatibilidade — usado SÓ quando
+ *     regiaoId não vier. Continua fazendo a busca por nome exato
+ *     (ilike) como sempre fez.
  *   operadoraCodigo: nome/código da operadora pra filtrar uma só (opcional)
  */
-export async function buscarPlanosElegiveis({ regiaoNome = null, operadoraCodigo = null } = {}) {
+export async function buscarPlanosElegiveis({ regiaoId = null, regiaoNome = null, operadoraCodigo = null } = {}) {
   let query = institucional
     .from('mercado_saude_planos')
     .select(
@@ -68,7 +74,9 @@ export async function buscarPlanosElegiveis({ regiaoNome = null, operadoraCodigo
     )
     .eq('status', 'ativo')
 
-  if (regiaoNome) {
+  if (regiaoId) {
+    query = query.eq('regiao_tarifaria_id', regiaoId)
+  } else if (regiaoNome) {
     // filtra depois de buscar o id, pra não depender de embed filtrável
     const { data: regiao, error: erroRegiao } = await institucional
       .from('regioes_tarifarias')
@@ -187,6 +195,34 @@ function segmentacaoElegivelPorVidas(grupo, totalVidas) {
   return totalVidas >= grupo.vidasMin && totalVidas <= grupo.vidasMax
 }
 
+/**
+ * Sprint 3b (21/08) — rótulo amigável pra segmentação, pro seletor do
+ * corretor. Achado real: várias operadoras usam `tabela_XX` opaco como
+ * texto de segmentação (Bradesco, Hapvida, Porto, Sobam, Unimed) —
+ * ilegível pro corretor decidir qual escolher.
+ *
+ * DE PROPÓSITO monta o rótulo só a partir das colunas do BMR-006
+ * (vidas_min/max, mei, coparticipacao_tipo, tipo_contratacao) — a MESMA
+ * fonte de verdade já validada linha a linha ontem contra as fontes
+ * originais e, em vários casos, contra o Painel do Corretor real. Não
+ * tenta decodificar/embelezar o texto opaco `tabela_XX` em si (isso
+ * exigiria lógica nova por operadora, arriscando afirmar algo que a
+ * fonte não confirma). Cai no texto bruto só se as 4 colunas vierem
+ * todas vazias (não deveria acontecer, BMR-006 está completo nas 12).
+ */
+export function descreverSegmentacao(grupo) {
+  const partes = []
+  if (grupo.vidasMin != null && grupo.vidasMax != null) {
+    partes.push(
+      grupo.vidasMin === grupo.vidasMax ? `${grupo.vidasMin} vida${grupo.vidasMin === 1 ? '' : 's'}` : `${grupo.vidasMin} a ${grupo.vidasMax} vidas`
+    )
+  }
+  if (grupo.mei != null) partes.push(grupo.mei ? 'MEI' : 'Não MEI')
+  if (grupo.coparticipacaoTipo) partes.push(grupo.coparticipacaoTipo)
+  if (grupo.tipoContratacao) partes.push(grupo.tipoContratacao)
+  return partes.length > 0 ? partes.join(' · ') : grupo.segmentacao
+}
+
 async function montarResumoRede(planoId) {
   const { count, error } = await institucional
     .from('mercado_saude_rede_cobertura')
@@ -239,11 +275,34 @@ export async function buscarFaixasEtariasDisponiveis() {
  * exato. Com a lista vindo direto daqui, o formulário sempre manda o
  * texto EXATO que está no banco, nunca o que o corretor digitou de
  * memória.
+ *
+ * ATUALIZADO (21/08) — só lista região com pelo menos 1 plano de
+ * verdade vinculado. Achado: depois de corrigir o vínculo de 8
+ * operadoras pra "Jundiaí" (20/08), sobraram 3 linhas órfãs em
+ * `regioes_tarifarias` ("São Paulo (Interior I)", "Interior I", "SP
+ * Interior I") sem nenhum plano apontando mais pra elas — apareciam no
+ * autocomplete mesmo sem servir pra nada ainda. Filtra pelo join em vez
+ * de apagar as linhas — se um dia precisar reaproveitar alguma (ex:
+ * quando "São Paulo" virar região de verdade), ela já existe, só não
+ * aparece enquanto não tiver uso real.
  */
 export async function buscarRegioesTarifariasDisponiveis() {
-  const { data, error } = await institucional.from('regioes_tarifarias').select('id, nome').order('nome')
+  const { data, error } = await institucional
+    .from('regioes_tarifarias')
+    .select('id, nome, mercado_saude_planos!inner(plano_id)')
+    .order('nome')
   if (error) throw new Error(`Erro buscando regiões tarifárias: ${error.message}`)
-  return data ?? []
+
+  // O join !inner pode devolver 1 linha por combinação região×plano —
+  // desduplica por id antes de devolver (o formulário só quer {id, nome}).
+  const vistos = new Set()
+  const regioesUnicas = []
+  for (const r of data ?? []) {
+    if (vistos.has(r.id)) continue
+    vistos.add(r.id)
+    regioesUnicas.push({ id: r.id, nome: r.nome })
+  }
+  return regioesUnicas
 }
 
 export function calcularMensalidade(grupoSegmentacao, faixasEtariasDasVidas) {
@@ -280,19 +339,26 @@ export function calcularMensalidade(grupoSegmentacao, faixasEtariasDasVidas) {
  * arquivo). Isso já é o formato pronto pra alimentar a próxima camada
  * visual (cards por operadora, comparação, seleção múltipla).
  *
- * @param {{ regiaoNome?: string, operadoraCodigos?: string[], totalVidas?: number }} contexto
+ * @param {{ regiaoId?: string, regiaoNome?: string, operadoraCodigos?: string[], totalVidas?: number }} contexto
+ *   regiaoId: caminho preferido (21/08) — filtra direto por id, sem
+ *   busca por nome. regiaoNome fica só de retrocompatibilidade/exibição.
  *   totalVidas: soma de vidas da cotação (Sprint 3b) — quando informado,
  *   filtra as segmentações elegíveis por vidas_min/vidas_max (BMR-006).
  *   Plano sem nenhuma segmentação elegível não entra no resultado — é
  *   assim que uma operadora inteira "some" quando nenhum plano dela bate
  *   o critério, como o Chief pediu na cascata.
  */
-export async function montarCotacaoEstruturada({ regiaoNome = null, operadoraCodigos = null, totalVidas = null } = {}) {
-  const filtrosAplicados = { regiaoNome, operadoraCodigos: operadoraCodigos ?? 'todas', totalVidas }
+export async function montarCotacaoEstruturada({
+  regiaoId = null,
+  regiaoNome = null,
+  operadoraCodigos = null,
+  totalVidas = null,
+} = {}) {
+  const filtrosAplicados = { regiaoId, regiaoNome, operadoraCodigos: operadoraCodigos ?? 'todas', totalVidas }
 
   if (totalVidas != null && totalVidas > LIMITE_VIDAS_MULTICALCULO) {
     return {
-      contexto: { regiaoNome, totalVidas },
+      contexto: { regiaoId, regiaoNome, totalVidas },
       operadoras: {},
       filtrosAplicados,
       motivoBloqueio:
@@ -305,7 +371,7 @@ export async function montarCotacaoEstruturada({ regiaoNome = null, operadoraCod
   const operadorasResultado = {}
 
   for (const codigo of codigos) {
-    const { planos, motivo } = await buscarPlanosElegiveis({ regiaoNome, operadoraCodigo: codigo })
+    const { planos, motivo } = await buscarPlanosElegiveis({ regiaoId, regiaoNome, operadoraCodigo: codigo })
     if (motivo) continue // operadora/região não encontrada — pula, não quebra a cotação inteira
 
     for (const planoBase of planos) {
@@ -336,5 +402,5 @@ export async function montarCotacaoEstruturada({ regiaoNome = null, operadoraCod
     }
   }
 
-  return { contexto: { regiaoNome, totalVidas }, operadoras: operadorasResultado, filtrosAplicados, motivoBloqueio: null }
+  return { contexto: { regiaoId, regiaoNome, totalVidas }, operadoras: operadorasResultado, filtrosAplicados, motivoBloqueio: null }
 }

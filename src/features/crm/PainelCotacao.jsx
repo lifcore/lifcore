@@ -26,6 +26,10 @@ import SelecaoPlanosMulticalculo from './SelecaoPlanosMulticalculo'
  * restauram e salvam sozinhos via `multicalculoRascunhoService` — este
  * componente só precisa passar `clienteProspectId` pra eles, sem
  * nenhuma lógica de rascunho aqui.
+ *
+ * ATUALIZADO (21/08) — `contexto` agora carrega `regiaoId` (o que o
+ * motor usa de verdade pra buscar) além de `regiaoNome` (só exibição).
+ * Este componente só repassa os dois adiante, sem decidir nada.
  */
 export default function PainelCotacao({ clienteProspectId, onConcluido }) {
   const [contexto, setContexto] = useState(null)
@@ -45,6 +49,7 @@ export default function PainelCotacao({ clienteProspectId, onConcluido }) {
           </button>
           <SelecaoPlanosMulticalculo
             clienteProspectId={clienteProspectId}
+            regiaoId={contexto.regiaoId}
             regiaoNome={contexto.regiaoNome}
             faixasEtariasDasVidas={contexto.faixasEtariasDasVidas}
             onCotacoesCriadas={handleCotacoesCriadas}

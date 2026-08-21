@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { montarCotacaoEstruturada } from '../../lib/crm/motorSmartQuoteService'
+import { montarCotacaoEstruturada, descreverSegmentacao } from '../../lib/crm/motorSmartQuoteService'
 import { criarCotacoesDoMulticalculo } from '../../lib/crm/multicalculoCotacaoService'
 import { buscarRascunhoMulticalculo, salvarSelecoesRascunho } from '../../lib/crm/multicalculoRascunhoService'
 import './selecaoPlanosMulticalculo.css'
@@ -56,6 +56,7 @@ function classificarAcomodacao(acomodacao) {
 const OPCOES_COPARTICIPACAO = ['Todas', 'Sem Coparticipação', 'Parcial', 'Completa']
 export default function SelecaoPlanosMulticalculo({
   clienteProspectId,
+  regiaoId,
   regiaoNome,
   operadoraCodigos = null,
   faixasEtariasDasVidas,
@@ -82,7 +83,11 @@ export default function SelecaoPlanosMulticalculo({
     let ativo = true
     setCarregando(true)
     setErro(null)
-    montarCotacaoEstruturada({ regiaoNome, operadoraCodigos, totalVidas })
+    // regiaoId é o caminho preferido (21/08, filtra direto por id, sem
+    // comparação de texto) — regiaoNome só viaja junto pra exibição
+    // ("Nenhum plano elegível para X") e como fallback se por algum
+    // motivo regiaoId não vier.
+    montarCotacaoEstruturada({ regiaoId, regiaoNome, operadoraCodigos, totalVidas })
       .then((resultado) => {
         if (ativo) setCotacao(resultado)
       })
@@ -95,7 +100,7 @@ export default function SelecaoPlanosMulticalculo({
     return () => {
       ativo = false
     }
-  }, [regiaoNome, JSON.stringify(operadoraCodigos), totalVidas])
+  }, [regiaoId, regiaoNome, JSON.stringify(operadoraCodigos), totalVidas])
 
   useEffect(() => {
     if (carregando || !cotacao || restaurouRascunho.current || !clienteProspectId) return
@@ -385,7 +390,7 @@ function PlanoCard({ plano, segmentacoesParaMostrar, selecionado, onSelecionar, 
           <option value="">Escolha a segmentação (vidas/MEI/coparticipação)...</option>
           {opcoesDoSeletor.map((g) => (
             <option key={g.segmentacao} value={g.segmentacao}>
-              {g.segmentacao}
+              {descreverSegmentacao(g)}
             </option>
           ))}
         </select>

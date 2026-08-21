@@ -32,26 +32,28 @@ import './contextoCotacao.css'
  * O CONTRATO EXTERNO NÃO MUDOU — `onContinuar` continua devolvendo
  * `faixasEtariasDasVidas` como array plano (1 item por vida, faixa
  * repetida N vezes), exatamente como antes. Por isso nenhuma mudança
- * foi necessária em `SelecaoPlanosMulticalculo.jsx`,
- * `multicalculoCotacaoService.js` nem no formato salvo no rascunho da
- * Fase 1 — só a forma de PREENCHER esse array mudou aqui dentro.
+ * foi necessária em `multicalculoCotacaoService.js` nem no formato
+ * salvo no rascunho da Fase 1 — só a forma de PREENCHER esse array
+ * mudou aqui dentro.
  *
- * Sprint 3b (20/08) — Região virou autocomplete de verdade. Achado real:
- * corretor digitando "jundiai" de cabeça (sem acento) não batia com
- * nada, porque a busca usa nome exato. Agora a lista de regiões vem
- * direto do banco (`buscarRegioesTarifariasDisponiveis`) via
- * `<datalist>` (autocomplete nativo do navegador), e o texto digitado é
- * SEMPRE resolvido pro nome exato do banco antes de continuar
- * (comparação sem acento/maiúscula) — se não bater com nenhuma região
- * real, mostra erro e não deixa buscar planos com um nome que
- * garantidamente não ia achar nada.
+ * Sprint 3b (21/08) — Região virou SELECT direto pelo `regiao_id` real
+ * do banco, não mais texto digitado. Achado real (20/08): mesmo com
+ * autocomplete + resolução por nome sem acento, ainda existia uma
+ * categoria inteira de risco (nome duplicado, região órfã aparecendo
+ * na lista, digitação) só por depender de comparar TEXTO em algum
+ * ponto do fluxo. Decisão do usuário: eliminar isso de vez — o valor
+ * que sai daqui e viaja por todo o wizard é sempre o `id` (uuid), nunca
+ * mais o nome. `onContinuar` agora devolve `regiaoId` (novo, é o que o
+ * motor usa pra buscar) + `regiaoNome` (só pra exibição em telas
+ * seguintes, tipo "Nenhum plano elegível para Jundiaí").
  */
 export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) {
-  const [regiaoNome, setRegiaoNome] = useState('')
+  const [regiaoId, setRegiaoId] = useState('')
   const [quantidadesPorFaixa, setQuantidadesPorFaixa] = useState(new Map())
   const [faixasDisponiveis, setFaixasDisponiveis] = useState([])
   const [regioesDisponiveis, setRegioesDisponiveis] = useState([])
   const [carregandoFaixas, setCarregandoFaixas] = useState(true)
+  const [carregandoRegioes, setCarregandoRegioes] = useState(true)
   const [erro, setErro] = useState(null)
   const [rascunhoRestaurado, setRascunhoRestaurado] = useState(false)
 
@@ -72,6 +74,7 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
     buscarRegioesTarifariasDisponiveis()
       .then(setRegioesDisponiveis)
       .catch((err) => setErro(`Erro carregando regiões: ${err.message}`))
+      .finally(() => setCarregandoRegioes(false))
   }, [])
 
   useEffect(() => {
@@ -82,7 +85,12 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
     buscarRascunhoMulticalculo(clienteProspectId)
       .then((rascunho) => {
         if (rascunho?.contexto?.faixasEtariasDasVidas?.length) {
-          setRegiaoNome(rascunho.contexto.regiaoNome ?? '')
+          // Rascunhos antigos (antes de 21/08) só têm regiaoNome salvo,
+          // não regiaoId — restaura pelo nome nesse caso, sem quebrar
+          // rascunhos já existentes.
+          if (rascunho.contexto.regiaoId) {
+            setRegiaoId(rascunho.contexto.regiaoId)
+          }
           // Array plano salvo (1 item por vida) → agrega de volta em
           // quantidade por faixa, pro campo numérico ser preenchido.
           const mapa = new Map()
@@ -101,20 +109,25 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
 
   useEffect(() => {
     if (!prontoParaAutosave.current || !clienteProspectId) return
-    const temAlgoPraSalvar = regiaoNome.trim() || quantidadesPorFaixa.size > 0
+    const temAlgoPraSalvar = regiaoId || quantidadesPorFaixa.size > 0
     if (!temAlgoPraSalvar) return
 
     if (timeoutAutosave.current) clearTimeout(timeoutAutosave.current)
     timeoutAutosave.current = setTimeout(() => {
+      const regiaoEscolhida = regioesDisponiveis.find((r) => r.id === regiaoId)
       salvarContextoRascunho({
         clienteProspectId,
-        contexto: { regiaoNome: regiaoNome.trim(), faixasEtariasDasVidas: expandirParaArrayPlano(quantidadesPorFaixa) },
+        contexto: {
+          regiaoId: regiaoId || null,
+          regiaoNome: regiaoEscolhida?.nome ?? null,
+          faixasEtariasDasVidas: expandirParaArrayPlano(quantidadesPorFaixa),
+        },
       }).catch((err) => console.error('Erro salvando rascunho do contexto:', err.message))
     }, 800)
 
     return () => clearTimeout(timeoutAutosave.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regiaoNome, quantidadesPorFaixa, clienteProspectId])
+  }, [regiaoId, quantidadesPorFaixa, clienteProspectId, regioesDisponiveis])
 
   function atualizarQuantidade(faixa, valorDigitado) {
     const quantidade = Math.max(0, Math.floor(Number(valorDigitado) || 0))
@@ -129,13 +142,8 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
   const totalVidas = [...quantidadesPorFaixa.values()].reduce((soma, qtd) => soma + qtd, 0)
 
   function handleContinuar() {
-    if (!regiaoNome.trim()) {
-      setErro('Informe a região da cotação.')
-      return
-    }
-    const regiaoResolvida = resolverRegiaoExata(regiaoNome, regioesDisponiveis)
-    if (!regiaoResolvida) {
-      setErro('Região não encontrada na lista — escolha uma das sugestões enquanto digita.')
+    if (!regiaoId) {
+      setErro('Selecione a região da cotação.')
       return
     }
     if (totalVidas === 0) {
@@ -143,8 +151,10 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
       return
     }
     setErro(null)
+    const regiaoEscolhida = regioesDisponiveis.find((r) => r.id === regiaoId)
     onContinuar({
-      regiaoNome: regiaoResolvida,
+      regiaoId,
+      regiaoNome: regiaoEscolhida?.nome ?? null,
       faixasEtariasDasVidas: expandirParaArrayPlano(quantidadesPorFaixa),
     })
   }
@@ -158,19 +168,14 @@ export default function ContextoCotacaoForm({ clienteProspectId, onContinuar }) 
       <div className="contexto-cotacao-linha">
         <label>
           Região
-          <input
-            type="text"
-            list="contexto-cotacao-regioes-lista"
-            placeholder="Comece a digitar (ex: Jun...)"
-            value={regiaoNome}
-            onChange={(e) => setRegiaoNome(e.target.value)}
-            autoComplete="off"
-          />
-          <datalist id="contexto-cotacao-regioes-lista">
+          <select value={regiaoId} onChange={(e) => setRegiaoId(e.target.value)} disabled={carregandoRegioes}>
+            <option value="">{carregandoRegioes ? 'Carregando regiões...' : 'Selecione a região...'}</option>
             {regioesDisponiveis.map((r) => (
-              <option key={r.id} value={r.nome} />
+              <option key={r.id} value={r.id}>
+                {r.nome}
+              </option>
             ))}
-          </datalist>
+          </select>
         </label>
       </div>
 
@@ -218,22 +223,4 @@ function expandirParaArrayPlano(quantidadesPorFaixa) {
     for (let i = 0; i < quantidade; i++) array.push(faixa)
   }
   return array
-}
-
-/** Acha, na lista de regiões reais do banco, aquela cujo nome bate com o
- *  que foi digitado — ignorando acento/maiúscula (achado real: "jundiai"
- *  sem acento não batia com "Jundiaí" no banco). Devolve o nome EXATO
- *  como está gravado (nunca o texto digitado), ou null se não achar
- *  nenhuma correspondência — nesse caso o formulário barra o avanço em
- *  vez de mandar pro motor um nome que garantidamente não acha nada. */
-function resolverRegiaoExata(textoDigitado, regioesDisponiveis) {
-  const normalizar = (t) =>
-    (t || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .trim()
-  const alvo = normalizar(textoDigitado)
-  const achada = regioesDisponiveis.find((r) => normalizar(r.nome) === alvo)
-  return achada?.nome ?? null
 }
