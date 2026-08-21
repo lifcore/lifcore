@@ -155,12 +155,22 @@ export default function SelecaoPlanosMulticalculo({
         novo.delete(planoId)
       } else {
         novo.add(planoId)
-        // se o plano só tem 1 segmentação, já pré-seleciona (sem
-        // ambiguidade nenhuma) — se tiver mais de 1, fica sem escolha
-        // até o corretor decidir no seletor do card
+        // Auto-seleciona quando existe só 1 segmentação DENTRO DO BLOCO
+        // ATUAL (respeitando o filtro de Coparticipação) — não a lista
+        // inteira do plano. Achado real (20/08): se o filtro reduzia a
+        // lista visível a 1 item, o card não mostrava seletor (achava
+        // que já era único), mas esta função checava a lista SEM
+        // filtro — se ela tivesse mais de 1, não auto-selecionava nada.
+        // Resultado: plano marcado, sem seletor, sem segmentação presa,
+        // travado pra sempre. Corrigido: agora as duas partes olham
+        // pra MESMA lista (filtrada pela Coparticipação atual).
         const plano = planoPorId(planoId)
-        if (plano?.precosPorSegmentacao.length === 1) {
-          setSegmentacaoPorPlano((mapa) => new Map(mapa).set(planoId, plano.precosPorSegmentacao[0]))
+        const segmentacoesVisiveis =
+          filtroCoparticipacao === 'Todas'
+            ? plano?.precosPorSegmentacao ?? []
+            : (plano?.precosPorSegmentacao ?? []).filter((g) => g.coparticipacaoTipo === filtroCoparticipacao)
+        if (segmentacoesVisiveis.length === 1) {
+          setSegmentacaoPorPlano((mapa) => new Map(mapa).set(planoId, segmentacoesVisiveis[0]))
         }
       }
       return novo
