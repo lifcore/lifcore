@@ -1,17 +1,200 @@
 /* Sprint 2D — Seleção de planos (Multicálculo)
    Reescrito usando as variáveis reais de lcds-tokens.css (confirmado
    via App.jsx: data-theme="lcds" cobre o app inteiro, não só o
-   Finance Center) — nada de hex/rgba chutado. */
+   Finance Center) — nada de hex/rgba chutado, exceto sombra (neutra,
+   não depende de nenhuma cor de marca).
+
+   REDESENHO (21/08) — passada completa de polimento visual, pedido
+   explícito do usuário depois de ver o Estudo de Mercado em PDF
+   (Canva) e comparar com a tela real. Objetivo: a mesma sensação de
+   peso/hierarquia daquele documento, sem inventar nenhum token novo —
+   só os já confirmados em uso no resto do arquivo. Zero mudança de
+   comportamento, só de aparência. */
 
 .selecao-planos-status {
   color: var(--lcds-text-secondary);
   font-size: 0.9rem;
-  padding: 1.5rem 0;
+  padding: 1.5rem 1rem;
   text-align: center;
+  background: var(--lcds-surface-card);
+  border: 1px dashed var(--lcds-border-strong);
+  border-radius: var(--lcds-radius-sm);
 }
 
-.selecao-planos-operadora {
+/* ===== Toolbar de filtros (Acomodação/Coparticipação) ===== */
+
+.selecao-planos-blocos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-bottom: 1.5rem;
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border);
+  border-radius: var(--lcds-radius-sm);
+  overflow: hidden;
+}
+
+.selecao-planos-bloco-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 1.1rem;
+  flex: 1;
+  min-width: 220px;
+}
+
+.selecao-planos-bloco-grupo + .selecao-planos-bloco-grupo {
+  border-left: 1px solid var(--lcds-border);
+}
+
+.selecao-planos-bloco-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--lcds-text-muted);
+}
+
+.selecao-planos-bloco-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.selecao-planos-bloco-btn {
+  background: var(--lcds-bg);
+  border: 1px solid var(--lcds-border);
+  border-radius: 999px;
+  color: var(--lcds-text-secondary);
+  font-size: 0.76rem;
+  font-weight: 500;
+  padding: 0.32rem 0.85rem;
+  cursor: pointer;
+  transition: border-color var(--lcds-dur) var(--lcds-ease), background var(--lcds-dur) var(--lcds-ease),
+    color var(--lcds-dur) var(--lcds-ease), transform var(--lcds-dur) var(--lcds-ease);
+}
+
+.selecao-planos-bloco-btn:hover {
+  border-color: var(--lcds-gold);
+  color: var(--lcds-text-primary);
+}
+
+.selecao-planos-bloco-btn-ativo {
+  background: var(--lcds-gold);
+  border-color: var(--lcds-gold);
+  color: var(--lcds-bg);
+  font-weight: 700;
+}
+
+.selecao-planos-bloco-btn-ativo:hover {
+  color: var(--lcds-bg);
+}
+
+/* ===== Carrinho — painel principal, fica sempre visível ===== */
+
+.selecao-planos-carrinho {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 5;
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border-strong);
+  border-left: 3px solid var(--lcds-gold);
+  border-radius: var(--lcds-radius-sm);
+  padding: 1.1rem 1.25rem;
   margin-bottom: 2rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.selecao-planos-carrinho-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.selecao-planos-carrinho-cabecalho > span {
+  color: var(--lcds-text-primary);
+  font-family: var(--lcds-font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+
+.selecao-planos-carrinho-vazio {
+  color: var(--lcds-text-muted);
+  font-size: 0.85rem;
+  margin: 0.9rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px dashed var(--lcds-border);
+}
+
+.selecao-planos-carrinho-itens {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--lcds-border);
+}
+
+.selecao-planos-carrinho-item {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr auto;
+  align-items: center;
+  gap: 0.85rem;
+  background: var(--lcds-bg);
+  border: 1px solid var(--lcds-border);
+  border-radius: var(--lcds-radius-sm);
+  padding: 0.65rem 0.85rem;
+  transition: border-color var(--lcds-dur) var(--lcds-ease);
+}
+
+.selecao-planos-carrinho-item:hover {
+  border-color: var(--lcds-border-strong);
+}
+
+.selecao-planos-carrinho-item-info {
+  min-width: 0;
+}
+
+.selecao-planos-carrinho-item-nome {
+  color: var(--lcds-text-primary);
+  font-size: 0.86rem;
+  font-weight: 700;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selecao-planos-carrinho-item-sub {
+  color: var(--lcds-gold);
+  font-size: 0.74rem;
+  font-weight: 600;
+  margin: 0.15rem 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.selecao-planos-carrinho-item-segmentacao {
+  color: var(--lcds-text-secondary);
+  font-size: 0.78rem;
+}
+
+.selecao-planos-carrinho-item .selecao-plano-card-segmentacao {
+  margin-bottom: 0;
+}
+
+.selecao-planos-carrinho-remover {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/* ===== Operadora colapsável ===== */
+
+.selecao-planos-operadora {
+  margin-bottom: 1.5rem;
 }
 
 .selecao-planos-operadora-titulo {
@@ -19,28 +202,77 @@
   font-size: 1rem;
   font-weight: 600;
   color: var(--lcds-text-primary);
-  margin: 0 0 0.85rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--lcds-border-strong);
+  margin: 0;
 }
+
+.selecao-planos-operadora-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border);
+  border-radius: var(--lcds-radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  padding: 0.75rem 1rem;
+  transition: border-color var(--lcds-dur) var(--lcds-ease), background var(--lcds-dur) var(--lcds-ease);
+}
+
+.selecao-planos-operadora-toggle:hover {
+  border-color: var(--lcds-gold);
+  background: var(--lcds-surface-card-hover);
+}
+
+.selecao-planos-operadora-seta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  color: var(--lcds-gold);
+  font-size: 0.7rem;
+  transition: transform var(--lcds-dur) var(--lcds-ease);
+}
+
+.selecao-planos-operadora-seta-aberta {
+  transform: rotate(90deg);
+}
+
+.selecao-planos-operadora-contagem {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--lcds-text-muted);
+  background: var(--lcds-bg);
+  border: 1px solid var(--lcds-border);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+}
+
+/* ===== Grid de planos ===== */
 
 .selecao-planos-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 0.85rem;
+  gap: 1rem;
+  margin-top: 0.9rem;
+  padding-top: 0.2rem;
 }
 
 .selecao-plano-card {
   background: var(--lcds-surface-card);
   border: 1px solid var(--lcds-border);
   border-radius: var(--lcds-radius-sm);
-  padding: 0.9rem;
-  transition: border-color var(--lcds-dur) var(--lcds-ease), background var(--lcds-dur) var(--lcds-ease);
+  padding: 0.95rem;
+  transition: border-color var(--lcds-dur) var(--lcds-ease), background var(--lcds-dur) var(--lcds-ease),
+    transform var(--lcds-dur) var(--lcds-ease);
 }
 
 .selecao-plano-card:hover {
   background: var(--lcds-surface-card-hover);
-  border-color: var(--lcds-border-strong);
+  border-color: var(--lcds-gold);
+  transform: translateY(-1px);
 }
 
 .selecao-plano-card-ativo {
@@ -48,11 +280,23 @@
   background: var(--lcds-gold-soft);
 }
 
+/* card da grade virou <button> clicável (clica em qualquer parte pra
+   adicionar ao carrinho — sem checkbox, sem seletor, isso mudou de
+   casa pro item do carrinho) */
+.selecao-plano-card-clicavel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
 .selecao-plano-card-header {
   display: flex;
   align-items: flex-start;
   gap: 0.65rem;
-  cursor: pointer;
   margin-bottom: 0.75rem;
 }
 
@@ -82,7 +326,7 @@
 .selecao-plano-card-nome {
   color: var(--lcds-text-primary);
   font-size: 0.92rem;
-  font-weight: 600;
+  font-weight: 700;
   margin: 0;
 }
 
@@ -113,9 +357,21 @@
 
 .selecao-plano-card-linha strong {
   color: var(--lcds-text-primary);
-  font-weight: 600;
+  font-weight: 700;
 }
 
+.selecao-plano-card-adicionar {
+  align-self: flex-start;
+  margin-top: 0.85rem;
+  color: var(--lcds-gold);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* estado sticky/hover já dá o feedback; rodapé antigo não é mais
+   usado (o botão de criar cotações agora mora no carrinho), mas a
+   classe fica declarada por segurança caso algum lugar ainda a use */
 .selecao-planos-rodape {
   position: sticky;
   bottom: 0;
@@ -136,5 +392,27 @@
 @media (max-width: 700px) {
   .selecao-planos-grid {
     grid-template-columns: 1fr;
+  }
+
+  .selecao-planos-blocos {
+    flex-direction: column;
+  }
+
+  .selecao-planos-bloco-grupo + .selecao-planos-bloco-grupo {
+    border-left: none;
+    border-top: 1px solid var(--lcds-border);
+  }
+
+  .selecao-planos-carrinho {
+    position: static;
+  }
+
+  .selecao-planos-carrinho-item {
+    grid-template-columns: 1fr;
+  }
+
+  .selecao-planos-carrinho-cabecalho {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
