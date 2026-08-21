@@ -1,5 +1,6 @@
 import { operacional } from '../supabaseSchemas'
 import { criarCotacao, calcularPorte } from './clientesService'
+import { excluirRascunhoMulticalculo } from './multicalculoRascunhoService'
 
 /**
  * Ponte entre a Biblioteca de Mercado (Sprint 1-3, motorSmartQuoteService)
@@ -79,6 +80,11 @@ export async function criarCotacoesDoMulticalculo({ clienteProspectId, selecoes,
     const cotacaoCriada = await criarCotacao({ clienteProspectId, casoId: null, dados, itens })
     cotacoesCriadas.push(cotacaoCriada)
   }
+
+  // Rascunho já cumpriu a função — as Cotações de verdade acabaram de
+  // ser criadas acima. Não bloqueante: um erro aqui não deve impedir o
+  // corretor de seguir com as Cotações já criadas com sucesso.
+  await excluirRascunhoMulticalculo(clienteProspectId)
 
   return { grupoComparacaoId, cotacoes: cotacoesCriadas }
 }

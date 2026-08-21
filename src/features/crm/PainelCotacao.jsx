@@ -20,6 +20,12 @@ import SelecaoPlanosMulticalculo from './SelecaoPlanosMulticalculo'
  * `grupo_comparacao_id`. Quem mostra o resultado é o card de Cotações
  * que já existe em `ClienteDetailPage.jsx` — por isso, ao terminar,
  * este wizard só fecha (`onConcluido`) e devolve o controle pra lá.
+ *
+ * ATUALIZADO (20/08) — Sprint 3 Fase 1, rascunho persistido: os dois
+ * passos (`ContextoCotacaoForm` e `SelecaoPlanosMulticalculo`) agora
+ * restauram e salvam sozinhos via `multicalculoRascunhoService` — este
+ * componente só precisa passar `clienteProspectId` pra eles, sem
+ * nenhuma lógica de rascunho aqui.
  */
 export default function PainelCotacao({ clienteProspectId, onConcluido }) {
   const [contexto, setContexto] = useState(null)
@@ -31,7 +37,7 @@ export default function PainelCotacao({ clienteProspectId, onConcluido }) {
   return (
     <div className="painel-cotacao">
       {!contexto ? (
-        <ContextoCotacaoForm onContinuar={setContexto} />
+        <ContextoCotacaoForm clienteProspectId={clienteProspectId} onContinuar={setContexto} />
       ) : (
         <div>
           <button className="ls-btn ls-btn-ghost painel-cotacao-voltar" onClick={() => setContexto(null)}>

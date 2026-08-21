@@ -28,7 +28,24 @@ import { institucional } from '../supabaseSchemas'
  * A seleção automática por vidas/MEI/coparticipação é Sprint 2B, e
  * depende de uma decisão de schema (estruturar `segmentacao` em
  * colunas) que ainda não foi tomada — não codificada aqui de propósito.
+ *
+ * ATUALIZADO (Sprint 3b, 20/08) — a decisão de schema acima FOI tomada
+ * (BMR-006/009: `vidas_min`/`vidas_max`/`mei`/`coparticipacao_tipo`/
+ * `tipo_contratacao`), e as 12 operadoras já estão gravadas de verdade.
+ * `montarCotacaoEstruturada` agora aceita `totalVidas` opcional e filtra
+ * por ele — é o primeiro corte da cascata que o Chief desenhou ("Vidas +
+ * Região + Regras → Operadoras elegíveis"). Continua SEM filtrar por
+ * MEI/coparticipação automaticamente (o formulário de Contexto ainda não
+ * pergunta isso) e SEM usar "Regras" como filtro — texto livre em
+ * `mercado_saude_regras.conteudo`, vira informativo, nunca corte de
+ * elegibilidade (decisão do usuário, mesma linha do "titulares mínimo"
+ * da Bradesco).
  */
+
+// Acima disso, contratos não seguem tabela fixa — viram negociação direta
+// com a seguradora (Estudo Corporativo, Sprint 4). Decisão de produto
+// confirmada pelo usuário, não limite técnico das tabelas atuais.
+const LIMITE_VIDAS_MULTICALCULO = 99
 
 /**
  * Lista os planos ativos de uma região (e, opcionalmente, operadora
@@ -108,7 +125,9 @@ export async function buscarCotacaoDoPlano(planoId) {
   const [{ data: precos, error: erroPrecos }, resumoRede, { data: regras, error: erroRegras }] = await Promise.all([
     institucional
       .from('mercado_saude_precos')
-      .select('segmentacao, familia_tarifaria, faixa_etaria, valor')
+      .select(
+        'segmentacao, familia_tarifaria, faixa_etaria, valor, vidas_min, vidas_max, mei, coparticipacao_tipo, tipo_contratacao'
+      )
       .eq('plano_id', planoId)
       .order('segmentacao')
       .order('faixa_etaria'),
@@ -131,16 +150,41 @@ export async function buscarCotacaoDoPlano(planoId) {
   }
 }
 
-/** Agrupa a lista plana de preços por segmentação — cada grupo já pronto pra virar 1 opção na tela. */
+/** Agrupa a lista plana de preços por segmentação — cada grupo já pronto pra
+ *  virar 1 opção na tela. vidas_min/vidas_max/mei/coparticipacao_tipo/
+ *  tipo_contratacao são iguais em todas as linhas de uma mesma segmentação
+ *  (1 valor por faixa etária, mesma regra de elegibilidade) — pega do
+ *  primeiro registro do grupo. */
 function agruparPrecosPorSegmentacao(precos) {
   const grupos = new Map()
   for (const p of precos) {
     if (!grupos.has(p.segmentacao)) {
-      grupos.set(p.segmentacao, { segmentacao: p.segmentacao, familiaTarifaria: p.familia_tarifaria, faixas: [] })
+      grupos.set(p.segmentacao, {
+        segmentacao: p.segmentacao,
+        familiaTarifaria: p.familia_tarifaria,
+        vidasMin: p.vidas_min,
+        vidasMax: p.vidas_max,
+        mei: p.mei,
+        coparticipacaoTipo: p.coparticipacao_tipo,
+        tipoContratacao: p.tipo_contratacao,
+        faixas: [],
+      })
     }
     grupos.get(p.segmentacao).faixas.push({ faixaEtaria: p.faixa_etaria, valor: p.valor })
   }
   return [...grupos.values()]
+}
+
+/** Uma segmentação é elegível pro total de vidas informado quando o total
+ *  cai dentro de [vidas_min, vidas_max]. vidas_min OU vidas_max NULL
+ *  significa "fonte não informou limite" — nunca bloqueia por conta
+ *  própria (regra confirmada com o usuário: NULL não é "não se aplica"
+ *  quando a coluna é vidas_min/vidas_max, é "não sabemos", e "não
+ *  sabemos" não pode virar exclusão automática). */
+function segmentacaoElegivelPorVidas(grupo, totalVidas) {
+  if (totalVidas == null) return true
+  if (grupo.vidasMin == null || grupo.vidasMax == null) return true
+  return totalVidas >= grupo.vidasMin && totalVidas <= grupo.vidasMax
 }
 
 async function montarResumoRede(planoId) {
@@ -221,12 +265,29 @@ export function calcularMensalidade(grupoSegmentacao, faixasEtariasDasVidas) {
  * arquivo). Isso já é o formato pronto pra alimentar a próxima camada
  * visual (cards por operadora, comparação, seleção múltipla).
  *
- * @param {{ regiaoNome?: string, operadoraCodigos?: string[] }} contexto
+ * @param {{ regiaoNome?: string, operadoraCodigos?: string[], totalVidas?: number }} contexto
+ *   totalVidas: soma de vidas da cotação (Sprint 3b) — quando informado,
+ *   filtra as segmentações elegíveis por vidas_min/vidas_max (BMR-006).
+ *   Plano sem nenhuma segmentação elegível não entra no resultado — é
+ *   assim que uma operadora inteira "some" quando nenhum plano dela bate
+ *   o critério, como o Chief pediu na cascata.
  */
-export async function montarCotacaoEstruturada({ regiaoNome = null, operadoraCodigos = null } = {}) {
+export async function montarCotacaoEstruturada({ regiaoNome = null, operadoraCodigos = null, totalVidas = null } = {}) {
+  const filtrosAplicados = { regiaoNome, operadoraCodigos: operadoraCodigos ?? 'todas', totalVidas }
+
+  if (totalVidas != null && totalVidas > LIMITE_VIDAS_MULTICALCULO) {
+    return {
+      contexto: { regiaoNome, totalVidas },
+      operadoras: {},
+      filtrosAplicados,
+      motivoBloqueio:
+        `Acima de ${LIMITE_VIDAS_MULTICALCULO} vidas o Multicálculo não se aplica — contratos desse porte ` +
+        `são negociados diretamente com a seguradora (Estudo Corporativo).`,
+    }
+  }
+
   const codigos = operadoraCodigos?.length ? operadoraCodigos : [null]
   const operadorasResultado = {}
-  const filtrosAplicados = { regiaoNome, operadoraCodigos: operadoraCodigos ?? 'todas' }
 
   for (const codigo of codigos) {
     const { planos, motivo } = await buscarPlanosElegiveis({ regiaoNome, operadoraCodigo: codigo })
@@ -237,6 +298,13 @@ export async function montarCotacaoEstruturada({ regiaoNome = null, operadoraCod
       const pacote = await buscarCotacaoDoPlano(planoBase.plano_id)
       if (!pacote.encontrado) continue
 
+      const precosElegiveis =
+        totalVidas != null
+          ? pacote.precosPorSegmentacao.filter((g) => segmentacaoElegivelPorVidas(g, totalVidas))
+          : pacote.precosPorSegmentacao
+
+      if (totalVidas != null && precosElegiveis.length === 0) continue
+
       if (!operadorasResultado[nomeOperadora]) operadorasResultado[nomeOperadora] = { planos: [] }
 
       operadorasResultado[nomeOperadora].planos.push({
@@ -246,12 +314,12 @@ export async function montarCotacaoEstruturada({ regiaoNome = null, operadoraCod
         operadoraId: pacote.plano.operadoras?.id ?? null,
         acomodacao: pacote.plano.acomodacao,
         linha: pacote.plano.linha,
-        precosPorSegmentacao: pacote.precosPorSegmentacao,
+        precosPorSegmentacao: precosElegiveis,
         redeDisponivel: { totalPrestadores: pacote.rede.totalPrestadores },
         regrasDisponiveis: pacote.regras.map((r) => r.conteudo?.titulo ?? r.tipo),
       })
     }
   }
 
-  return { contexto: { regiaoNome }, operadoras: operadorasResultado, filtrosAplicados }
+  return { contexto: { regiaoNome, totalVidas }, operadoras: operadorasResultado, filtrosAplicados, motivoBloqueio: null }
 }
