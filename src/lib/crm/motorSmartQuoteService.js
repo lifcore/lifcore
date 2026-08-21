@@ -100,7 +100,15 @@ export async function buscarPlanosElegiveis({ regiaoId = null, regiaoNome = null
     query = query.eq('operadora_id', operadora.id)
   }
 
-  const { data: planos, error } = await query.order('nome')
+  // ACHADO (21/08, tarde): essa consulta nunca teve .range() explícito —
+  // só a batelada de preços/rede tinha sido corrigida antes. Diagnóstico
+  // com SQL direto confirmou que o BANCO tem os 163 planos elegíveis
+  // certinhos nas 12 operadoras (dado 100% correto) — então se algumas
+  // sumiam da tela mesmo assim, só podia ser aqui: o teto padrão de
+  // linhas do Supabase cortando a lista ANTES de eu nem chegar na parte
+  // que já tinha corrigido. 999 é generoso pra hoje (163 reais) e sobra
+  // espaço grande pra quando o catálogo crescer.
+  const { data: planos, error } = await query.order('nome').range(0, 999)
   if (error) throw new Error(`Erro buscando planos elegíveis: ${error.message}`)
 
   return { planos: planos ?? [], motivo: null }
@@ -227,6 +235,7 @@ async function buscarCotacoesEmLote(planosBase) {
           .select('operadora_id, tipo, conteudo')
           .in('operadora_id', operadoraIdsUnicos)
           .order('tipo')
+          .range(0, 4999)
       : { data: [], error: null }
   if (erroRegras) throw new Error(`Erro buscando regras em lote: ${erroRegras.message}`)
 
@@ -406,7 +415,7 @@ async function montarResumoRede(planoId) {
  * idade sem arriscar um valor que não bate com o banco.
  */
 export async function buscarFaixasEtariasDisponiveis() {
-  const { data, error } = await institucional.from('mercado_saude_precos').select('faixa_etaria')
+  const { data, error } = await institucional.from('mercado_saude_precos').select('faixa_etaria').range(0, 19999)
   if (error) throw new Error(`Erro buscando faixas etárias: ${error.message}`)
 
   const unicas = [...new Set((data ?? []).map((r) => r.faixa_etaria))]
