@@ -847,11 +847,24 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                             </span>
                           )
                         })}
-                        <span className="cotacao-item-valor cotacao-item-valor-total">
+                        <span
+                          className="cotacao-item-valor cotacao-item-valor-total"
+                          style={{
+                            display: 'block',
+                            width: '100%',
+                            marginTop: '0.5rem',
+                            paddingTop: '0.5rem',
+                            borderTop: '1px solid var(--lcds-border-strong)',
+                            color: 'var(--lcds-gold)',
+                            fontWeight: 700,
+                            fontSize: '1.05rem',
+                            letterSpacing: '0.01em',
+                          }}
+                        >
                           Total: R${' '}
                           {cot.itens_cotacao
                             .reduce((soma, item) => soma + (item.quantidade_vidas ?? 0) * Number(item.valor ?? 0), 0)
-                            .toFixed(2)}
+                            .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     )}
