@@ -530,11 +530,25 @@ export async function montarCotacaoEstruturada({
     const { planos, motivo } = await buscarPlanosElegiveis({ regiaoId, regiaoNome, operadoraCodigo: codigo })
     if (motivo) continue // operadora/região não encontrada — pula, não quebra a cotação inteira
 
+    // DIAGNÓSTICO TEMPORÁRIO (21/08) — remover depois de achar a causa do
+    // "só 7 de 12 operadoras aparecem". Mostra exatamente quantos planos
+    // vieram e de quais operadoras, direto no Console do navegador.
+    const porOperadoraDebug = {}
+    for (const p of planos) {
+      const nome = p.operadoras?.nome ?? 'sem operadora'
+      porOperadoraDebug[nome] = (porOperadoraDebug[nome] ?? 0) + 1
+    }
+    console.log('[DEBUG buscarPlanosElegiveis] total de planos:', planos.length)
+    console.log('[DEBUG buscarPlanosElegiveis] por operadora:', porOperadoraDebug)
+
     // Achado de performance (21/08): buscar plano por plano em sequência
     // (4 consultas cada) virou centenas de idas ao banco assim que as 12
     // operadoras passaram a aparecer de verdade. `buscarCotacoesEmLote`
     // faz tudo em ~3 consultas totais — ver nota na função.
     const pacotesPorPlano = await buscarCotacoesEmLote(planos)
+
+    // DIAGNÓSTICO TEMPORÁRIO (21/08)
+    console.log('[DEBUG buscarCotacoesEmLote] pacotes encontrados:', pacotesPorPlano.size, 'de', planos.length, 'planos pedidos')
 
     for (const planoBase of planos) {
       const nomeOperadora = planoBase.operadoras?.nome ?? 'sem operadora'
@@ -563,6 +577,9 @@ export async function montarCotacaoEstruturada({
       })
     }
   }
+
+  // DIAGNÓSTICO TEMPORÁRIO (21/08) — remover depois de achar a causa.
+  console.log('[DEBUG montarCotacaoEstruturada] operadoras no resultado final:', Object.keys(operadorasResultado))
 
   return { contexto: { regiaoId, regiaoNome, totalVidas }, operadoras: operadorasResultado, filtrosAplicados, motivoBloqueio: null }
 }
