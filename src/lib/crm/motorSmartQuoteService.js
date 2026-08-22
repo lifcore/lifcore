@@ -525,6 +525,7 @@ export async function montarCotacaoEstruturada({
 
   const codigos = operadoraCodigos?.length ? operadoraCodigos : [null]
   const operadorasResultado = {}
+  const linhasDebug = [] // DIAGNÓSTICO TEMPORÁRIO (21/08)
 
   for (const codigo of codigos) {
     const { planos, motivo } = await buscarPlanosElegiveis({ regiaoId, regiaoNome, operadoraCodigo: codigo })
@@ -551,8 +552,6 @@ export async function montarCotacaoEstruturada({
     console.log('[DEBUG buscarCotacoesEmLote] pacotes encontrados:', pacotesPorPlano.size, 'de', planos.length, 'planos pedidos')
     console.log('[DEBUG] totalVidas usado nesta chamada:', totalVidas)
 
-    const operadorasExcluidasPorVidasDebug = {}
-
     for (const planoBase of planos) {
       const nomeOperadora = planoBase.operadoras?.nome ?? 'sem operadora'
       const pacote = pacotesPorPlano.get(planoBase.plano_id)
@@ -563,13 +562,23 @@ export async function montarCotacaoEstruturada({
           ? pacote.precosPorSegmentacao.filter((g) => segmentacaoElegivelPorVidas(g, totalVidas))
           : pacote.precosPorSegmentacao
 
+      // DIAGNÓSTICO TEMPORÁRIO (21/08) — registra CADA segmentação desse
+      // plano (elegível ou não) numa lista plana, pra sair como tabela
+      // no Console (console.table) — nada de clicar/expandir nada.
+      for (const g of pacote.precosPorSegmentacao) {
+        linhasDebug.push({
+          operadora: nomeOperadora,
+          plano: pacote.plano.nome,
+          segmentacao: g.segmentacao,
+          vidasMin: g.vidasMin,
+          vidasMax: g.vidasMax,
+          tipoVidasMin: typeof g.vidasMin,
+          totalVidasTestado: totalVidas,
+          elegivel: segmentacaoElegivelPorVidas(g, totalVidas),
+        })
+      }
+
       if (totalVidas != null && precosElegiveis.length === 0) {
-        // DIAGNÓSTICO TEMPORÁRIO (21/08) — registra por que esse plano
-        // caiu fora, com as faixas de vidas que ele TINHA disponível
-        // (antes do filtro), pra comparar contra o totalVidas usado.
-        const faixasDisponiveisDebug = pacote.precosPorSegmentacao.map((g) => `${g.vidasMin ?? '?'}-${g.vidasMax ?? '?'}`)
-        operadorasExcluidasPorVidasDebug[nomeOperadora] = operadorasExcluidasPorVidasDebug[nomeOperadora] || []
-        operadorasExcluidasPorVidasDebug[nomeOperadora].push({ plano: pacote.plano.nome, faixasDisponiveis: faixasDisponiveisDebug })
         continue
       }
 
@@ -587,10 +596,12 @@ export async function montarCotacaoEstruturada({
         regrasDisponiveis: pacote.regras.map((r) => r.conteudo?.titulo ?? r.tipo),
       })
     }
-
-    // DIAGNÓSTICO TEMPORÁRIO (21/08)
-    console.log('[DEBUG] operadoras com plano(s) excluído(s) por vidas, e a faixa que cada um tinha:', operadorasExcluidasPorVidasDebug)
   }
+
+  // DIAGNÓSTICO TEMPORÁRIO (21/08) — tabela pronta, sem precisar clicar
+  // em nada. Foca nas 5 operadoras que estavam sumindo, senão fica gigante.
+  const operadorasFoco = ['Notredame', 'PORTO SEGURO', 'SOBAM', 'SULAMERICA', 'UNIMED JUNDIAI']
+  console.table(linhasDebug.filter((l) => operadorasFoco.includes(l.operadora)))
 
   // DIAGNÓSTICO TEMPORÁRIO (21/08) — remover depois de achar a causa.
   console.log('[DEBUG montarCotacaoEstruturada] operadoras no resultado final:', Object.keys(operadorasResultado))
