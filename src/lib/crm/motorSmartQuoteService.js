@@ -220,6 +220,27 @@ async function buscarCotacoesEmLote(planosBase) {
     precosPorPlano.get(p.plano_id).push(p)
   }
 
+  // DIAGNÓSTICO TEMPORÁRIO (21/08) — checa, plano a plano das 5
+  // operadoras suspeitas, se o plano_id delas apareceu de verdade em
+  // `todosPrecos` (o que voltou das consultas em lote) ou se já chegou
+  // vazio aqui.
+  const nomesFocoDebug = ['Notredame', 'PORTO SEGURO', 'SOBAM', 'SULAMERICA', 'UNIMED JUNDIAI']
+  const planosFocoDebug = planosBase.filter((p) => nomesFocoDebug.includes(p.operadoras?.nome))
+  window.__debugPrecos = {
+    totalLinhasTodosPrecos: todosPrecos.length,
+    totalPlanoIdsDistintosEmPrecos: precosPorPlano.size,
+    totalPlanoIdsPedidos: planoIds.length,
+    amostraPlanosFoco: planosFocoDebug.slice(0, 5).map((p) => ({
+      operadora: p.operadoras?.nome,
+      plano_id: p.plano_id,
+      encontradoEmTodosPrecos: precosPorPlano.has(p.plano_id),
+      quantasLinhasDePreco: precosPorPlano.get(p.plano_id)?.length ?? 0,
+    })),
+  }
+  console.log(
+    '[DEBUG] dados prontos em window.__debugPrecos. Rode no Console: copy(JSON.stringify(window.__debugPrecos, null, 2))'
+  )
+
   // Supabase/PostgREST não agrupa COUNT nativamente por essa via — conta
   // em memória mesmo, ainda assim é poucas consultas pra todos os planos.
   const totalPrestadoresPorPlano = new Map()
