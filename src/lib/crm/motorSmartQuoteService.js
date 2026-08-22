@@ -598,10 +598,16 @@ export async function montarCotacaoEstruturada({
     }
   }
 
-  // DIAGNÓSTICO TEMPORÁRIO (21/08) — tabela pronta, sem precisar clicar
-  // em nada. Foca nas 5 operadoras que estavam sumindo, senão fica gigante.
+  // DIAGNÓSTICO TEMPORÁRIO (21/08) — guarda numa variável global, pra dar
+  // pra copiar o dado bruto direto pro clipboard via comando no Console
+  // (mais confiável que expandir/rolar a árvore de objetos).
   const operadorasFoco = ['Notredame', 'PORTO SEGURO', 'SOBAM', 'SULAMERICA', 'UNIMED JUNDIAI']
-  console.table(linhasDebug.filter((l) => operadorasFoco.includes(l.operadora)))
+  window.__debugPlanos = linhasDebug.filter((l) => operadorasFoco.includes(l.operadora))
+  console.log(
+    '[DEBUG] dados prontos em window.__debugPlanos —',
+    window.__debugPlanos.length,
+    'linhas. Rode no Console: copy(JSON.stringify(window.__debugPlanos, null, 2))'
+  )
 
   // DIAGNÓSTICO TEMPORÁRIO (21/08) — remover depois de achar a causa.
   console.log('[DEBUG montarCotacaoEstruturada] operadoras no resultado final:', Object.keys(operadorasResultado))
