@@ -549,6 +549,9 @@ export async function montarCotacaoEstruturada({
 
     // DIAGNÓSTICO TEMPORÁRIO (21/08)
     console.log('[DEBUG buscarCotacoesEmLote] pacotes encontrados:', pacotesPorPlano.size, 'de', planos.length, 'planos pedidos')
+    console.log('[DEBUG] totalVidas usado nesta chamada:', totalVidas)
+
+    const operadorasExcluidasPorVidasDebug = {}
 
     for (const planoBase of planos) {
       const nomeOperadora = planoBase.operadoras?.nome ?? 'sem operadora'
@@ -560,7 +563,15 @@ export async function montarCotacaoEstruturada({
           ? pacote.precosPorSegmentacao.filter((g) => segmentacaoElegivelPorVidas(g, totalVidas))
           : pacote.precosPorSegmentacao
 
-      if (totalVidas != null && precosElegiveis.length === 0) continue
+      if (totalVidas != null && precosElegiveis.length === 0) {
+        // DIAGNÓSTICO TEMPORÁRIO (21/08) — registra por que esse plano
+        // caiu fora, com as faixas de vidas que ele TINHA disponível
+        // (antes do filtro), pra comparar contra o totalVidas usado.
+        const faixasDisponiveisDebug = pacote.precosPorSegmentacao.map((g) => `${g.vidasMin ?? '?'}-${g.vidasMax ?? '?'}`)
+        operadorasExcluidasPorVidasDebug[nomeOperadora] = operadorasExcluidasPorVidasDebug[nomeOperadora] || []
+        operadorasExcluidasPorVidasDebug[nomeOperadora].push({ plano: pacote.plano.nome, faixasDisponiveis: faixasDisponiveisDebug })
+        continue
+      }
 
       if (!operadorasResultado[nomeOperadora]) operadorasResultado[nomeOperadora] = { planos: [] }
 
@@ -576,6 +587,9 @@ export async function montarCotacaoEstruturada({
         regrasDisponiveis: pacote.regras.map((r) => r.conteudo?.titulo ?? r.tipo),
       })
     }
+
+    // DIAGNÓSTICO TEMPORÁRIO (21/08)
+    console.log('[DEBUG] operadoras com plano(s) excluído(s) por vidas, e a faixa que cada um tinha:', operadorasExcluidasPorVidasDebug)
   }
 
   // DIAGNÓSTICO TEMPORÁRIO (21/08) — remover depois de achar a causa.
