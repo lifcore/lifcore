@@ -150,30 +150,17 @@ function dividirEmLotes(array, tamanho) {
 }
 
 /** Roda a mesma consulta `.in(coluna, valores)` em vários lotes e junta
- *  os resultados — resiliente a listas grandes (evita estourar URL).
- *
- * ATUALIZADO (21/08) — SEQUENCIAL, não mais em paralelo (`Promise.all`).
- * Achado: 5 operadoras (Notredame, Porto, Sobam, SulAmérica, Unimed)
- * sumiam consistentemente depois que os lotes passaram a rodar todos ao
- * mesmo tempo — suspeita concreta de que consultas paralelas pra mesma
- * tabela, com filtros `.in()` diferentes entre si, colidem de forma sutil
- * nessa versão do cliente Supabase. Rodar em sequência é mais lento
- * (soma o tempo de cada lote em vez de rodar junto), mas ainda MUITO mais
- * rápido que o jeito original (1 consulta por plano — aqui é 1 consulta
- * por LOTE de 40 planos) e elimina essa categoria de risco por completo. */
+ *  os resultados — resiliente a listas grandes (evita estourar URL) e a
+ *  operadoras densas (evita estourar o teto de linhas por resposta do
+ *  servidor, que não é sobrescrevível só com `.range()` maior do lado
+ *  do código — só reduzindo o tamanho do lote de verdade). Sequencial
+ *  (não em paralelo) — mais lento, mas simples e confiável. */
 async function buscarEmLotesDeValores(valores, tamanhoDoLote, montarConsulta) {
   const lotes = dividirEmLotes(valores, tamanhoDoLote)
   const linhas = []
   for (const lote of lotes) {
     const { data, error } = await montarConsulta(lote)
     if (error) throw error
-    // DIAGNÓSTICO TEMPORÁRIO (21/08) — se ALGUM lote sozinho vier com
-    // quantidade suspeita de linhas (perto de um teto redondo tipo 1000),
-    // é sinal forte de que o servidor está cortando a resposta mesmo com
-    // `.range()` pedindo mais — confirma ou descarta essa teoria de vez.
-    if ((data?.length ?? 0) >= 900) {
-      console.warn('[DEBUG ALERTA] lote com', data.length, 'linhas — perto de um teto redondo, pode estar sendo cortado pelo servidor. plano_ids desse lote:', lote)
-    }
     linhas.push(...(data ?? []))
   }
   return linhas
@@ -234,26 +221,6 @@ async function buscarCotacoesEmLote(planosBase) {
     if (!precosPorPlano.has(p.plano_id)) precosPorPlano.set(p.plano_id, [])
     precosPorPlano.get(p.plano_id).push(p)
   }
-
-  // DIAGNÓSTICO TEMPORÁRIO (21/08) — checa, plano a plano das 5
-  // operadoras suspeitas, se o plano_id delas apareceu de verdade em
-  // `todosPrecos` (o que voltou das consultas em lote) ou se já chegou
-  // vazio aqui. Imprime como TEXTO direto (JSON.stringify), pra só
-  // selecionar e copiar no Console — sem precisar rodar comando nenhum.
-  const nomesFocoDebug = ['Notredame', 'PORTO SEGURO', 'SOBAM', 'SULAMERICA', 'UNIMED JUNDIAI']
-  const planosFocoDebug = planosBase.filter((p) => nomesFocoDebug.includes(p.operadoras?.nome))
-  const resumoDebug = {
-    totalLinhasTodosPrecos: todosPrecos.length,
-    totalPlanoIdsDistintosEmPrecos: precosPorPlano.size,
-    totalPlanoIdsPedidos: planoIds.length,
-    amostraPlanosFoco: planosFocoDebug.slice(0, 8).map((p) => ({
-      operadora: p.operadoras?.nome,
-      plano_id: p.plano_id,
-      encontradoEmTodosPrecos: precosPorPlano.has(p.plano_id),
-      quantasLinhasDePreco: precosPorPlano.get(p.plano_id)?.length ?? 0,
-    })),
-  }
-  console.log('[DEBUG TEXTO] ' + JSON.stringify(resumoDebug, null, 2))
 
   // Supabase/PostgREST não agrupa COUNT nativamente por essa via — conta
   // em memória mesmo, ainda assim é poucas consultas pra todos os planos.
@@ -560,32 +527,16 @@ export async function montarCotacaoEstruturada({
 
   const codigos = operadoraCodigos?.length ? operadoraCodigos : [null]
   const operadorasResultado = {}
-  const linhasDebug = [] // DIAGNÓSTICO TEMPORÁRIO (21/08)
 
   for (const codigo of codigos) {
     const { planos, motivo } = await buscarPlanosElegiveis({ regiaoId, regiaoNome, operadoraCodigo: codigo })
     if (motivo) continue // operadora/região não encontrada — pula, não quebra a cotação inteira
 
-    // DIAGNÓSTICO TEMPORÁRIO (21/08) — remover depois de achar a causa do
-    // "só 7 de 12 operadoras aparecem". Mostra exatamente quantos planos
-    // vieram e de quais operadoras, direto no Console do navegador.
-    const porOperadoraDebug = {}
-    for (const p of planos) {
-      const nome = p.operadoras?.nome ?? 'sem operadora'
-      porOperadoraDebug[nome] = (porOperadoraDebug[nome] ?? 0) + 1
-    }
-    console.log('[DEBUG buscarPlanosElegiveis] total de planos:', planos.length)
-    console.log('[DEBUG buscarPlanosElegiveis] por operadora:', porOperadoraDebug)
-
     // Achado de performance (21/08): buscar plano por plano em sequência
     // (4 consultas cada) virou centenas de idas ao banco assim que as 12
     // operadoras passaram a aparecer de verdade. `buscarCotacoesEmLote`
-    // faz tudo em ~3 consultas totais — ver nota na função.
+    // faz tudo em poucas consultas em lote — ver nota na função.
     const pacotesPorPlano = await buscarCotacoesEmLote(planos)
-
-    // DIAGNÓSTICO TEMPORÁRIO (21/08)
-    console.log('[DEBUG buscarCotacoesEmLote] pacotes encontrados:', pacotesPorPlano.size, 'de', planos.length, 'planos pedidos')
-    console.log('[DEBUG] totalVidas usado nesta chamada:', totalVidas)
 
     for (const planoBase of planos) {
       const nomeOperadora = planoBase.operadoras?.nome ?? 'sem operadora'
@@ -596,22 +547,6 @@ export async function montarCotacaoEstruturada({
         totalVidas != null
           ? pacote.precosPorSegmentacao.filter((g) => segmentacaoElegivelPorVidas(g, totalVidas))
           : pacote.precosPorSegmentacao
-
-      // DIAGNÓSTICO TEMPORÁRIO (21/08) — registra CADA segmentação desse
-      // plano (elegível ou não) numa lista plana, pra sair como tabela
-      // no Console (console.table) — nada de clicar/expandir nada.
-      for (const g of pacote.precosPorSegmentacao) {
-        linhasDebug.push({
-          operadora: nomeOperadora,
-          plano: pacote.plano.nome,
-          segmentacao: g.segmentacao,
-          vidasMin: g.vidasMin,
-          vidasMax: g.vidasMax,
-          tipoVidasMin: typeof g.vidasMin,
-          totalVidasTestado: totalVidas,
-          elegivel: segmentacaoElegivelPorVidas(g, totalVidas),
-        })
-      }
 
       if (totalVidas != null && precosElegiveis.length === 0) {
         continue
@@ -632,20 +567,6 @@ export async function montarCotacaoEstruturada({
       })
     }
   }
-
-  // DIAGNÓSTICO TEMPORÁRIO (21/08) — guarda numa variável global, pra dar
-  // pra copiar o dado bruto direto pro clipboard via comando no Console
-  // (mais confiável que expandir/rolar a árvore de objetos).
-  const operadorasFoco = ['Notredame', 'PORTO SEGURO', 'SOBAM', 'SULAMERICA', 'UNIMED JUNDIAI']
-  window.__debugPlanos = linhasDebug.filter((l) => operadorasFoco.includes(l.operadora))
-  console.log(
-    '[DEBUG] dados prontos em window.__debugPlanos —',
-    window.__debugPlanos.length,
-    'linhas. Rode no Console: copy(JSON.stringify(window.__debugPlanos, null, 2))'
-  )
-
-  // DIAGNÓSTICO TEMPORÁRIO (21/08) — remover depois de achar a causa.
-  console.log('[DEBUG montarCotacaoEstruturada] operadoras no resultado final:', Object.keys(operadorasResultado))
 
   return { contexto: { regiaoId, regiaoNome, totalVidas }, operadoras: operadorasResultado, filtrosAplicados, motivoBloqueio: null }
 }
