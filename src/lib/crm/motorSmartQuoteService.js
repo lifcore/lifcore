@@ -368,6 +368,31 @@ function segmentacaoElegivelPorVidas(grupo, totalVidas) {
  * fonte não confirma). Cai no texto bruto só se as 4 colunas vierem
  * todas vazias (não deveria acontecer, BMR-006 está completo nas 12).
  */
+/**
+ * Sprint 3b (21/08) — rótulo amigável pra segmentação, pro seletor do
+ * corretor. Achado real: várias operadoras usam `tabela_XX` opaco como
+ * texto de segmentação (Bradesco, Hapvida, Porto, Sobam, Unimed) —
+ * ilegível pro corretor decidir qual escolher.
+ *
+ * DE PROPÓSITO monta o rótulo só a partir das colunas do BMR-006
+ * (vidas_min/max, mei, coparticipacao_tipo, tipo_contratacao) — a MESMA
+ * fonte de verdade já validada linha a linha ontem contra as fontes
+ * originais e, em vários casos, contra o Painel do Corretor real. Não
+ * tenta decodificar/embelezar o texto opaco `tabela_XX` em si (isso
+ * exigiria lógica nova por operadora, arriscando afirmar algo que a
+ * fonte não confirma). Cai no texto bruto só se as 4 colunas vierem
+ * todas vazias (não deveria acontecer, BMR-006 está completo nas 12).
+ *
+ * ATUALIZADO (21/08, achado real) — SulAmérica tem 2 tabelas de preço
+ * genuinamente diferentes (vigência 12 meses vs 24 meses, valores
+ * diferentes de verdade — 24m sai mais barato) que batem igual nas 4
+ * colunas acima, então pareciam duplicadas no seletor sem essa parte.
+ * A vigência não é uma coluna própria no BMR-006 (não fazia parte do
+ * mapeamento original), mas já vem embutida no texto de `segmentacao`
+ * de quem usa esse padrão (ex: "..._12m_...", "..._24m_..."). Detecta
+ * esse padrão e acrescenta ao rótulo só quando encontra — não afeta
+ * operadoras que não usam essa convenção.
+ */
 export function descreverSegmentacao(grupo) {
   const partes = []
   if (grupo.vidasMin != null && grupo.vidasMax != null) {
@@ -378,6 +403,10 @@ export function descreverSegmentacao(grupo) {
   if (grupo.mei != null) partes.push(grupo.mei ? 'MEI' : 'Não MEI')
   if (grupo.coparticipacaoTipo) partes.push(grupo.coparticipacaoTipo)
   if (grupo.tipoContratacao) partes.push(grupo.tipoContratacao)
+
+  const vigenciaEncontrada = grupo.segmentacao?.match(/_(\d{1,2})m_/)
+  if (vigenciaEncontrada) partes.push(`Vigência ${vigenciaEncontrada[1]} meses`)
+
   return partes.length > 0 ? partes.join(' · ') : grupo.segmentacao
 }
 
