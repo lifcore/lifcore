@@ -77,9 +77,148 @@ function reconstruirBlocos(itensCotacao) {
  * Agora, na primeira criação, o formulário fica aberto (via `onCriado`,
  * novo prop opcional) até o corretor clicar em "Concluir e voltar à
  * lista", explicitamente.
+ *
+ * ACHADO (21/08) — editar uma Cotação criada pelo Multicálculo abria
+ * este formulário em branco, com o formato antigo de faixas ANS
+ * ("00-18") em vez da composição real. Causa: `reconstruirBlocos`
+ * espera `faixa_etaria` no formato "00-18 (Nome do Plano)" — o
+ * Multicálculo salva como "0 a 18" (sem parênteses, dígitos sem zero à
+ * esquerda), formato completamente diferente, então nenhuma faixa batia
+ * e o corretor via um card vazio, desconectado do que foi criado de
+ * verdade.
+ *
+ * CORRIGIDO: Cotação vinda do Multicálculo (identificada por já ter
+ * `grupo_comparacao_id` — só o Multicálculo grava esse campo hoje) usa
+ * uma edição PRÓPRIA e mais simples (`EdicaoCotacaoMulticalculo`,
+ * abaixo) — operadora/plano/composição de preço aparecem como
+ * referência (não editáveis, vieram da Biblioteca de Mercado, não é
+ * dado digitado à mão), só a validade é editável. Cotação antiga
+ * continua usando o formulário completo de sempre, sem nenhuma mudança.
  */
 export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoId, onSalvo, onCriado, onCancelar }) {
   const { usuario } = useAuth()
+
+  // Só o Multicálculo grava grupo_comparacao_id hoje — identificador
+  // seguro pra saber que essa Cotação não tem o formato de faixas ANS
+  // que o resto deste formulário espera.
+  if (cotacaoExistente?.grupo_comparacao_id) {
+    return (
+      <EdicaoCotacaoMulticalculo
+        cotacaoExistente={cotacaoExistente}
+        onSalvo={onSalvo}
+        onCancelar={onCancelar}
+      />
+    )
+  }
+
+  return <CotacaoFormCompleto clienteProspectId={clienteProspectId} cotacaoExistente={cotacaoExistente} casoId={casoId} onSalvo={onSalvo} onCriado={onCriado} onCancelar={onCancelar} usuario={usuario} />
+}
+
+/**
+ * Edição simplificada pra Cotação do Multicálculo — ver nota acima.
+ * Operadora/plano/composição de preço são só referência (read-only,
+ * mesmo visual do card de Cotações em ClienteDetailPage.jsx, pra ficar
+ * consistente); só a validade é editável de verdade. Reaproveita
+ * `atualizarCotacao` passando os `itens_cotacao` existentes de volta
+ * sem nenhuma mudança — nunca reescreve preço vindo da Biblioteca de
+ * Mercado.
+ */
+function EdicaoCotacaoMulticalculo({ cotacaoExistente, onSalvo, onCancelar }) {
+  const [validade, setValidade] = useState(cotacaoExistente.validade ?? '')
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  const itens = cotacaoExistente.itens_cotacao ?? []
+  const total = itens.reduce((soma, item) => soma + (item.quantidade_vidas ?? 0) * Number(item.valor ?? 0), 0)
+
+  async function handleSalvar() {
+    setSalvando(true)
+    setErro(null)
+    try {
+      const dados = {
+        operadora_id: cotacaoExistente.operadora_id,
+        operadora_nome_livre: cotacaoExistente.operadora_nome_livre,
+        porte: cotacaoExistente.porte,
+        numero_vidas: cotacaoExistente.numero_vidas,
+        plano: cotacaoExistente.plano,
+        validade: validade || null,
+      }
+      const itensParaSalvar = itens.map((item) => ({
+        faixa_etaria: item.faixa_etaria,
+        quantidade_vidas: item.quantidade_vidas,
+        valor: item.valor,
+      }))
+      await atualizarCotacao(cotacaoExistente.id, dados, itensParaSalvar)
+      onSalvo()
+    } catch (err) {
+      setErro(err.message)
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <div className="cotacao-form">
+      <p className="cenario-atual-descricao">
+        Cotação criada pelo Multicálculo (Biblioteca de Mercado) — operadora, plano e valores vêm da fonte de
+        preços real, por isso aparecem só como referência aqui. Se precisar de um valor diferente, gere uma nova
+        comparação no Multicálculo.
+      </p>
+
+      <div className="cotacao-form-linha">
+        <div>
+          <label>Operadora</label>
+          <input type="text" value={cotacaoExistente.operadora_nome_livre ?? ''} disabled />
+        </div>
+        <div>
+          <label>Plano</label>
+          <input type="text" value={cotacaoExistente.plano ?? ''} disabled />
+        </div>
+        <div>
+          <label>Validade da proposta</label>
+          <input type="date" value={validade ?? ''} onChange={(e) => setValidade(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="cotacao-item-valores">
+        {itens.map((item) => {
+          const subtotal = (item.quantidade_vidas ?? 0) * Number(item.valor ?? 0)
+          return (
+            <span key={item.id ?? item.faixa_etaria} className="cotacao-item-valor">
+              {item.faixa_etaria} ({item.quantidade_vidas ?? 0}x): R$ {subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+          )
+        })}
+        <span
+          className="cotacao-item-valor cotacao-item-valor-total"
+          style={{
+            display: 'block',
+            width: '100%',
+            marginTop: '0.5rem',
+            paddingTop: '0.5rem',
+            borderTop: '1px solid var(--lcds-border-strong)',
+            color: 'var(--lcds-gold)',
+            fontWeight: 700,
+            fontSize: '1.05rem',
+          }}
+        >
+          Total: R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+        </span>
+      </div>
+
+      {erro && <p className="ls-modal-erro">{erro}</p>}
+
+      <div className="ls-modal-acoes">
+        <button className="ls-btn ls-btn-ghost" onClick={onCancelar}>Cancelar</button>
+        <button className="ls-btn ls-btn-primary" onClick={handleSalvar} disabled={salvando}>
+          {salvando ? 'Salvando...' : 'Salvar alterações'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function CotacaoFormCompleto({ clienteProspectId, cotacaoExistente, casoId, onSalvo, onCriado, onCancelar, usuario }) {
   const [operadoraId, setOperadoraId] = useState(cotacaoExistente?.operadora_id ?? '')
   const [operadoraNome, setOperadoraNome] = useState(cotacaoExistente?.operadora_nome_livre ?? '')
   const [validade, setValidade] = useState(cotacaoExistente?.validade ?? '')
