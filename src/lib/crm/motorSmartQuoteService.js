@@ -149,15 +149,23 @@ function dividirEmLotes(array, tamanho) {
   return lotes
 }
 
-/** Roda a mesma consulta `.in(coluna, valores)` em vários lotes (em
- *  paralelo) e junta os resultados — mesma ideia de `buscarCotacoesEmLote`
- *  só que resiliente a listas grandes. `montarConsulta` recebe o lote e
- *  devolve a query pronta (com .in() já aplicado). */
+/** Roda a mesma consulta `.in(coluna, valores)` em vários lotes e junta
+ *  os resultados — resiliente a listas grandes (evita estourar URL).
+ *
+ * ATUALIZADO (21/08) — SEQUENCIAL, não mais em paralelo (`Promise.all`).
+ * Achado: 5 operadoras (Notredame, Porto, Sobam, SulAmérica, Unimed)
+ * sumiam consistentemente depois que os lotes passaram a rodar todos ao
+ * mesmo tempo — suspeita concreta de que consultas paralelas pra mesma
+ * tabela, com filtros `.in()` diferentes entre si, colidem de forma sutil
+ * nessa versão do cliente Supabase. Rodar em sequência é mais lento
+ * (soma o tempo de cada lote em vez de rodar junto), mas ainda MUITO mais
+ * rápido que o jeito original (1 consulta por plano — aqui é 1 consulta
+ * por LOTE de 40 planos) e elimina essa categoria de risco por completo. */
 async function buscarEmLotesDeValores(valores, tamanhoDoLote, montarConsulta) {
   const lotes = dividirEmLotes(valores, tamanhoDoLote)
-  const resultados = await Promise.all(lotes.map((lote) => montarConsulta(lote)))
   const linhas = []
-  for (const { data, error } of resultados) {
+  for (const lote of lotes) {
+    const { data, error } = await montarConsulta(lote)
     if (error) throw error
     linhas.push(...(data ?? []))
   }
@@ -177,30 +185,24 @@ async function buscarCotacoesEmLote(planosBase) {
   const TAMANHO_LOTE = 40
   let todosPrecos, todaRede
   try {
-    ;[todosPrecos, todaRede] = await Promise.all([
-      buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote) =>
-        institucional
-          .from('mercado_saude_precos')
-          .select(
-            'plano_id, segmentacao, familia_tarifaria, faixa_etaria, valor, vidas_min, vidas_max, mei, coparticipacao_tipo, tipo_contratacao'
-          )
-          .in('plano_id', lote)
-          // ACHADO (21/08): sem isso, o Supabase/PostgREST limita a
-          // resposta a 1000 linhas por padrão — silencioso, sem erro.
-          // Operadoras onde o MESMO plano aparece em muitas segmentações
-          // (SulAmérica, Notredame, Porto, Sobam, Unimed — o mesmo plano
-          // repetido em dezenas de combinações de vidas/MEI/coparticipação)
-          // estouravam esse teto dentro de um lote de 40 planos
-          // misturados, cortando o resto sem avisar — e como cada plano
-          // cortado ficava sem NENHUM preço, ele sumia do resultado
-          // inteiro (não só perdia algumas opções). Faixa generosa,
-          // bem acima de qualquer lote real hoje.
-          .range(0, 19999)
-      ),
-      buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote) =>
-        institucional.from('mercado_saude_rede_cobertura').select('plano_id').in('plano_id', lote).range(0, 19999)
-      ),
-    ])
+    // ATUALIZADO (21/08) — sequencial, não mais Promise.all entre precos
+    // e rede também, pra eliminar qualquer paralelismo enquanto
+    // investigamos. Mais lento, mas confiável.
+    todosPrecos = await buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote) =>
+      institucional
+        .from('mercado_saude_precos')
+        .select(
+          'plano_id, segmentacao, familia_tarifaria, faixa_etaria, valor, vidas_min, vidas_max, mei, coparticipacao_tipo, tipo_contratacao'
+        )
+        .in('plano_id', lote)
+        // ACHADO (21/08): sem isso, o Supabase/PostgREST limita a
+        // resposta a 1000 linhas por padrão — silencioso, sem erro.
+        // Faixa generosa, bem acima de qualquer lote real hoje.
+        .range(0, 19999)
+    )
+    todaRede = await buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote) =>
+      institucional.from('mercado_saude_rede_cobertura').select('plano_id').in('plano_id', lote).range(0, 19999)
+    )
   } catch (erro) {
     throw new Error(`Erro buscando preços/rede em lote: ${erro.message}`)
   }
