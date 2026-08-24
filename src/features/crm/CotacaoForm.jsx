@@ -3,6 +3,7 @@ import { criarCotacao, atualizarCotacao, calcularPorte, listarCatalogoOperadoras
 import { useAuth } from '../auth/AuthContext'
 import CenarioAtualForm from './CenarioAtualForm'
 import PropostasEstudoForm from './PropostasEstudoForm'
+import './cotacoesGrupo.css'
 
 const FAIXAS_ETARIAS_ANS = [
   '00-18', '19-23', '24-28', '29-33', '34-38',
@@ -189,19 +190,7 @@ function EdicaoCotacaoMulticalculo({ cotacaoExistente, onSalvo, onCancelar }) {
             </span>
           )
         })}
-        <span
-          className="cotacao-item-valor cotacao-item-valor-total"
-          style={{
-            display: 'block',
-            width: '100%',
-            marginTop: '0.5rem',
-            paddingTop: '0.5rem',
-            borderTop: '1px solid var(--lcds-border-strong)',
-            color: 'var(--lcds-gold)',
-            fontWeight: 700,
-            fontSize: '1.05rem',
-          }}
-        >
+        <span className="cotacao-item-valor cotacao-item-valor-total">
           Total: R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
         </span>
       </div>

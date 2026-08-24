@@ -33,3 +33,33 @@
   background: var(--lcds-gold-soft);
   color: var(--lcds-gold);
 }
+
+/* Sprint 3b (21/08) — valores por faixa etária + Total, dentro do card
+   de Cotação (ClienteDetailPage.jsx) e na edição simplificada de
+   Cotação do Multicálculo (CotacaoForm.jsx). Antes vivia como estilo
+   solto direto no JSX porque este arquivo não tinha essas classes
+   ainda — agora as duas telas usam só a classe, sem estilo inline. */
+
+.cotacao-item-valores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.cotacao-item-valor {
+  font-size: 0.8rem;
+  color: var(--lcds-text-secondary);
+}
+
+.cotacao-item-valor-total {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--lcds-border-strong);
+  color: var(--lcds-gold);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
