@@ -167,6 +167,13 @@ async function buscarEmLotesDeValores(valores, tamanhoDoLote, montarConsulta) {
   for (const lote of lotes) {
     const { data, error } = await montarConsulta(lote)
     if (error) throw error
+    // DIAGNÓSTICO TEMPORÁRIO (21/08) — se ALGUM lote sozinho vier com
+    // quantidade suspeita de linhas (perto de um teto redondo tipo 1000),
+    // é sinal forte de que o servidor está cortando a resposta mesmo com
+    // `.range()` pedindo mais — confirma ou descarta essa teoria de vez.
+    if ((data?.length ?? 0) >= 900) {
+      console.warn('[DEBUG ALERTA] lote com', data.length, 'linhas — perto de um teto redondo, pode estar sendo cortado pelo servidor. plano_ids desse lote:', lote)
+    }
     linhas.push(...(data ?? []))
   }
   return linhas
@@ -179,15 +186,24 @@ async function buscarCotacoesEmLote(planosBase) {
   // ACHADO (21/08): mandar TODOS os plano_id numa única .in() estourava
   // o tamanho da URL da consulta com ~150 planos (vários plano_id têm
   // 70+ caracteres, ex: operadoras com slug técnico longo) — a consulta
-  // falhava e "buscar planos" parava de achar qualquer coisa. Dividir
-  // em lotes de 40 resolve sem perder o ganho de velocidade de ontem
-  // (poucas consultas em paralelo, não uma por plano).
-  const TAMANHO_LOTE = 40
+  // falhava e "buscar planos" parava de achar qualquer coisa.
+  //
+  // ATUALIZADO (21/08, 2ª correção) — achado mais sério: o teto de 1000
+  // linhas por resposta é do SERVIDOR (Supabase), não algo que dá pra
+  // sobrescrever só pedindo `.range()` maior do lado do código — o
+  // `.range(0, 19999)` que coloquei antes NÃO estava tendo efeito de
+  // verdade. Com lotes de 40 planos misturando operadoras densas
+  // (Notredame, SulAmérica — o mesmo plano repetido em dezenas de
+  // combinações de preço), UM lote sozinho já passava do teto do
+  // servidor, cortando o resto sem erro nenhum. Reduzido pra 5 planos
+  // por lote — folga grande mesmo pra operadora mais densa que temos
+  // hoje (SulAmérica, ~240 linhas por plano em média; 5 planos densos
+  // juntos não chegam nem perto de 1000).
+  const TAMANHO_LOTE = 5
   let todosPrecos, todaRede
   try {
-    // ATUALIZADO (21/08) — sequencial, não mais Promise.all entre precos
-    // e rede também, pra eliminar qualquer paralelismo enquanto
-    // investigamos. Mais lento, mas confiável.
+    // Sequencial (não Promise.all) — eliminado paralelismo enquanto
+    // investigávamos outra hipótese; mantido por segurança.
     todosPrecos = await buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote) =>
       institucional
         .from('mercado_saude_precos')
@@ -195,9 +211,6 @@ async function buscarCotacoesEmLote(planosBase) {
           'plano_id, segmentacao, familia_tarifaria, faixa_etaria, valor, vidas_min, vidas_max, mei, coparticipacao_tipo, tipo_contratacao'
         )
         .in('plano_id', lote)
-        // ACHADO (21/08): sem isso, o Supabase/PostgREST limita a
-        // resposta a 1000 linhas por padrão — silencioso, sem erro.
-        // Faixa generosa, bem acima de qualquer lote real hoje.
         .range(0, 19999)
     )
     todaRede = await buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote) =>
