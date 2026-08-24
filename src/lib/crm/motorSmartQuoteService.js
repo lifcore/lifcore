@@ -223,23 +223,22 @@ async function buscarCotacoesEmLote(planosBase) {
   // DIAGNÓSTICO TEMPORÁRIO (21/08) — checa, plano a plano das 5
   // operadoras suspeitas, se o plano_id delas apareceu de verdade em
   // `todosPrecos` (o que voltou das consultas em lote) ou se já chegou
-  // vazio aqui.
+  // vazio aqui. Imprime como TEXTO direto (JSON.stringify), pra só
+  // selecionar e copiar no Console — sem precisar rodar comando nenhum.
   const nomesFocoDebug = ['Notredame', 'PORTO SEGURO', 'SOBAM', 'SULAMERICA', 'UNIMED JUNDIAI']
   const planosFocoDebug = planosBase.filter((p) => nomesFocoDebug.includes(p.operadoras?.nome))
-  window.__debugPrecos = {
+  const resumoDebug = {
     totalLinhasTodosPrecos: todosPrecos.length,
     totalPlanoIdsDistintosEmPrecos: precosPorPlano.size,
     totalPlanoIdsPedidos: planoIds.length,
-    amostraPlanosFoco: planosFocoDebug.slice(0, 5).map((p) => ({
+    amostraPlanosFoco: planosFocoDebug.slice(0, 8).map((p) => ({
       operadora: p.operadoras?.nome,
       plano_id: p.plano_id,
       encontradoEmTodosPrecos: precosPorPlano.has(p.plano_id),
       quantasLinhasDePreco: precosPorPlano.get(p.plano_id)?.length ?? 0,
     })),
   }
-  console.log(
-    '[DEBUG] dados prontos em window.__debugPrecos. Rode no Console: copy(JSON.stringify(window.__debugPrecos, null, 2))'
-  )
+  console.log('[DEBUG TEXTO] ' + JSON.stringify(resumoDebug, null, 2))
 
   // Supabase/PostgREST não agrupa COUNT nativamente por essa via — conta
   // em memória mesmo, ainda assim é poucas consultas pra todos os planos.
