@@ -738,11 +738,19 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
     <div>
       {!mostrarForm && !cotacaoEditando && !cotacaoFormalizando && !mostrarMulticalculo && (
         <div style={{ display: 'flex', gap: '0.6rem' }}>
-          <button className="ls-btn ls-btn-accent" onClick={() => setMostrarForm(true)}>
+          {/* ATUALIZADO (21/08) — troca de destaque pedida pelo usuário:
+              o Multicálculo é o fluxo real de cotação hoje (cria as
+              Cotações de verdade, com preço vindo da Biblioteca de
+              Mercado), então vira a ação primária "Registrar Cotação".
+              O formulário antigo (que embute Cenário Atual + Propostas
+              de Mercado) reflete melhor o que ele faz de verdade sendo
+              chamado de "Estudo de Mercado" — nenhuma lógica mudou, só
+              rótulo/ícone/destaque visual dos 2 botões. */}
+          <button className="ls-btn ls-btn-accent" onClick={() => setMostrarMulticalculo(true)}>
             + Registrar Cotação
           </button>
-          <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarMulticalculo(true)}>
-            🔍 Multicálculo (Biblioteca de Mercado)
+          <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarForm(true)}>
+            📊 Estudo de Mercado
           </button>
         </div>
       )}
@@ -754,7 +762,7 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
             style={{ marginBottom: '0.75rem' }}
             onClick={() => setMostrarMulticalculo(false)}
           >
-            ✕ Fechar Multicálculo
+            ✕ Fechar
           </button>
           <PainelCotacao clienteProspectId={clienteId} onConcluido={handleMulticalculoConcluido} />
         </div>
