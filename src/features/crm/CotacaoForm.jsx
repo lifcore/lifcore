@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { criarCotacao, atualizarCotacao, calcularPorte, listarCatalogoOperadoras, parseValorBR } from '../../lib/crm/clientesService'
-import { useAuth } from '../auth/AuthContext'
-import CenarioAtualForm from './CenarioAtualForm'
-import PropostasEstudoForm from './PropostasEstudoForm'
+import { institucional } from '../../lib/supabaseSchemas'
 import './cotacoesGrupo.css'
 
 const FAIXAS_ETARIAS_ANS = [
@@ -95,10 +93,35 @@ function reconstruirBlocos(itensCotacao) {
  * referência (não editáveis, vieram da Biblioteca de Mercado, não é
  * dado digitado à mão), só a validade é editável. Cotação antiga
  * continua usando o formulário completo de sempre, sem nenhuma mudança.
+ *
+ * REDESENHO (21/08) — "Registro Manual". Plano acordado com o usuário
+ * pra consolidar o Cenário Atual/Estudo de Mercado:
+ *   - `CenarioAtualForm`/`PropostasEstudoForm` embutidos REMOVIDOS —
+ *     esse formulário volta a ser só "criar/editar 1 Cotação manual",
+ *     sem seção extra grudada embaixo. O fluxo de Estudo de Mercado
+ *     passa a viver nos CARDS de Cotação (seleção múltipla + flags),
+ *     não mais preso a esta tela.
+ *   - Como não tem mais seção pra "dar tempo de preencher", o
+ *     comportamento de "ficar aberto depois de criar" (`onCriado`)
+ *     também não faz mais sentido aqui — criar ou editar sempre fecha
+ *     e volta pra lista (`onSalvo`), igual o resto do app já faz. O
+ *     prop `onCriado` continua aceito (retrocompatível com quem chama
+ *     este componente), só não é mais usado por dentro.
+ *   - NOVO: seletor de "Plano real (opcional)", logo após escolher a
+ *     Operadora — busca os planos ativos dela na Biblioteca de Mercado.
+ *     Quando escolhido, grava `plano_biblioteca_id` na Cotação — é o
+ *     vínculo que o Estudo de Mercado vai usar depois pra puxar rede/
+ *     regras de verdade em vez de só o texto livre. Sem escolher nada,
+ *     continua funcionando 100% manual, como sempre.
+ *   - LIMITAÇÃO CONHECIDA: o vínculo é 1 por Cotação, mas esta tela
+ *     ainda permite "+ Adicionar outro plano" (vários blocos dentro da
+ *     MESMA Cotação). Se o corretor usar múltiplos blocos, o vínculo
+ *     escolhido aqui se aplica à Cotação inteira, não a um bloco
+ *     específico — na prática só faz sentido pleno quando há 1 bloco
+ *     só. Sinalizando isso porque não foi decidido explicitamente com
+ *     o usuário; ele pode preferir tratar diferente.
  */
 export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoId, onSalvo, onCriado, onCancelar }) {
-  const { usuario } = useAuth()
-
   // Só o Multicálculo grava grupo_comparacao_id hoje — identificador
   // seguro pra saber que essa Cotação não tem o formato de faixas ANS
   // que o resto deste formulário espera.
@@ -112,7 +135,7 @@ export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoI
     )
   }
 
-  return <CotacaoFormCompleto clienteProspectId={clienteProspectId} cotacaoExistente={cotacaoExistente} casoId={casoId} onSalvo={onSalvo} onCriado={onCriado} onCancelar={onCancelar} usuario={usuario} />
+  return <CotacaoFormCompleto clienteProspectId={clienteProspectId} cotacaoExistente={cotacaoExistente} casoId={casoId} onSalvo={onSalvo} onCancelar={onCancelar} />
 }
 
 /**
@@ -207,7 +230,7 @@ function EdicaoCotacaoMulticalculo({ cotacaoExistente, onSalvo, onCancelar }) {
   )
 }
 
-function CotacaoFormCompleto({ clienteProspectId, cotacaoExistente, casoId, onSalvo, onCriado, onCancelar, usuario }) {
+function CotacaoFormCompleto({ clienteProspectId, cotacaoExistente, casoId, onSalvo, onCancelar }) {
   const [operadoraId, setOperadoraId] = useState(cotacaoExistente?.operadora_id ?? '')
   const [operadoraNome, setOperadoraNome] = useState(cotacaoExistente?.operadora_nome_livre ?? '')
   const [validade, setValidade] = useState(cotacaoExistente?.validade ?? '')
@@ -215,11 +238,49 @@ function CotacaoFormCompleto({ clienteProspectId, cotacaoExistente, casoId, onSa
   const [catalogoOperadoras, setCatalogoOperadoras] = useState([])
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
-  const [cotacaoSalvaId, setCotacaoSalvaId] = useState(cotacaoExistente?.id ?? null)
+
+  // NOVO (21/08) — vínculo opcional com o plano real da Biblioteca de
+  // Mercado, pra alimentar o Estudo de Mercado depois (rede/regras de
+  // verdade em vez de só texto livre). Busca só quando a operadora
+  // muda; lista vazia = operadora sem plano cadastrado na Biblioteca
+  // ainda, formulário continua 100% funcional sem isso.
+  const [planosDaOperadora, setPlanosDaOperadora] = useState([])
+  const [planoBibliotecaId, setPlanoBibliotecaId] = useState(cotacaoExistente?.plano_biblioteca_id ?? '')
+  const [carregandoPlanos, setCarregandoPlanos] = useState(false)
 
   useEffect(() => {
     listarCatalogoOperadoras().then(setCatalogoOperadoras).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!operadoraId) {
+      setPlanosDaOperadora([])
+      return
+    }
+    let ativo = true
+    setCarregandoPlanos(true)
+    institucional
+      .from('mercado_saude_planos')
+      .select('plano_id, nome, acomodacao')
+      .eq('operadora_id', operadoraId)
+      .eq('status', 'ativo')
+      .order('nome')
+      .then(({ data, error }) => {
+        if (!ativo) return
+        if (error) {
+          console.error('Erro buscando planos da operadora:', error.message)
+          setPlanosDaOperadora([])
+          return
+        }
+        setPlanosDaOperadora(data ?? [])
+      })
+      .finally(() => {
+        if (ativo) setCarregandoPlanos(false)
+      })
+    return () => {
+      ativo = false
+    }
+  }, [operadoraId])
 
   const totalVidas = blocosPlano.reduce(
     (soma, bloco) =>
@@ -237,23 +298,13 @@ function CotacaoFormCompleto({ clienteProspectId, cotacaoExistente, casoId, onSa
   )
   const porteCalculado = totalVidas ? calcularPorte(totalVidas) : null
 
-  /** Mesma composição que vai pro banco em itens_cotacao — usada ao vivo pelo comparativo financeiro das Propostas de Mercado, sem precisar esperar salvar. */
-  const itensParaFinanceiro = []
-  for (const bloco of blocosPlano) {
-    for (const faixa of FAIXAS_ETARIAS_ANS) {
-      const { vidas } = bloco.faixas[faixa]
-      if (vidas) {
-        itensParaFinanceiro.push({
-          faixa_etaria: blocosPlano.length > 1 && bloco.plano ? `${faixa} (${bloco.plano})` : faixa,
-          quantidade_vidas: parseInt(vidas, 10),
-        })
-      }
-    }
-  }
-
   function selecionarOperadora(id) {
     setOperadoraId(id)
     setOperadoraNome(catalogoOperadoras.find((op) => op.id === id)?.nome ?? '')
+    // Vínculo de plano é da operadora anterior — limpa ao trocar, pra
+    // nunca salvar um plano_biblioteca_id de uma operadora diferente
+    // da que ficou selecionada.
+    setPlanoBibliotecaId('')
   }
 
   function atualizarFaixa(blocoId, faixa, campo, valor) {
@@ -308,29 +359,18 @@ function CotacaoFormCompleto({ clienteProspectId, cotacaoExistente, casoId, onSa
         numero_vidas: totalVidas,
         plano: blocosPlano.map((b) => b.plano).filter(Boolean).join(' + ') || null,
         validade: validade || null,
+        plano_biblioteca_id: planoBibliotecaId || null,
       }
 
+      // REDESENHO (21/08) — sem mais seção embutida esperando a Cotação
+      // existir, criar ou editar sempre fecha e volta pra lista, mesmo
+      // padrão do resto do app.
       if (cotacaoExistente) {
         await atualizarCotacao(cotacaoExistente.id, dados, itens)
-        setCotacaoSalvaId(cotacaoExistente.id)
-        onSalvo()
       } else {
-        const novaCotacao = await criarCotacao({ clienteProspectId, casoId: casoId ?? null, dados: { ...dados, status: 'em_analise' }, itens })
-        setCotacaoSalvaId(novaCotacao.id)
-        // CORREÇÃO (achado real de teste, 17/08): na primeira vez que a
-        // Cotação é criada, NÃO fecha o formulário — Cenário Atual e
-        // Propostas de Mercado só aparecem depois que existe um id
-        // real, e fechar aqui escondia essas seções antes do corretor
-        // conseguir vê-las (obrigava reabrir manualmente via "Editar",
-        // gerando a falsa impressão de precisar criar outra Cotação).
-        // `onCriado` mantém o mesmo formulário aberto, agora em modo
-        // edição, com as seções já visíveis.
-        if (onCriado) {
-          onCriado(novaCotacao)
-        } else {
-          onSalvo()
-        }
+        await criarCotacao({ clienteProspectId, casoId: casoId ?? null, dados: { ...dados, status: 'em_analise' }, itens })
       }
+      onSalvo()
     } catch (err) {
       setErro(err.message)
     } finally {
@@ -347,6 +387,29 @@ function CotacaoFormCompleto({ clienteProspectId, cotacaoExistente, casoId, onSa
             <option value="">Selecione...</option>
             {catalogoOperadoras.map((op) => (
               <option key={op.id} value={op.id}>{op.nome}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label>Plano real (opcional)</label>
+          <select
+            value={planoBibliotecaId}
+            onChange={(e) => setPlanoBibliotecaId(e.target.value)}
+            disabled={!operadoraId || carregandoPlanos}
+          >
+            <option value="">
+              {!operadoraId
+                ? 'Selecione a operadora primeiro...'
+                : carregandoPlanos
+                  ? 'Carregando planos...'
+                  : planosDaOperadora.length === 0
+                    ? 'Nenhum plano cadastrado — segue manual'
+                    : 'Nenhum vinculado (opcional)'}
+            </option>
+            {planosDaOperadora.map((p) => (
+              <option key={p.plano_id} value={p.plano_id}>
+                {p.nome} · {p.acomodacao}
+              </option>
             ))}
           </select>
         </div>
@@ -430,27 +493,6 @@ function CotacaoFormCompleto({ clienteProspectId, cotacaoExistente, casoId, onSa
           {salvando ? 'Salvando...' : cotacaoExistente ? 'Salvar alterações' : 'Registrar Cotação'}
         </button>
       </div>
-
-      {cotacaoSalvaId && (
-        <div className="cenario-atual-secao">
-          <hr className="cenario-atual-separador" />
-          <CenarioAtualForm cotacaoId={cotacaoSalvaId} usuarioId={usuario?.id ?? null} />
-
-          <hr className="cenario-atual-separador" />
-          <PropostasEstudoForm cotacaoId={cotacaoSalvaId} clienteProspectId={clienteProspectId} itensCotacao={itensParaFinanceiro} usuarioId={usuario?.id ?? null} />
-
-          {/* CORREÇÃO 17/08 — antes só existia "Cancelar" (que soa como
-              descartar) pra sair daqui. Agora tem uma ação explícita de
-              concluir, já que o formulário fica aberto de propósito
-              depois de criar, pra dar tempo do corretor preencher
-              Cenário Atual e Propostas antes de voltar pra lista. */}
-          <div className="ls-modal-acoes" style={{ marginTop: '1rem' }}>
-            <button className="ls-btn ls-btn-primary" onClick={onSalvo}>
-              ✓ Concluir e voltar à lista
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
