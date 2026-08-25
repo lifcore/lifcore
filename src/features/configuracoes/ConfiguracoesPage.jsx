@@ -1,5 +1,4 @@
 import { useEffect, useState, Fragment } from 'react'
-import { Link } from 'react-router-dom'
 import '../../styles/lcds-tokens.css'
 import InfoTooltip from '../../components/InfoTooltip'
 import { cadastrarCorretor } from '../../lib/crm/clientesService'
@@ -39,9 +38,7 @@ export default function ConfiguracoesPage() {
   const abas = [
     { id: 'corretores', label: 'Corretores' },
     ...(ehMaster ? [{ id: 'transferir', label: 'Transferir Carteira' }] : []),
-    ...(ehMaster ? [{ id: 'seguradoras', label: 'Seguradoras' }] : []),
     ...(ehMaster ? [{ id: 'regras-comissao', label: 'Regras de Comissão' }] : []),
-    ...(ehMaster ? [{ id: 'conexoes', label: 'Conexões' }] : []),
   ]
 
   async function handleCadastrar() {
@@ -135,11 +132,7 @@ export default function ConfiguracoesPage() {
 
       {abaAtiva === 'transferir' && ehMaster && <TransferirCarteiraCard />}
 
-      {abaAtiva === 'seguradoras' && ehMaster && <SeguradorasRedirectCard />}
-
       {abaAtiva === 'regras-comissao' && ehMaster && <RegrasComissaoCard />}
-
-      {abaAtiva === 'conexoes' && ehMaster && <ConexoesRedirectCard />}
     </div>
   )
 }
@@ -466,68 +459,6 @@ function TransferirCarteiraCard() {
       <button className="ls-btn ls-btn-primary" onClick={handleTransferir} disabled={transferindo}>
         {transferindo ? 'Transferindo...' : 'Transferir Carteira'}
       </button>
-    </div>
-  )
-}
-
-
-/**
- * CONNECT-004C — a gestão de Conexões saiu de Configurações e virou
- * área única do Connect Center. Esta tela não guarda mais o CRUD
- * (ConexoesOperadorasCard/NovaConexaoForm/LinhaConexao removidos) —
- * só redireciona. Nenhum dado foi apagado: as conexões continuam na
- * mesma tabela `conexoes_operadoras`, só a UI de gestão mudou de
- * endereço, conforme a diretriz do Chief (remover duplicidade
- * visual/funcional, sem recriar estrutura nova).
- */
-function ConexoesRedirectCard() {
-  return (
-    <div className="ls-card" style={{ marginTop: '1.5rem' }}>
-      <h3>
-        🔌 Conexões com Operadoras/Provedores
-        <InfoTooltip
-          titulo="Conexões"
-          texto="A gestão de conexões agora é feita no Connect Center — área única da plataforma pra qualquer integração externa, seja com seguradora ou canal de aquisição de leads."
-        />
-      </h3>
-      <p className="config-instrucao" style={{ marginBottom: '1rem' }}>
-        Essa gestão foi movida pro Connect Center, junto com o resto da infraestrutura de integrações
-        da plataforma. Nenhuma conexão foi perdida — só a tela mudou de lugar.
-      </p>
-      <Link to="/connect?aba=conexoes" className="ls-btn ls-btn-primary">
-        Abrir Conexões no Connect Center →
-      </Link>
-    </div>
-  )
-}
-
-/**
- * Passo 2 do Documento Mestre (Chief) — Seguradoras (cadastro de
- * operadora, Catálogo Oficial de Produtos e Importação de Material de
- * Mercado) saiu de Configurações e virou o Catálogo de Mercado do
- * Connect Center, seguindo o mesmo padrão do CONNECT-004C (Conexões):
- * esta tela não guarda mais o CRUD — só redireciona. Nenhum dado foi
- * apagado, nenhuma tabela mudou; só a UI de gestão mudou de endereço.
- * Tag de governança oficial (equivalente ao CONNECT-004C) a confirmar
- * com o Chief.
- */
-function SeguradorasRedirectCard() {
-  return (
-    <div className="ls-card" style={{ marginTop: '1.5rem' }}>
-      <h3>
-        🏢 Seguradoras e Catálogo de Mercado
-        <InfoTooltip
-          titulo="Seguradoras e Catálogo de Mercado"
-          texto="O cadastro de seguradoras, o Catálogo Oficial de Produtos e a Importação de Material de Mercado agora vivem no Connect Center — módulo mestre de Mercado da plataforma (operadoras, produtos, preços, regras, rede)."
-        />
-      </h3>
-      <p className="config-instrucao" style={{ marginBottom: '1rem' }}>
-        Essa gestão foi movida pro Connect Center, junto com o resto do que é dado de mercado da plataforma.
-        Nenhuma seguradora, produto ou importação foi perdida — só a tela mudou de lugar.
-      </p>
-      <Link to="/connect?aba=catalogo" className="ls-btn ls-btn-primary">
-        Abrir Catálogo de Mercado no Connect Center →
-      </Link>
     </div>
   )
 }

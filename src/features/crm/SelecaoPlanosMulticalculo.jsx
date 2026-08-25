@@ -101,6 +101,31 @@ function segmentacaoElegivelParaVidas(grupo, totalVidas) {
   return totalVidas >= grupo.vidasMin && totalVidas <= grupo.vidasMax
 }
 
+/**
+ * Sprint 3b (21/08) — logo da operadora no cabeçalho. `logoFundoChip`
+ * vem calculado no banco (luminância real do arquivo, não chutado) —
+ * 'claro'/'escuro' colocam um chip atrás pra dar contraste (logo
+ * desenhado assumindo fundo branco, texto escuro sumiria no card escuro
+ * do app sem isso); 'nenhum' é pra logo autocontido (já tem o fundo da
+ * própria marca, tipo o verde da Unimed ou o azul do Care Plus/Hapvida)
+ * — nesse caso não põe chip nenhum, só mostra a imagem. Sem `logoUrl`
+ * (operadora ainda sem logo cadastrado), não renderiza nada — o nome
+ * em texto ao lado já cobre a identificação. */
+function LogoOperadora({ logoUrl, logoFundoChip }) {
+  if (!logoUrl) return null
+  const classeChip =
+    logoFundoChip === 'claro'
+      ? 'selecao-planos-logo-chip selecao-planos-logo-chip-claro'
+      : logoFundoChip === 'escuro'
+        ? 'selecao-planos-logo-chip selecao-planos-logo-chip-escuro'
+        : 'selecao-planos-logo-chip'
+  return (
+    <span className={classeChip}>
+      <img src={logoUrl} alt="" className="selecao-planos-logo-img" />
+    </span>
+  )
+}
+
 function criarItemMisto() {
   return {
     id: crypto.randomUUID(),
@@ -605,6 +630,7 @@ export default function SelecaoPlanosMulticalculo({
                   aria-expanded={expandida}
                 >
                   <span className={`selecao-planos-operadora-seta${expandida ? ' selecao-planos-operadora-seta-aberta' : ''}`}>▸</span>
+                  <LogoOperadora logoUrl={cotacao.operadoras[nomeOperadora].logoUrl} logoFundoChip={cotacao.operadoras[nomeOperadora].logoFundoChip} />
                   {nomeOperadora}
                   <span className="selecao-planos-operadora-contagem">{planosDoBloco.length} plano{planosDoBloco.length === 1 ? '' : 's'}</span>
                 </button>
@@ -956,6 +982,7 @@ function ModoMisto({
                     aria-expanded={expandida}
                   >
                     <span className={`selecao-planos-operadora-seta${expandida ? ' selecao-planos-operadora-seta-aberta' : ''}`}>▸</span>
+                    <LogoOperadora logoUrl={cotacaoBruta.operadoras[nomeOperadora].logoUrl} logoFundoChip={cotacaoBruta.operadoras[nomeOperadora].logoFundoChip} />
                     {nomeOperadora}
                     <span className="selecao-planos-operadora-contagem">{planosDoBloco.length} plano{planosDoBloco.length === 1 ? '' : 's'}</span>
                   </button>

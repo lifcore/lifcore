@@ -551,3 +551,35 @@
     align-items: flex-start;
   }
 }
+
+/* ===== Logo da operadora no cabeçalho (21/08) ===== */
+
+.selecao-planos-logo-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 0.4rem;
+  border-radius: 6px;
+}
+
+/* 'claro'/'escuro' calculados de verdade (luminância do arquivo) —
+   logo desenhado assumindo fundo branco ganha chip claro atrás pra não
+   sumir no card escuro do app; texto branco ganha chip escuro. Logo
+   autocontido (já tem o fundo da própria marca, ex: Unimed/Care Plus/
+   Hapvida/GoCare) não usa nenhuma das duas — só a imagem, sem chip. */
+.selecao-planos-logo-chip-claro {
+  background: #ffffff;
+}
+
+.selecao-planos-logo-chip-escuro {
+  background: #14181c;
+}
+
+.selecao-planos-logo-img {
+  height: 20px;
+  width: auto;
+  max-width: 90px;
+  object-fit: contain;
+  display: block;
+}

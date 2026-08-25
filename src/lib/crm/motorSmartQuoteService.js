@@ -68,7 +68,7 @@ export async function buscarPlanosElegiveis({ regiaoId = null, regiaoNome = null
     .select(
       `
       plano_id, nome, acomodacao, linha, status,
-      operadoras:operadora_id ( id, nome ),
+      operadoras:operadora_id ( id, nome, logo_url, logo_fundo_chip ),
       regioes_tarifarias:regiao_tarifaria_id ( id, nome )
     `
     )
@@ -581,7 +581,13 @@ export async function montarCotacaoEstruturada({
         continue
       }
 
-      if (!operadorasResultado[nomeOperadora]) operadorasResultado[nomeOperadora] = { planos: [] }
+      if (!operadorasResultado[nomeOperadora]) {
+        operadorasResultado[nomeOperadora] = {
+          planos: [],
+          logoUrl: pacote.plano.operadoras?.logo_url ?? null,
+          logoFundoChip: pacote.plano.operadoras?.logo_fundo_chip ?? null,
+        }
+      }
 
       operadorasResultado[nomeOperadora].planos.push({
         planoId: pacote.plano.plano_id,

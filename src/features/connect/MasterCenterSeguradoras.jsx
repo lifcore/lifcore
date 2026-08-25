@@ -292,8 +292,91 @@ function NovaSeguradoraForm({ onSalvo, onCancelar }) {
   )
 }
 
+/**
+ * ACHADO (21/08) — `atualizarDadosSeguradora` já estava importada no
+ * topo do arquivo desde sempre, mas nunca era chamada em lugar nenhum
+ * — o botão "Alterar" nunca tinha sido construído (a função existia,
+ * a UI não). Espelha os mesmos campos do cadastro (`NovaSeguradoraForm`
+ * acima), só que pré-preenchidos com o que já está salvo, chamando
+ * atualização em vez de criação.
+ *
+ * ATENÇÃO: assumi que `atualizarDadosSeguradora(id, dados)` aceita o
+ * mesmo formato de `dados` que `criarSeguradora` — não tive acesso ao
+ * `apolicesService.js` pra confirmar a assinatura exata. Se o nome dos
+ * campos esperados for diferente, ajustar só dentro de `handleSalvar`
+ * abaixo.
+ */
+function AlterarSeguradoraForm({ seguradora, onSalvo, onCancelar }) {
+  const [nome, setNome] = useState(seguradora.nome ?? '')
+  const [razaoSocial, setRazaoSocial] = useState(seguradora.razao_social ?? '')
+  const [cnpj, setCnpj] = useState(seguradora.cnpj ?? '')
+  const [site, setSite] = useState(seguradora.site ?? '')
+  const [categoriaSeguro, setCategoriaSeguro] = useState(seguradora.categoria_seguro ?? '')
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  async function handleSalvar() {
+    if (!nome.trim()) {
+      setErro('Informe o nome da seguradora.')
+      return
+    }
+    setSalvando(true)
+    setErro(null)
+    try {
+      await atualizarDadosSeguradora(seguradora.id, { nome, razaoSocial, cnpj, site, categoriaSeguro })
+      onSalvo()
+    } catch (err) {
+      setErro(err.message)
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <div className="ls-card" style={{ marginTop: '0.75rem' }}>
+      <div className="cotacao-form-linha">
+        <div>
+          <label>Nome</label>
+          <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Bradesco Seguros" />
+        </div>
+        <div>
+          <label>Razão social</label>
+          <input value={razaoSocial} onChange={(e) => setRazaoSocial(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="cotacao-form-linha">
+        <div>
+          <label>CNPJ</label>
+          <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
+        </div>
+        <div>
+          <label>Site</label>
+          <input value={site} onChange={(e) => setSite(e.target.value)} placeholder="https://..." />
+        </div>
+      </div>
+
+      <div className="cotacao-form-linha">
+        <div>
+          <label>Categoria de seguro</label>
+          <input value={categoriaSeguro} onChange={(e) => setCategoriaSeguro(e.target.value)} placeholder="Ex: Saúde, Auto..." />
+        </div>
+      </div>
+
+      {erro && <p className="ls-modal-erro">{erro}</p>}
+
+      <div className="ls-modal-acoes">
+        <button className="ls-btn ls-btn-ghost" onClick={onCancelar}>Cancelar</button>
+        <button className="ls-btn ls-btn-primary" onClick={handleSalvar} disabled={salvando}>
+          {salvando ? 'Salvando...' : 'Salvar alterações'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function SeguradoraItem({ seguradora, onAtualizado }) {
-  const [expandido, setExpandido] = useState(null) // null | 'gestores' | 'institucional'
+  const [expandido, setExpandido] = useState(null) // null | 'gestores' | 'institucional' | 'alterar'
   const [gestores, setGestores] = useState([])
   const [carregandoGestores, setCarregandoGestores] = useState(false)
 
@@ -332,6 +415,9 @@ function SeguradoraItem({ seguradora, onAtualizado }) {
           )}
         </div>
         <div style={{ display: 'flex', gap: '0.4rem' }}>
+          <button className="cliente-tabela-btn" onClick={() => setExpandido(expandido === 'alterar' ? null : 'alterar')}>
+            {expandido === 'alterar' ? 'Fechar' : 'Alterar'}
+          </button>
           <button className="cliente-tabela-btn" onClick={() => setExpandido(expandido === 'institucional' ? null : 'institucional')}>
             {expandido === 'institucional' ? 'Fechar' : 'Dados Institucionais'}
           </button>
@@ -340,6 +426,17 @@ function SeguradoraItem({ seguradora, onAtualizado }) {
           </button>
         </div>
       </div>
+
+      {expandido === 'alterar' && (
+        <AlterarSeguradoraForm
+          seguradora={seguradora}
+          onSalvo={() => {
+            setExpandido(null)
+            onAtualizado()
+          }}
+          onCancelar={() => setExpandido(null)}
+        />
+      )}
 
       {expandido === 'institucional' && (
         <PainelInstitucional seguradora={seguradora} onAtualizado={onAtualizado} />
