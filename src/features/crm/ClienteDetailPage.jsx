@@ -26,6 +26,9 @@ import PainelCotacao from './PainelCotacao'
 import './cotacoesGrupo.css'
 import './selecaoPlanosMulticalculo.css'
 import { marcarCotacaoRecomendada, marcarCotacaoCenarioAtual } from '../../lib/crm/multicalculoCotacaoService'
+import { montarDadosEstudoEssencial, montarDadosEstudoExecutivo } from '../../lib/crm/estudoManualDadosService'
+import { gerarHtmlEstudoEssencial } from '../../lib/crm/estudoEssencialPdfService'
+import { gerarHtmlEstudoMercado } from '../../lib/crm/estudoMercadoPdfService'
 import EspecialistaSaude from '../especialista/EspecialistaSaude'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
@@ -669,6 +672,7 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
   const [mostrarOpcoesEstudo, setMostrarOpcoesEstudo] = useState(false)
   const [incluirRede, setIncluirRede] = useState(true) // rede é por plano, estável — praticamente sempre desejada (confirmado com o usuário)
   const [incluirRegras, setIncluirRegras] = useState(false) // regras são de venda, não valem pro que o cliente já tem ativo — opt-in
+  const [gerandoEstudo, setGerandoEstudo] = useState(false)
 
   function alternarSelecaoEstudo(cotacaoId) {
     setSelecionadasParaEstudo((atual) => {
@@ -683,18 +687,30 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
   // busca de dado de verdade + geração do HTML/PDF. Por enquanto só
   // confirma a seleção, pra a Etapa 4 já ser testável sozinha sem
   // depender da reescrita inteira de uma vez.
-  function handleGerarEstudo(tipo) {
-    console.log('[Estudo de Mercado — ainda não implementado]', {
-      tipo,
-      cotacaoIds: [...selecionadasParaEstudo],
-      incluirRede,
-      incluirRegras,
-    })
-    alert(
-      `Geração do Estudo ${tipo === 'essencial' ? 'Essencial' : 'Executivo'} ainda não está ligada ` +
-        `(Etapa 5 do plano) — mas a seleção de ${selecionadasParaEstudo.size} Cotação(ões) e as opções ` +
-        `(Rede: ${incluirRede ? 'sim' : 'não'}, Regras: ${incluirRegras ? 'sim' : 'não'}) já estão prontas.`
-    )
+  // Etapa 5 (21/08) — liga a seleção da Etapa 4 na busca de dado nova
+  // (estudoManualDadosService.js, lê direto das Cotações selecionadas,
+  // sem sistema antigo de upload+extração no meio) + no HTML que já
+  // existia (gerarHtmlEstudoEssencial/gerarHtmlEstudoMercado, ambos
+  // intocados — só a fonte do dado mudou). Mesmo mecanismo de
+  // janela+impressão dos botões antigos (BotaoGerarEstudoEssencial/
+  // Premium): abre em aba nova, pronto pra "Salvar como PDF".
+  async function handleGerarEstudo(tipo) {
+    setGerandoEstudo(true)
+    setErroWorkflow(null)
+    try {
+      const opcoes = { cotacaoIds: [...selecionadasParaEstudo], incluirRede, incluirRegras }
+      const dados = tipo === 'essencial' ? await montarDadosEstudoEssencial(opcoes) : await montarDadosEstudoExecutivo(opcoes)
+      const html = tipo === 'essencial' ? gerarHtmlEstudoEssencial(dados) : gerarHtmlEstudoMercado(dados)
+      const janela = window.open('', '_blank')
+      janela.document.write(html)
+      janela.document.close()
+      setMostrarOpcoesEstudo(false)
+      setSelecionadasParaEstudo(new Set())
+    } catch (err) {
+      setErroWorkflow(`Erro ao gerar o Estudo: ${err.message}`)
+    } finally {
+      setGerandoEstudo(false)
+    }
   }
 
   // Sprint 3b (21/08) — logo da operadora no card de Cotação, mesmo
@@ -916,14 +932,14 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
             Regras da operadora
           </label>
           <div className="ls-modal-acoes">
-            <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarOpcoesEstudo(false)}>
+            <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarOpcoesEstudo(false)} disabled={gerandoEstudo}>
               Cancelar
             </button>
-            <button className="ls-btn ls-btn-ghost" onClick={() => handleGerarEstudo('essencial')}>
-              📊 Gerar Estudo Essencial
+            <button className="ls-btn ls-btn-ghost" onClick={() => handleGerarEstudo('essencial')} disabled={gerandoEstudo}>
+              {gerandoEstudo ? 'Gerando...' : '📊 Gerar Estudo Essencial'}
             </button>
-            <button className="ls-btn ls-btn-primary" onClick={() => handleGerarEstudo('executivo')}>
-              📊 Gerar Estudo Executivo
+            <button className="ls-btn ls-btn-primary" onClick={() => handleGerarEstudo('executivo')} disabled={gerandoEstudo}>
+              {gerandoEstudo ? 'Gerando...' : '📊 Gerar Estudo Executivo'}
             </button>
           </div>
         </div>

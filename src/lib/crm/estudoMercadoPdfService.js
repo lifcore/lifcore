@@ -12,7 +12,10 @@ import {
 import { graficoBarrasVertical, graficoDivergente } from './graficosSvg'
 
 /**
- * SPEC-001 §12 — Estudo de Mercado Premium LifitSeg.
+ * SPEC-001 §12 — Estudo de Mercado Executivo LifitSeg (era "Premium" —
+ * renomeado 21/08, mesmo documento, mesmo padrão visual, só o nome
+ * mudou pra bater com a nomenclatura de 3 níveis do Chief:
+ * Essencial/Executivo/Corporativo).
  * Mesmo padrão do Report Center (documentoClienteService.js):
  *   1. montarDadosEstudoMercado(cotacaoId) → só busca e organiza dado
  *      (reaproveita os Services das Peças 1-3, nenhuma consulta nova).
@@ -118,7 +121,7 @@ function escapeHtml(valor) {
 }
 
 export function gerarHtmlEstudoMercado(dados) {
-  const { geradoEm, cliente, cenarioAtual, totalCenarioAtual, propostasSelecionadas, rede, legenda } = dados
+  const { geradoEm, cliente, cenarioAtual, totalCenarioAtual, propostasSelecionadas, rede, legenda, regrasIncluidas } = dados
 
   const valoresGrafico = [
     { label: 'Atual', valor: totalCenarioAtual.totalMensal ?? 0 },
@@ -228,7 +231,7 @@ export function gerarHtmlEstudoMercado(dados) {
 
   <section class="capa">
     <div class="marca">LifitSeg</div>
-    <h1>Estudo Comparativo de Planos de Saúde</h1>
+    <h1>Estudo de Mercado — Executivo</h1>
     <p class="tagline">Uma análise técnica para encontrar o melhor equilíbrio entre investimento, cobertura e rede.</p>
     <div class="meta">Cliente: ${escapeHtml(cliente.razao_social)}<br/>Data: ${formatarDataBR(geradoEm.slice(0, 10))}</div>
   </section>
@@ -277,6 +280,17 @@ export function gerarHtmlEstudoMercado(dados) {
     <table><thead><tr><th>Código</th><th>Significado</th></tr></thead><tbody>${linhasLegenda}</tbody></table>
     `}
   </section>
+
+  ${regrasIncluidas?.length ? `
+  <section>
+    <h2 class="titulo-secao">Regras Comerciais</h2>
+    <p class="aviso">Regras de venda vigentes no momento da geração — não valem pra plano(s) que o cliente já tem ativo hoje (condições desses foram travadas na contratação original).</p>
+    <table>
+      <thead><tr><th>Operadora</th><th>Tipo</th><th>Descrição</th></tr></thead>
+      <tbody>${regrasIncluidas.map((r) => `<tr><td>${escapeHtml(r.operadora)}</td><td>${escapeHtml(r.tipo)}</td><td>${escapeHtml(r.descricao)}</td></tr>`).join('')}</tbody>
+    </table>
+  </section>
+  ` : ''}
 
   <section>
     <h2 class="titulo-secao">Conclusão</h2>

@@ -100,7 +100,7 @@ function blocoImpactoComCobertura(colunaAtual, colunasPropostas) {
 
 function montarPontosAtencao(dados) {
   const pontos = []
-  const { colunaAtual, colunasPropostas, prontidao } = dados
+  const { colunaAtual, colunasPropostas, prontidao, pontosAtencaoExtras } = dados
 
   if (prontidao.precisamAtencao.length > 0) {
     pontos.push(`${prontidao.precisamAtencao.length} proposta(s) confirmada(s) ficaram de fora deste Estudo por falta de vínculo com o catálogo ou regra de preço aplicável — revise na tela de Propostas antes de considerar o comparativo completo.`)
@@ -112,6 +112,12 @@ function montarPontosAtencao(dados) {
     if (c.avisoVinculo) pontos.push(`${escapeHtml(c.operadoraPlano)}: ${escapeHtml(c.avisoVinculo)}`)
   }
   if (!colunaAtual) pontos.push('Cenário atual do cliente não foi cadastrado — comparação apresentada sem referência de partida.')
+
+  // Etapa 5 (21/08) — regras comerciais, quando o corretor marcou
+  // "incluir regras" na seleção do Estudo (montarDadosEstudoEssencial,
+  // estudoManualDadosService.js). Sem seção própria no Essencial —
+  // entram aqui, mesma área já usada pra avisos.
+  if (pontosAtencaoExtras?.length) pontos.push(...pontosAtencaoExtras.map((p) => escapeHtml(p)))
 
   return pontos
 }
