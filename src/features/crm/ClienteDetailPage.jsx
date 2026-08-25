@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { institucional } from '../../lib/supabaseSchemas'
 import {
   buscarClienteProspectCompleto,
   salvarContato,
@@ -24,6 +25,7 @@ import CotacaoForm from './CotacaoForm'
 import ContratoForm from './ContratoForm'
 import PainelCotacao from './PainelCotacao'
 import './cotacoesGrupo.css'
+import './selecaoPlanosMulticalculo.css'
 import { marcarCotacaoRecomendada } from '../../lib/crm/multicalculoCotacaoService'
 import EspecialistaSaude from '../especialista/EspecialistaSaude'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
@@ -628,6 +630,28 @@ const ROTULO_STATUS_COTACAO = {
  * corretor preenche os dados reais, e o Salvar chama
  * `fecharCotacaoComDocumento`, fechando a cotação de fato.
  */
+/**
+ * Sprint 3b (21/08) — mesma lógica de chip adaptativo já usada em
+ * `SelecaoPlanosMulticalculo.jsx` (LogoOperadora) — duplicada aqui de
+ * propósito (arquivo diferente, sem import cruzado entre features/crm
+ * e components/multicalculo) em vez de compartilhada, pra não criar
+ * acoplamento entre as duas telas por causa de um detalhe visual.
+ */
+function LogoOperadoraCotacao({ logoInfo }) {
+  if (!logoInfo?.logo_url) return null
+  const classeChip =
+    logoInfo.logo_fundo_chip === 'claro'
+      ? 'selecao-planos-logo-chip selecao-planos-logo-chip-claro'
+      : logoInfo.logo_fundo_chip === 'escuro'
+        ? 'selecao-planos-logo-chip selecao-planos-logo-chip-escuro'
+        : 'selecao-planos-logo-chip'
+  return (
+    <span className={classeChip}>
+      <img src={logoInfo.logo_url} alt="" className="selecao-planos-logo-img" />
+    </span>
+  )
+}
+
 function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [mostrarMulticalculo, setMostrarMulticalculo] = useState(false)
@@ -635,6 +659,22 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
   const [cotacaoFormalizando, setCotacaoFormalizando] = useState(null)
   const [processando, setProcessando] = useState(null)
   const [erroWorkflow, setErroWorkflow] = useState(null)
+
+  // Sprint 3b (21/08) — logo da operadora no card de Cotação, mesmo
+  // padrão do cabeçalho de operadora no Multicálculo
+  // (SelecaoPlanosMulticalculo.jsx). Busca só 1 vez (poucas linhas, ~12
+  // operadoras), mapeado por id pra achar rápido card a card.
+  const [logosPorOperadoraId, setLogosPorOperadoraId] = useState(new Map())
+
+  useEffect(() => {
+    institucional
+      .from('operadoras')
+      .select('id, logo_url, logo_fundo_chip')
+      .then(({ data, error }) => {
+        if (error) return
+        setLogosPorOperadoraId(new Map((data ?? []).map((o) => [o.id, o])))
+      })
+  }, [])
 
   async function handleExcluir(cotacaoId) {
     if (!window.confirm('Excluir esta cotação?')) return
@@ -833,6 +873,7 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                 return (
                   <div key={cot.id} className={`ls-card cotacao-item${cot.recomendada ? ' cotacao-item-recomendada' : ''}`}>
                     <div className="cotacao-item-header">
+                      <LogoOperadoraCotacao logoInfo={logosPorOperadoraId.get(cot.operadora_id)} />
                       <strong>{cot.operadora_nome_livre}</strong>
                       <span className="ls-badge ls-badge-prospect">{cot.porte}</span>
                       <span>{cot.numero_vidas} vidas</span>
