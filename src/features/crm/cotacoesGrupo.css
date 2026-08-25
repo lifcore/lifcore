@@ -71,3 +71,20 @@
   color: var(--lcds-text-secondary);
   font-style: italic;
 }
+
+/* Etapa 3 do plano "Registro Manual + Estudo de Mercado" (21/08) —
+   destaque visual do Cenário Atual, mesmo padrão da Recomendada, mas
+   com propriedade CSS diferente (box-shadow em vez de border-color) —
+   de propósito: um card pode ser as duas coisas ao mesmo tempo, e
+   `border-color` só aceita 1 valor por vez (a Recomendada usa
+   !important, sempre venceria). Com box-shadow, os dois convivem sem
+   conflito, cada um com sua cor. */
+.cotacao-item-cenario-atual {
+  box-shadow: inset 0 0 0 2px var(--lcds-text-secondary);
+}
+
+.cotacao-badge-cenario-atual {
+  background: var(--lcds-surface-card-hover);
+  color: var(--lcds-text-secondary);
+  border: 1px solid var(--lcds-text-secondary);
+}

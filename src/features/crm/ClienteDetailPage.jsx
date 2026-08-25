@@ -865,7 +865,10 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                 const venceu = cot.validade && cot.validade < hoje
 
                 return (
-                  <div key={cot.id} className={`ls-card cotacao-item${cot.recomendada ? ' cotacao-item-recomendada' : ''}`}>
+                  <div
+                    key={cot.id}
+                    className={`ls-card cotacao-item${cot.recomendada ? ' cotacao-item-recomendada' : ''}${cot.eh_cenario_atual ? ' cotacao-item-cenario-atual' : ''}`}
+                  >
                     <div className="cotacao-item-header">
                       <strong>{cot.operadora_nome_livre}</strong>
                       {cot.plano && <span className="cotacao-item-plano">{cot.plano}</span>}
@@ -874,6 +877,7 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                       <span>{formatarDataBR(cot.data_cotacao)}</span>
                       <span style={{ fontWeight: 600, color: status.cor }}>{status.texto}</span>
                       {cot.recomendada && <span className="ls-badge cotacao-badge-recomendada">★ Recomendada</span>}
+                      {cot.eh_cenario_atual && <span className="ls-badge cotacao-badge-cenario-atual">📍 Cenário Atual</span>}
                     </div>
                     {cot.itens_cotacao?.length > 0 && (
                       <div className="cotacao-item-valores">
