@@ -127,3 +127,17 @@ export async function marcarCotacaoRecomendada(cotacaoId, recomendada) {
   const { error } = await operacional.from('cotacoes').update({ recomendada }).eq('id', cotacaoId)
   if (error) throw new Error(`Erro ao marcar cotação como recomendada: ${error.message}`)
 }
+
+/**
+ * Etapa 3 do plano "Registro Manual + Estudo de Mercado" (21/08) —
+ * marca/desmarca a tag "Cenário Atual" numa Cotação. Mesmo padrão de
+ * `marcarCotacaoRecomendada`: nunca calculada sozinha, sempre ação
+ * explícita do corretor no card; independente da tag Recomendada
+ * (uma Cotação pode ser as duas coisas, nenhuma, ou só uma). Cliente
+ * com mais de 1 plano ativo hoje → marca várias Cotações como Cenário
+ * Atual, sem problema nenhum (não é campo único/exclusivo).
+ */
+export async function marcarCotacaoCenarioAtual(cotacaoId, ehCenarioAtual) {
+  const { error } = await operacional.from('cotacoes').update({ eh_cenario_atual: ehCenarioAtual }).eq('id', cotacaoId)
+  if (error) throw new Error(`Erro ao marcar cotação como cenário atual: ${error.message}`)
+}

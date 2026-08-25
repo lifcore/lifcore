@@ -14,7 +14,6 @@ import {
   excluirCotacao,
   fecharCotacaoComOpcao,
   fecharCotacaoComDocumento,
-  marcarCotacaoPerdida,
   marcarCotacaoExpirada,
   calcularPorte,
   transferirClienteIndividual,
@@ -26,7 +25,7 @@ import ContratoForm from './ContratoForm'
 import PainelCotacao from './PainelCotacao'
 import './cotacoesGrupo.css'
 import './selecaoPlanosMulticalculo.css'
-import { marcarCotacaoRecomendada } from '../../lib/crm/multicalculoCotacaoService'
+import { marcarCotacaoRecomendada, marcarCotacaoCenarioAtual } from '../../lib/crm/multicalculoCotacaoService'
 import EspecialistaSaude from '../especialista/EspecialistaSaude'
 import { listarTemplates, montarLinkWhatsApp, personalizarMensagem } from '../../lib/crm/templatesService'
 import { listarCorretores } from '../../lib/crm/apolicesService'
@@ -658,7 +657,6 @@ function LogoOperadoraCotacao({ logoInfo, tamanho = 'normal' }) {
 function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [mostrarMulticalculo, setMostrarMulticalculo] = useState(false)
-  const [cotacaoEditando, setCotacaoEditando] = useState(null)
   const [cotacaoFormalizando, setCotacaoFormalizando] = useState(null)
   const [processando, setProcessando] = useState(null)
   const [erroWorkflow, setErroWorkflow] = useState(null)
@@ -699,13 +697,30 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
     }
   }
 
-  async function handleDesistir(cotacaoId) {
-    const motivo = window.prompt('Motivo da desistência (opcional):')
-    if (motivo === null) return
+  // NOVO (19/08) — tag manual "Recomendada" (BMR-008). Nunca calculada
+  // sozinha, sempre clique explícito do corretor.
+  async function handleAlternarRecomendada(cotacaoId, valorAtual) {
     setProcessando(cotacaoId)
     setErroWorkflow(null)
     try {
-      await marcarCotacaoPerdida(cotacaoId, perfil?.id, motivo)
+      await marcarCotacaoRecomendada(cotacaoId, !valorAtual)
+      onAtualizado()
+    } catch (err) {
+      setErroWorkflow(err.message)
+    } finally {
+      setProcessando(null)
+    }
+  }
+
+  // Etapa 3 do plano "Registro Manual + Estudo de Mercado" (21/08) —
+  // mesmo padrão de handleAlternarRecomendada, independente dela.
+  // Cliente com mais de 1 plano ativo hoje → o corretor marca várias
+  // Cotações como Cenário Atual, sem trava nenhuma pra isso.
+  async function handleAlternarCenarioAtual(cotacaoId, valorAtual) {
+    setProcessando(cotacaoId)
+    setErroWorkflow(null)
+    try {
+      await marcarCotacaoCenarioAtual(cotacaoId, !valorAtual)
       onAtualizado()
     } catch (err) {
       setErroWorkflow(err.message)
@@ -742,21 +757,6 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
     }
   }
 
-  // NOVO (19/08) — tag manual "Recomendada" (BMR-008). Nunca calculada
-  // sozinha, sempre clique explícito do corretor.
-  async function handleAlternarRecomendada(cotacaoId, valorAtual) {
-    setProcessando(cotacaoId)
-    setErroWorkflow(null)
-    try {
-      await marcarCotacaoRecomendada(cotacaoId, !valorAtual)
-      onAtualizado()
-    } catch (err) {
-      setErroWorkflow(err.message)
-    } finally {
-      setProcessando(null)
-    }
-  }
-
   // NOVO (19/08) — o Multicálculo (Sprint 3) já cria as Cotações
   // direto no banco (mesmo grupo_comparacao_id); ao terminar, só fecha
   // o wizard e recarrega a lista — a UI de baixo (agrupada) já mostra
@@ -779,7 +779,7 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
 
   return (
     <div>
-      {!mostrarForm && !cotacaoEditando && !cotacaoFormalizando && !mostrarMulticalculo && (
+      {!mostrarForm && !cotacaoFormalizando && !mostrarMulticalculo && (
         <div style={{ display: 'flex', gap: '0.6rem' }}>
           {/* ATUALIZADO (21/08) — troca de destaque pedida pelo usuário:
               o Multicálculo é o fluxo real de cotação hoje (cria as
@@ -811,29 +811,20 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
         </div>
       )}
 
-      {(mostrarForm || cotacaoEditando) && (
+      {/* REDESENHO "Registro Manual" (21/08) — `cotacaoEditando`/`onCriado`
+          removidos: o botão "Editar" saiu do card (não funcionava certo,
+          criar de novo é mais simples), e o `CotacaoForm` não fica mais
+          aberto depois de salvar (os blocos embutidos que justificavam
+          isso, Cenário Atual/Propostas, saíram também — ver
+          CotacaoForm.jsx). Esse caminho hoje só serve pra CRIAR. */}
+      {mostrarForm && (
         <CotacaoForm
           clienteProspectId={clienteId}
-          cotacaoExistente={cotacaoEditando}
           onSalvo={() => {
             setMostrarForm(false)
-            setCotacaoEditando(null)
             onAtualizado()
           }}
-          onCriado={(novaCotacao) => {
-            // CORREÇÃO 17/08 — na primeira criação, NÃO fecha o
-            // formulário: troca pro modo "editando" com a Cotação
-            // recém-criada, mantendo o mesmo formulário aberto pra que
-            // Cenário Atual e Propostas de Mercado fiquem visíveis sem
-            // precisar reabrir manualmente depois.
-            setMostrarForm(false)
-            setCotacaoEditando(novaCotacao)
-            onAtualizado()
-          }}
-          onCancelar={() => {
-            setMostrarForm(false)
-            setCotacaoEditando(null)
-          }}
+          onCancelar={() => setMostrarForm(false)}
         />
       )}
 
@@ -940,15 +931,6 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                           {processando === cot.id ? '...' : 'Marcar Expirada'}
                         </button>
                       )}
-                      {podeDesistirOuExpirar && (
-                        <button
-                          className="cliente-tabela-btn cliente-tabela-btn-perigo"
-                          disabled={processando === cot.id}
-                          onClick={() => handleDesistir(cot.id)}
-                        >
-                          {processando === cot.id ? '...' : 'Cliente Desistiu'}
-                        </button>
-                      )}
                       {podeFechar && (
                         <button
                           className="cliente-tabela-btn"
@@ -958,8 +940,18 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                           {cot.recomendada ? '★ Desmarcar recomendada' : '☆ Marcar como recomendada'}
                         </button>
                       )}
-                      <button className="cliente-tabela-btn" onClick={() => setCotacaoEditando(cot)}>
-                        Editar
+                      {/* Etapa 3 do plano "Registro Manual + Estudo de
+                          Mercado" (21/08) — independente de Recomendada
+                          e de status; é um marcador descritivo ("isso é
+                          o que o cliente já tem hoje"), não uma ação de
+                          workflow, por isso sem a mesma trava de
+                          `podeFechar`. */}
+                      <button
+                        className="cliente-tabela-btn"
+                        disabled={processando === cot.id}
+                        onClick={() => handleAlternarCenarioAtual(cot.id, cot.eh_cenario_atual)}
+                      >
+                        {cot.eh_cenario_atual ? '☑ Desmarcar cenário atual' : '☐ Marcar como cenário atual'}
                       </button>
                       <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(cot.id)}>
                         Excluir
