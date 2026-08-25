@@ -589,12 +589,12 @@
    direito (achado real: logo pequeno no cabeçalho compacto ficava
    difícil de ver; a linha de botões tinha espaço vazio sobrando). */
 .selecao-planos-logo-chip-grande {
-  height: 40px;
-  padding: 0 0.6rem;
+  height: 54px;
+  padding: 0 0.75rem;
   margin-left: auto;
 }
 
 .selecao-planos-logo-chip-grande .selecao-planos-logo-img {
-  height: 28px;
-  max-width: 130px;
+  height: 38px;
+  max-width: 176px;
 }
