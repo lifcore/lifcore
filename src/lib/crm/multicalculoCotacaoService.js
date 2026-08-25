@@ -28,6 +28,19 @@ import { excluirRascunhoMulticalculo } from './multicalculoRascunhoService'
  *
  * O uso de hoje (1 grupo de vidas → N planos pra comparar) continua
  * idêntico — é só o caso `itens.length === 1`.
+ *
+ * CORRIGIDO (25/08) — BUG do Estudo de Mercado: as Cotações criadas aqui
+ * nunca gravavam `plano_biblioteca_id`, mesmo quando `plano` (vindo de
+ * montarCotacaoEstruturada) já sabia exatamente qual plano da Biblioteca
+ * de Mercado foi escolhido (`plano.planoId`). Sem esse vínculo, o Estudo
+ * de Mercado (estudoEssencialPdfService/estudoMercadoPdfService) não
+ * conseguia puxar Rede Credenciada, Acomodação nem Coparticipação pra
+ * Cotações vindas do Multicálculo — a maioria na prática — mesmo sendo
+ * planos reais e catalogados. Corrigido repassando `plano.planoId` pro
+ * objeto `dados`. Cotações antigas, já criadas antes desta correção,
+ * continuam com `plano_biblioteca_id = null` — não é retroativo; se
+ * precisar corrigir as já existentes, é um UPDATE à parte, não algo
+ * que este arquivo resolve sozinho.
  */
 
 /**
@@ -100,6 +113,11 @@ export async function criarCotacoesDoMulticalculo({ clienteProspectId, itens }) 
         porte,
         numero_vidas: totalVidas,
         plano: plano.nome,
+        // CORRIGIDO (25/08): antes faltava esse campo — sem ele, o Estudo
+        // de Mercado não conseguia puxar Rede/Acomodação/Coparticipação
+        // pra Cotações vindas do Multicálculo. plano.planoId já vem
+        // pronto de montarCotacaoEstruturada, só faltava repassar.
+        plano_biblioteca_id: plano.planoId ?? null,
         validade: null,
         grupo_comparacao_id: grupoComparacaoId,
         composicao_id: composicaoId,
