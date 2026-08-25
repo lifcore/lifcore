@@ -661,6 +661,42 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
   const [processando, setProcessando] = useState(null)
   const [erroWorkflow, setErroWorkflow] = useState(null)
 
+  // Etapa 4 do plano "Registro Manual + Estudo de Mercado" (21/08) —
+  // seleção pro Estudo é TRANSIENTE (só existe enquanto o corretor está
+  // montando o PDF nesta visita à tela) — não precisa de coluna no
+  // banco, mesma ideia do carrinho do Multicálculo (Set em memória).
+  const [selecionadasParaEstudo, setSelecionadasParaEstudo] = useState(new Set())
+  const [mostrarOpcoesEstudo, setMostrarOpcoesEstudo] = useState(false)
+  const [incluirRede, setIncluirRede] = useState(true) // rede é por plano, estável — praticamente sempre desejada (confirmado com o usuário)
+  const [incluirRegras, setIncluirRegras] = useState(false) // regras são de venda, não valem pro que o cliente já tem ativo — opt-in
+
+  function alternarSelecaoEstudo(cotacaoId) {
+    setSelecionadasParaEstudo((atual) => {
+      const novo = new Set(atual)
+      if (novo.has(cotacaoId)) novo.delete(cotacaoId)
+      else novo.add(cotacaoId)
+      return novo
+    })
+  }
+
+  // ETAPA 5 (ainda não construída) vai substituir este handler pela
+  // busca de dado de verdade + geração do HTML/PDF. Por enquanto só
+  // confirma a seleção, pra a Etapa 4 já ser testável sozinha sem
+  // depender da reescrita inteira de uma vez.
+  function handleGerarEstudo(tipo) {
+    console.log('[Estudo de Mercado — ainda não implementado]', {
+      tipo,
+      cotacaoIds: [...selecionadasParaEstudo],
+      incluirRede,
+      incluirRegras,
+    })
+    alert(
+      `Geração do Estudo ${tipo === 'essencial' ? 'Essencial' : 'Executivo'} ainda não está ligada ` +
+        `(Etapa 5 do plano) — mas a seleção de ${selecionadasParaEstudo.size} Cotação(ões) e as opções ` +
+        `(Rede: ${incluirRede ? 'sim' : 'não'}, Regras: ${incluirRegras ? 'sim' : 'não'}) já estão prontas.`
+    )
+  }
+
   // Sprint 3b (21/08) — logo da operadora no card de Cotação, mesmo
   // padrão do cabeçalho de operadora no Multicálculo
   // (SelecaoPlanosMulticalculo.jsx). Busca só 1 vez (poucas linhas, ~12
@@ -846,6 +882,53 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
 
       {erroWorkflow && <p className="ls-modal-erro">{erroWorkflow}</p>}
 
+      {/* Etapa 4 (21/08) — barra de seleção pro Estudo, mesmo padrão
+          visual do carrinho do Multicálculo (selecao-planos-carrinho),
+          reaproveitado aqui pra ficar familiar pro corretor. */}
+      {selecionadasParaEstudo.size > 0 && (
+        <div className="selecao-planos-carrinho" style={{ marginBottom: '1rem' }}>
+          <div className="selecao-planos-carrinho-cabecalho">
+            <span>
+              📊 {selecionadasParaEstudo.size} cotação{selecionadasParaEstudo.size === 1 ? '' : 'ões'} selecionada
+              {selecionadasParaEstudo.size === 1 ? '' : 's'} pro Estudo
+            </span>
+            <button className="ls-btn ls-btn-primary" onClick={() => setMostrarOpcoesEstudo(true)}>
+              Gerar Estudo
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mostrarOpcoesEstudo && (
+        <div className="ls-card" style={{ marginBottom: '1rem' }}>
+          <h3 style={{ marginTop: 0 }}>O que incluir no comparativo</h3>
+          <p className="config-instrucao">
+            Rede vem do plano vinculado na Biblioteca de Mercado (quando existir) — praticamente sempre faz
+            sentido incluir. Regras são de venda e não valem pro que o cliente já tem ativo — inclua só se fizer
+            sentido pro comparativo.
+          </p>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <input type="checkbox" checked={incluirRede} onChange={(e) => setIncluirRede(e.target.checked)} />
+            Rede credenciada
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+            <input type="checkbox" checked={incluirRegras} onChange={(e) => setIncluirRegras(e.target.checked)} />
+            Regras da operadora
+          </label>
+          <div className="ls-modal-acoes">
+            <button className="ls-btn ls-btn-ghost" onClick={() => setMostrarOpcoesEstudo(false)}>
+              Cancelar
+            </button>
+            <button className="ls-btn ls-btn-ghost" onClick={() => handleGerarEstudo('essencial')}>
+              📊 Gerar Estudo Essencial
+            </button>
+            <button className="ls-btn ls-btn-primary" onClick={() => handleGerarEstudo('executivo')}>
+              📊 Gerar Estudo Executivo
+            </button>
+          </div>
+        </div>
+      )}
+
       {cotacoes.length === 0 ? (
         <p className="cliente-vazio">Nenhuma cotação registrada ainda.</p>
       ) : (
@@ -908,6 +991,18 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                       </div>
                     )}
                     <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
+                      {/* Etapa 4 (21/08) — seleção pro Estudo, separada
+                          de Recomendada/Cenário Atual (que são tags
+                          permanentes da Cotação). Essa é só "inclui no
+                          PDF que estou montando agora". */}
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.85rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={selecionadasParaEstudo.has(cot.id)}
+                          onChange={() => alternarSelecaoEstudo(cot.id)}
+                        />
+                        Incluir no Estudo
+                      </label>
                       {podeFechar && (
                         <button
                           className="cliente-tabela-btn"
