@@ -636,17 +636,20 @@ const ROTULO_STATUS_COTACAO = {
  * propósito (arquivo diferente, sem import cruzado entre features/crm
  * e components/multicalculo) em vez de compartilhada, pra não criar
  * acoplamento entre as duas telas por causa de um detalhe visual.
+ *
+ * ATUALIZADO (21/08) — `tamanho="grande"` (achado real: no cabeçalho
+ * compacto do card o logo pequeno ficava difícil de ver). Movido pra
+ * dentro da linha de botões, empurrado pro canto direito (`margin-left:
+ * auto` na classe grande) — é onde sobrava espaço vazio de verdade.
  */
-function LogoOperadoraCotacao({ logoInfo }) {
+function LogoOperadoraCotacao({ logoInfo, tamanho = 'normal' }) {
   if (!logoInfo?.logo_url) return null
-  const classeChip =
-    logoInfo.logo_fundo_chip === 'claro'
-      ? 'selecao-planos-logo-chip selecao-planos-logo-chip-claro'
-      : logoInfo.logo_fundo_chip === 'escuro'
-        ? 'selecao-planos-logo-chip selecao-planos-logo-chip-escuro'
-        : 'selecao-planos-logo-chip'
+  const classes = ['selecao-planos-logo-chip']
+  if (logoInfo.logo_fundo_chip === 'claro') classes.push('selecao-planos-logo-chip-claro')
+  else if (logoInfo.logo_fundo_chip === 'escuro') classes.push('selecao-planos-logo-chip-escuro')
+  if (tamanho === 'grande') classes.push('selecao-planos-logo-chip-grande')
   return (
-    <span className={classeChip}>
+    <span className={classes.join(' ')}>
       <img src={logoInfo.logo_url} alt="" className="selecao-planos-logo-img" />
     </span>
   )
@@ -873,8 +876,8 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                 return (
                   <div key={cot.id} className={`ls-card cotacao-item${cot.recomendada ? ' cotacao-item-recomendada' : ''}`}>
                     <div className="cotacao-item-header">
-                      <LogoOperadoraCotacao logoInfo={logosPorOperadoraId.get(cot.operadora_id)} />
                       <strong>{cot.operadora_nome_livre}</strong>
+                      {cot.plano && <span className="cotacao-item-plano">{cot.plano}</span>}
                       <span className="ls-badge ls-badge-prospect">{cot.porte}</span>
                       <span>{cot.numero_vidas} vidas</span>
                       <span>{formatarDataBR(cot.data_cotacao)}</span>
@@ -961,6 +964,7 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                       <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(cot.id)}>
                         Excluir
                       </button>
+                      <LogoOperadoraCotacao logoInfo={logosPorOperadoraId.get(cot.operadora_id)} tamanho="grande" />
                     </div>
                   </div>
                 )

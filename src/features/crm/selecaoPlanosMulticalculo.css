@@ -583,3 +583,18 @@
   object-fit: contain;
   display: block;
 }
+
+/* Variante grande do chip de logo — usada no card de Cotação
+   (ClienteDetailPage.jsx), na linha de botões, empurrada pro canto
+   direito (achado real: logo pequeno no cabeçalho compacto ficava
+   difícil de ver; a linha de botões tinha espaço vazio sobrando). */
+.selecao-planos-logo-chip-grande {
+  height: 40px;
+  padding: 0 0.6rem;
+  margin-left: auto;
+}
+
+.selecao-planos-logo-chip-grande .selecao-planos-logo-img {
+  height: 28px;
+  max-width: 130px;
+}

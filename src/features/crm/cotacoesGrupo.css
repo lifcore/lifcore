@@ -63,3 +63,11 @@
   font-size: 1.05rem;
   letter-spacing: 0.01em;
 }
+
+/* Sprint 3b (21/08) — nome do plano no cabeçalho do card de Cotação
+   (achado real: faltava, só mostrava a operadora). Cor discreta,
+   diferencia do nome da operadora (que fica em negrito/destaque). */
+.cotacao-item-plano {
+  color: var(--lcds-text-secondary);
+  font-style: italic;
+}
