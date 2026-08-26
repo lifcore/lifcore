@@ -38,10 +38,51 @@ export async function criarSeguradora({ nome, categoriaSeguro, observacoesComiss
   return data
 }
 
+/**
+ * Mapa de nomes de campo camelCase (como o formulário envia) para o
+ * nome real da coluna no Postgres (snake_case). `atualizarDadosSeguradora`
+ * recebia `dados` direto do formulário e repassava pro `.update()` sem
+ * converter — funcionava por acaso pros campos cuja grafia é igual nos
+ * dois formatos (nome, cnpj, site), mas quebrava em qualquer campo
+ * composto (razaoSocial, categoriaSeguro) com "column not found in
+ * schema cache". `criarSeguradora`, ao lado, já fazia essa conversão
+ * manualmente linha por linha — aqui generalizamos num mapa único,
+ * cobrindo também colunas ainda não usadas em formulário nenhum hoje,
+ * pra este mesmo bug não se repetir quando alguém adicionar um novo
+ * campo composto no futuro.
+ */
+const MAPA_CAMPOS_SEGURADORA = {
+  razaoSocial: 'razao_social',
+  categoriaSeguro: 'categoria_seguro',
+  observacoesComissionamento: 'observacoes_comissionamento',
+  tipoParceiro: 'tipo_parceiro',
+  modeloFinanceiro: 'modelo_financeiro',
+  competenciaFinanceira: 'competencia_financeira',
+  situacaoIntegracao: 'situacao_integracao',
+  logoUrl: 'logo_url',
+  logoFundoChip: 'logo_fundo_chip',
+  registroAns: 'registro_ans',
+  bibliotecaId: 'biblioteca_id',
+}
+
+/** Converte os campos conhecidos de camelCase para snake_case; qualquer
+ * chave já em snake_case (ou não reconhecida) passa direto, sem quebrar
+ * chamadas que já mandam o nome certo da coluna. */
+function normalizarCamposSeguradora(dados) {
+  const normalizado = {}
+  for (const [chave, valor] of Object.entries(dados)) {
+    normalizado[MAPA_CAMPOS_SEGURADORA[chave] ?? chave] = valor
+  }
+  return normalizado
+}
+
 /** Atualiza dados gerais de uma seguradora existente (nome, CNPJ, razão social, site) —
  * complementa atualizarObservacaoSeguradora, que cuida só do campo de comissionamento */
 export async function atualizarDadosSeguradora(operadoraId, dados) {
-  const { error } = await institucional.from('operadoras').update(dados).eq('id', operadoraId)
+  const { error } = await institucional
+    .from('operadoras')
+    .update(normalizarCamposSeguradora(dados))
+    .eq('id', operadoraId)
   if (error) throw new Error(`Erro ao atualizar seguradora: ${error.message}`)
 }
 
