@@ -11,7 +11,27 @@ import { institucional, operacional } from '../supabaseSchemas'
  *
  * Import de `institucional` e `operacional` juntos aqui de propósito —
  * `cotacoes`/`itens_cotacao`/`clientes_prospects` vivem em `operacional`,
- * a Biblioteca de Mercado (rede/regras) vive em `institucional`.
+ * a Biblioteca de Mercado (rede/regras/operadoras) vive em `institucional`.
+ *
+ * ATUALIZADO (26/08) — 3 pedidos do usuário pro primeiro Estudo
+ * Essencial de verdade:
+ *   1. Logo de cada operadora (Cenário Atual + cada proposta) — nova
+ *      função `buscarLogosOperadoras`, mesmo padrão já usado no card
+ *      de Cotação (ClienteDetailPage.jsx).
+ *   2. Logo da LifitSeg na capa/fechamento — fica no arquivo de HTML
+ *      (estudoEssencialPdfService.js), não precisa de dado do banco,
+ *      é URL fixa.
+ *   3. Contagem de prestadores por plano — reaproveita a mesma busca
+ *      de rede que já existia (buscarRedeDoPlano), só passou a contar
+ *      e guardar o total. Separação Hospital×Laboratório ainda não dá
+ *      (coluna `categoria` não existe em `mercado_saude_rede_prestadores`
+ *      hoje — achado real, 25/08) — fica só o total por enquanto,
+ *      documentado como limitação conhecida, não escondido.
+ *
+ * Bônus (mesma atualização): `coparticipacao_tipo` estava fixo como
+ * '—' — a Cotação já carrega esse dado real (coluna adicionada 25/08),
+ * e já vinha junto no `select('*, ...')` de `buscarCotacoesParaEstudo`
+ * sem custo extra de consulta — só não estava sendo lido.
  */
 
 /** Busca as Cotações selecionadas pelo corretor nos cards, com os
@@ -66,8 +86,9 @@ export function calcularTotalCombinado(cotacoesAtuais) {
 
 /** Rede credenciada do plano vinculado na Biblioteca de Mercado — só
  *  existe quando `plano_biblioteca_id` foi escolhido no Registro Manual
- *  (vínculo opcional, ver CotacaoForm.jsx). Mesmo padrão de consulta já
- *  usado em `montarResumoRede` (motorSmartQuoteService.js). */
+ *  (vínculo opcional, ver CotacaoForm.jsx) OU vem do Multicálculo (já
+ *  corrigido 25/08). Mesmo padrão de consulta já usado em
+ *  `montarResumoRede` (motorSmartQuoteService.js). */
 export async function buscarRedeDoPlano(planoBibliotecaId) {
   if (!planoBibliotecaId) return []
   const { data, error } = await institucional
@@ -92,6 +113,20 @@ export async function buscarRegrasDaOperadora(operadoraId) {
   return data ?? []
 }
 
+/** NOVO (26/08) — logo de cada operadora envolvida no Estudo, em lote
+ *  (1 consulta só, não 1 por coluna) — mesmo padrão do card de Cotação
+ *  (ClienteDetailPage.jsx, `logosPorOperadoraId`). */
+export async function buscarLogosOperadoras(operadoraIds) {
+  const idsUnicos = [...new Set((operadoraIds ?? []).filter(Boolean))]
+  if (idsUnicos.length === 0) return new Map()
+  const { data, error } = await institucional
+    .from('operadoras')
+    .select('id, nome, logo_url, logo_fundo_chip')
+    .in('id', idsUnicos)
+  if (error) throw new Error(`Erro ao buscar logos das operadoras: ${error.message}`)
+  return new Map((data ?? []).map((o) => [o.id, o]))
+}
+
 export async function buscarClienteDoEstudo(clienteProspectId) {
   const { data, error } = await operacional
     .from('clientes_prospects')
@@ -104,24 +139,23 @@ export async function buscarClienteDoEstudo(clienteProspectId) {
 
 /**
  * Monta `dados` no formato que `gerarHtmlEstudoEssencial` já espera
- * (estudoEssencialPdfService.js — esse arquivo não muda nada, só a
- * fonte do dado). Sem `montarDadosEstudoEssencial` antigo (vivia em
- * `estudoEssencialService.js`, não tive acesso) — reescrito do zero
- * aqui, seguindo exatamente a mesma "forma" que o gerador de HTML lê.
+ * (estudoEssencialPdfService.js — esse arquivo não muda nada na
+ * estrutura, só a fonte do dado e o que cada célula recebe).
  *
  * Achado (21/08): o Registro Manual (CotacaoForm.jsx) não coleta mais
- * acomodação/coparticipação/reembolso/carência/abrangência como texto
- * livre (esses campos existiam no antigo CenarioAtualForm embutido,
- * removido na Etapa 2) — por isso ficam "—" quando não dá pra derivar
- * do `plano_biblioteca_id` vinculado. Só `acomodacao` dá pra puxar de
- * verdade hoje (existe na Biblioteca de Mercado); os outros ficam como
- * limitação conhecida, registrada aqui — não inventei dado nenhum pra
- * preencher isso.
+ * reembolso/carência/abrangência como texto livre (existiam no antigo
+ * CenarioAtualForm embutido, removido na Etapa 2) — por isso ficam "—"
+ * quando não dá pra derivar do `plano_biblioteca_id` vinculado. Isso
+ * continua sendo limitação conhecida, registrada aqui — não inventa
+ * dado pra preencher.
  */
 export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = true, incluirRegras = false }) {
   const cotacoesSelecionadas = await buscarCotacoesParaEstudo(cotacaoIds)
   const cliente = await buscarClienteDoEstudo(cotacoesSelecionadas[0].cliente_prospect_id)
   const { atuais, propostasOrdenadas } = separarAtuaisEPropostas(cotacoesSelecionadas)
+
+  const operadoraIdsEnvolvidas = [...atuais, ...propostasOrdenadas].map((c) => c.operadora_id).filter(Boolean)
+  const logosPorOperadora = await buscarLogosOperadoras(operadoraIdsEnvolvidas)
 
   async function buscarAcomodacao(planoBibliotecaId) {
     if (!planoBibliotecaId) return '—'
@@ -129,20 +163,35 @@ export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = tru
     return data?.acomodacao ?? '—'
   }
 
+  /** NOVO (26/08) — total de prestadores na rede do plano, reaproveita
+   *  a mesma busca que já existia pra montar a rede por região (só
+   *  quando incluirRede está ligado — senão não faz sentido buscar
+   *  algo que não vai aparecer no PDF). Sem separação Hospital×Lab
+   *  ainda (ver nota no topo do arquivo). */
+  async function contarPrestadores(planoBibliotecaId) {
+    if (!incluirRede || !planoBibliotecaId) return null
+    const rede = await buscarRedeDoPlano(planoBibliotecaId)
+    return new Set(rede.map((r) => r.prestador?.nome).filter(Boolean)).size
+  }
+
   let colunaAtual = null
   if (atuais.length === 1) {
     const c = atuais[0]
     const t = calcularTotaisCotacao(c)
+    const totalPrestadores = await contarPrestadores(c.plano_biblioteca_id)
+    const logo = logosPorOperadora.get(c.operadora_id) ?? null
     colunaAtual = {
       operadoraPlano: `${c.operadora_nome_livre}${c.plano ? ' — ' + c.plano : ''}`,
       custoMensal: t.totalMensal,
       custoAnual: t.totalAnual,
       acomodacao: await buscarAcomodacao(c.plano_biblioteca_id),
-      coparticipacao: '—',
+      coparticipacao: c.coparticipacao_tipo ?? '—',
       reembolso: '—',
       carencia: '—',
       abrangencia: '—',
-      redeResumo: '—',
+      redeResumo: totalPrestadores != null ? `${totalPrestadores} prestador${totalPrestadores === 1 ? '' : 'es'} na rede` : '—',
+      logoUrl: logo?.logo_url ?? null,
+      logoFundo: logo?.logo_fundo_chip ?? null,
     }
   } else if (atuais.length > 1) {
     const total = calcularTotalCombinado(atuais)
@@ -156,12 +205,18 @@ export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = tru
       carencia: '—',
       abrangencia: '—',
       redeResumo: '—',
+      // Vários planos combinados = vários operadoras = sem 1 logo
+      // único pra representar a coluna. Fica sem logo, de propósito.
+      logoUrl: null,
+      logoFundo: null,
     }
   }
 
   const colunasPropostas = []
   for (const cot of propostasOrdenadas) {
     const t = calcularTotaisCotacao(cot)
+    const totalPrestadores = await contarPrestadores(cot.plano_biblioteca_id)
+    const logo = logosPorOperadora.get(cot.operadora_id) ?? null
     colunasPropostas.push({
       operadoraPlano: `${cot.operadora_nome_livre}${cot.plano ? ' — ' + cot.plano : ''}`,
       papel: cot.recomendada ? 'recomendada' : 'outra',
@@ -169,11 +224,11 @@ export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = tru
       custoAnual: t.totalAnual,
       fontePreco: cot.plano_biblioteca_id ? 'Biblioteca de Mercado' : 'Digitado manualmente',
       acomodacao: await buscarAcomodacao(cot.plano_biblioteca_id),
-      coparticipacao: '—',
+      coparticipacao: cot.coparticipacao_tipo ?? '—',
       reembolso: '—',
       carencia: '—',
       abrangencia: '—',
-      redeResumo: '—',
+      redeResumo: totalPrestadores != null ? `${totalPrestadores} prestador${totalPrestadores === 1 ? '' : 'es'} na rede` : '—',
       statusPrecificacao: 'aplicavel',
       motivoPrecificacao: null,
       avisoVinculo: cot.plano_biblioteca_id
@@ -181,6 +236,8 @@ export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = tru
         : 'Sem vínculo com a Biblioteca de Mercado — preço digitado manualmente, sem rede vinculada.',
       planoVarianteId: cot.plano_biblioteca_id ?? cot.id,
       operadoraId: cot.operadora_id ?? null,
+      logoUrl: logo?.logo_url ?? null,
+      logoFundo: logo?.logo_fundo_chip ?? null,
     })
   }
 
@@ -244,6 +301,12 @@ export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = tru
  * (estudoMercadoPdfService.js). Mesma ideia do Essencial acima — só a
  * fonte do dado muda, o HTML/visual não é tocado (exceto o texto
  * "Premium" → "Executivo", feito à parte nesse arquivo).
+ *
+ * Logo/prestadores/coparticipação do Executivo ficam pra quando esse
+ * arquivo entrar em revisão — hoje ele não tem os campos correspondentes
+ * no template de PDF ainda (estudoMercadoPdfService.js não visto nesta
+ * sessão), então não adianto sem saber se o template já tem onde
+ * exibir. Sinalizado, não implementado às cegas.
  */
 export async function montarDadosEstudoExecutivo({ cotacaoIds, incluirRede = true, incluirRegras = false }) {
   const cotacoesSelecionadas = await buscarCotacoesParaEstudo(cotacaoIds)

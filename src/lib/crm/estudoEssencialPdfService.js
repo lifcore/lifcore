@@ -18,6 +18,23 @@ function escapeHtml(v) {
   return String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 }
 
+// NOVO (26/08) — logo da LifitSeg, usado na capa e no fechamento.
+// URL fixa (mesmo padrão das operadoras: pasta `public` do site vira
+// raiz do domínio) — confirmada com o usuário.
+const LOGO_LIFITSEG = 'https://lifitseg.com.br/logo.png'
+
+/** NOVO (26/08) — logo de operadora, pra cabeçalho da tabela
+ *  comparativa. Fundo branco fixo (não reaproveita a lógica de chip
+ *  claro/escuro do app, pensada pro tema escuro da UI) — o PDF já é
+ *  fundo claro (--offwhite), uma caixa branca simples atrás do logo
+ *  garante contraste consistente pra qualquer logo, sem precisar saber
+ *  se ele foi desenhado pra fundo claro ou escuro. Sem logo cadastrado
+ *  (logoUrl null), não quebra nada — só não mostra imagem. */
+function logoOperadora(logoUrl) {
+  if (!logoUrl) return ''
+  return `<div class="logo-operadora-box"><img src="${escapeHtml(logoUrl)}" alt="" class="logo-operadora-img" /></div>`
+}
+
 function formatarMoeda(v) {
   return v == null ? 'não informado' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
@@ -40,12 +57,12 @@ function linhaComparativa(rotulo, campo, colunaAtual, colunasPropostas) {
 
 function montarTabelaComparativa(colunaAtual, colunasPropostas) {
   const cabecalhoAtual = colunaAtual
-    ? `<th><div class="papel-badge">Cenário Atual</div>${escapeHtml(colunaAtual.operadoraPlano)}</th>`
+    ? `<th>${logoOperadora(colunaAtual.logoUrl)}<div class="papel-badge">Cenário Atual</div>${escapeHtml(colunaAtual.operadoraPlano)}</th>`
     : `<th class="sub">Atual (não cadastrado)</th>`
   const cabecalhoPropostas = colunasPropostas
     .map((c, i) => {
       const papel = PAPEL_LABEL[c.papel]
-      return `<th>${papel ? `<div class="papel-badge">${papel}</div>` : ''}${escapeHtml(c.operadoraPlano)}</th>`
+      return `<th>${logoOperadora(c.logoUrl)}${papel ? `<div class="papel-badge">${papel}</div>` : ''}${escapeHtml(c.operadoraPlano)}</th>`
     })
     .join('')
 
@@ -216,13 +233,33 @@ export function gerarHtmlEstudoEssencial(dados) {
   .recomendacao-texto { font-size: 15px; line-height: 1.6; }
   ul.pontos-atencao { padding-left: 18px; font-size: 12.5px; line-height: 1.7; }
   footer.rodape { font-size: 10px; color: var(--text-soft); text-align: center; padding: 16px; }
-  @media print { body { background: #fff; } button.no-print { display: none; } }
+  /* NOVO (26/08) — logo da LifitSeg (capa + fechamento) e logo de
+     operadora (cabeçalho da tabela comparativa). */
+  .capa .logo-lifitseg { height: 40px; margin-bottom: 20px; }
+  .logo-operadora-box { background: #fff; border-radius: 6px; padding: 6px 10px; display: inline-block; margin-bottom: 6px; }
+  .logo-operadora-img { height: 22px; display: block; }
+  .fechamento { background: var(--dark); color: var(--offwhite); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
+  .fechamento .logo-lifitseg { height: 44px; margin-bottom: 22px; }
+  .fechamento .mensagem { font-size: 16px; max-width: 440px; line-height: 1.7; color: #dbe3e1; }
+  .fechamento .assinatura { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--primary); margin-top: 26px; }
+  @media print {
+    body { background: #fff; }
+    button.no-print { display: none; }
+    /* CORRIGIDO (26/08) — bug conhecido "PDF sai com fundo em branco":
+       o Chrome ignora background-color/background-image na impressão
+       por padrão, mesmo com as cores certas na pré-visualização,
+       a menos que essa propriedade force a inclusão. Resolve na
+       origem, sem depender do usuário lembrar de marcar "Imprimir
+       plano de fundo" nas opções do navegador. */
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  }
 </style>
 </head>
 <body>
   <button class="no-print" onclick="window.print()" style="position:fixed;top:16px;right:16px;padding:10px 18px;background:#C9A45A;color:#082124;border:none;border-radius:6px;cursor:pointer;font-weight:600;z-index:10;">🖨️ Imprimir / Salvar como PDF</button>
 
   <section class="capa">
+    <img src="${LOGO_LIFITSEG}" alt="LifitSeg" class="logo-lifitseg" />
     <div class="marca">LifitSeg</div>
     <h1>Estudo de Mercado — Essencial</h1>
     <p class="tagline">Uma análise objetiva para encontrar o melhor equilíbrio entre investimento, cobertura e rede.</p>
@@ -260,6 +297,12 @@ export function gerarHtmlEstudoEssencial(dados) {
   <section>
     <h2 class="titulo-secao">Observações e Metodologia</h2>
     <p class="aviso-essencial">Valores e condições são de responsabilidade das operadoras e sujeitos a alteração — este estudo não vincula a prestação do serviço, que se dá apenas na assinatura do contrato. Preços refletem a regra comercial vigente no Connect Center no momento da geração; confirme período de vigência com a operadora antes de fechar negócio.</p>
+  </section>
+
+  <section class="fechamento">
+    <img src="${LOGO_LIFITSEG}" alt="LifitSeg" class="logo-lifitseg" />
+    <p class="mensagem">Obrigado pela confiança em construir, junto com você, a melhor decisão sobre o cuidado da sua equipe.</p>
+    <div class="assinatura">LifitSeg — Corretora de Seguros</div>
   </section>
 
   <footer class="rodape">LifitSeg — Estudo de Mercado (Essencial) gerado em ${new Date(geradoEm).toLocaleDateString('pt-BR')}, a partir de dados confirmados pelo corretor responsável.</footer>
