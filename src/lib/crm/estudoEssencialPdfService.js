@@ -62,7 +62,7 @@ function montarTabelaComparativa(colunaAtual, colunasPropostas) {
   const cabecalhoPropostas = colunasPropostas
     .map((c, i) => {
       const papel = PAPEL_LABEL[c.papel]
-      return `<th>${logoOperadora(c.logoUrl)}${papel ? `<div class="papel-badge">${papel}</div>` : ''}${escapeHtml(c.operadoraPlano)}</th>`
+      return `<th>${logoOperadora(c.logoUrl)}<div class="papel-badge">${papel ?? ''}</div>${escapeHtml(c.operadoraPlano)}</th>`
     })
     .join('')
 
@@ -219,7 +219,7 @@ export function gerarHtmlEstudoEssencial(dados) {
   .linha-rotulo { font-weight: 700; color: var(--dark); white-space: nowrap; }
   .linha-custo td { font-weight: 700; }
   .fonte-preco { font-size: 10px; color: var(--text-soft); font-weight: 400; margin-top: 2px; }
-  .papel-badge { font-size: 10px; color: var(--primary); margin-bottom: 3px; }
+  .papel-badge { font-size: 10px; color: var(--primary); margin-bottom: 3px; min-height: 13px; }
   .impacto-card { display: inline-block; width: 30%; margin: 0 1.5% 16px; padding: 14px; background: #fff; border: 1px solid #e4ded1; border-radius: 8px; vertical-align: top; }
   .impacto-valor { font-size: 18px; font-weight: 700; }
   .impacto-anual { font-size: 12px; color: var(--text-soft); }
