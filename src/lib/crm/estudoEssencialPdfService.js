@@ -72,7 +72,7 @@ function montarTabelaComparativa(colunaAtual, colunasPropostas) {
     ${colunasPropostas.map((c) => `<td>${formatarMoeda(c.custoMensal)}${c.fontePreco ? `<div class="fonte-preco">${escapeHtml(c.fontePreco)}</div>` : ''}</td>`).join('')}
   </tr>`
 
-  const linhaCustoAnual = `<tr>
+  const linhaCustoAnual = `<tr class="linha-custo-anual">
     <td class="linha-rotulo">Custo anual</td>
     <td>${colunaAtual ? formatarMoeda(colunaAtual.custoAnual) : '—'}</td>
     ${colunasPropostas.map((c) => `<td>${formatarMoeda(c.custoAnual)}</td>`).join('')}
@@ -217,12 +217,13 @@ export function gerarHtmlEstudoEssencial(dados) {
   th { text-align: left; background: var(--surface); color: var(--offwhite); padding: 9px 10px; font-size: 10px; text-transform: uppercase; font-weight: 400; }
   td { padding: 9px 10px; border-bottom: 1px solid #e4ded1; vertical-align: top; }
   .linha-rotulo { font-weight: 700; color: var(--dark); white-space: nowrap; }
-  .linha-custo td { font-weight: 700; }
+  .linha-custo td { font-weight: 700; font-family: 'Helvetica Neue', Arial, sans-serif; }
+  .linha-custo-anual td { font-family: 'Helvetica Neue', Arial, sans-serif; color: var(--text-soft); }
   .fonte-preco { font-size: 10px; color: var(--text-soft); font-weight: 400; margin-top: 2px; }
   .papel-badge { font-size: 10px; color: var(--primary); margin-bottom: 3px; min-height: 13px; }
   .impacto-card { display: inline-block; width: 30%; margin: 0 1.5% 16px; padding: 14px; background: #fff; border: 1px solid #e4ded1; border-radius: 8px; vertical-align: top; }
-  .impacto-valor { font-size: 18px; font-weight: 700; }
-  .impacto-anual { font-size: 12px; color: var(--text-soft); }
+  .impacto-valor { font-size: 18px; font-weight: 700; font-family: 'Helvetica Neue', Arial, sans-serif; }
+  .impacto-anual { font-size: 12px; color: var(--text-soft); font-family: 'Helvetica Neue', Arial, sans-serif; }
   .impacto-plano { font-size: 12px; margin-top: 6px; font-weight: 700; }
   .impacto-cobertura { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
   .regiao-bloco { margin-bottom: 20px; }
