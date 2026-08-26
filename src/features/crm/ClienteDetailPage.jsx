@@ -663,6 +663,10 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
   const [cotacaoFormalizando, setCotacaoFormalizando] = useState(null)
   const [processando, setProcessando] = useState(null)
   const [erroWorkflow, setErroWorkflow] = useState(null)
+  // REDESENHO card cliente-facing (25/08) — menu de ações escondido atrás
+  // de "⋮" no canto do card; guarda o id da Cotação com o menu aberto no
+  // momento (só 1 por vez, fecha se abrir outro).
+  const [menuAbertoId, setMenuAbertoId] = useState(null)
 
   // Etapa 4 do plano "Registro Manual + Estudo de Mercado" (21/08) —
   // seleção pro Estudo é TRANSIENTE (só existe enquanto o corretor está
@@ -955,19 +959,95 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                 <p className="cotacoes-grupo-titulo">{cotacoesDoGrupo.length} opções nesta rodada de comparação</p>
               )}
 
-              {cotacoesDoGrupo.map((cot) => {
+              {/* REDESENHO (25/08) — Cenário Atual sempre em primeiro,
+                  independente da ordem de criação/vinda do banco. É a
+                  referência do cliente, faz sentido ler antes das opções. */}
+              {[...cotacoesDoGrupo]
+                .sort((a, b) => (b.eh_cenario_atual ? 1 : 0) - (a.eh_cenario_atual ? 1 : 0))
+                .map((cot) => {
                 const status = ROTULO_STATUS_COTACAO[cot.status ?? 'em_negociacao'] ?? ROTULO_STATUS_COTACAO.em_negociacao
                 const podeFechar = (cot.status ?? 'em_negociacao') === 'em_negociacao'
                 const podeFormalizar = cot.status === 'emissao'
                 const podeDesistirOuExpirar = ['em_negociacao', 'emissao'].includes(cot.status ?? 'em_negociacao')
                 const hoje = new Date().toISOString().slice(0, 10)
                 const venceu = cot.validade && cot.validade < hoje
+                const totalCotacao = (cot.itens_cotacao ?? []).reduce(
+                  (soma, item) => soma + (item.quantidade_vidas ?? 0) * Number(item.valor ?? 0),
+                  0
+                )
+                const menuAberto = menuAbertoId === cot.id
 
                 return (
                   <div
                     key={cot.id}
                     className={`ls-card cotacao-item${cot.recomendada ? ' cotacao-item-recomendada' : ''}${cot.eh_cenario_atual ? ' cotacao-item-cenario-atual' : ''}`}
+                    style={{ position: 'relative' }}
                   >
+                    {/* REDESENHO (25/08) — menu de ações escondido atrás de
+                        "⋮". Fecha sozinho depois de qualquer ação (cada
+                        handle* já chama onAtualizado, que remonta a lista). */}
+                    <button
+                      className="cotacao-item-menu-gatilho"
+                      onClick={() => setMenuAbertoId(menuAberto ? null : cot.id)}
+                      aria-label="Mais ações"
+                      title="Mais ações"
+                    >
+                      ⋮
+                    </button>
+                    {menuAberto && (
+                      <div className="cotacao-item-menu" onMouseLeave={() => setMenuAbertoId(null)}>
+                        {podeFechar && (
+                          <button
+                            className="cotacao-item-menu-item"
+                            disabled={processando === cot.id}
+                            onClick={() => { setMenuAbertoId(null); handleFechar(cot.id) }}
+                          >
+                            {processando === cot.id ? '...' : 'Fechar com esta (ir pra Emissão)'}
+                          </button>
+                        )}
+                        {podeFormalizar && (
+                          <button
+                            className="cotacao-item-menu-item"
+                            disabled={processando === cot.id}
+                            onClick={() => { setMenuAbertoId(null); setCotacaoFormalizando(cot) }}
+                          >
+                            {processando === cot.id ? '...' : 'Formalizar Contrato'}
+                          </button>
+                        )}
+                        {podeDesistirOuExpirar && venceu && (
+                          <button
+                            className="cotacao-item-menu-item"
+                            disabled={processando === cot.id}
+                            onClick={() => { setMenuAbertoId(null); handleExpirar(cot.id) }}
+                          >
+                            {processando === cot.id ? '...' : 'Marcar Expirada'}
+                          </button>
+                        )}
+                        {podeFechar && (
+                          <button
+                            className="cotacao-item-menu-item"
+                            disabled={processando === cot.id}
+                            onClick={() => { setMenuAbertoId(null); handleAlternarRecomendada(cot.id, cot.recomendada) }}
+                          >
+                            {cot.recomendada ? '★ Desmarcar recomendada' : '☆ Marcar como recomendada'}
+                          </button>
+                        )}
+                        <button
+                          className="cotacao-item-menu-item"
+                          disabled={processando === cot.id}
+                          onClick={() => { setMenuAbertoId(null); handleAlternarCenarioAtual(cot.id, cot.eh_cenario_atual) }}
+                        >
+                          {cot.eh_cenario_atual ? '☑ Desmarcar cenário atual' : '☐ Marcar como cenário atual'}
+                        </button>
+                        <button
+                          className="cotacao-item-menu-item cotacao-item-menu-item-perigo"
+                          onClick={() => { setMenuAbertoId(null); handleExcluir(cot.id) }}
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    )}
+
                     <div className="cotacao-item-header">
                       <strong>{cot.operadora_nome_livre}</strong>
                       {cot.plano && <span className="cotacao-item-plano">{cot.plano}</span>}
@@ -978,14 +1058,10 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                       {cot.recomendada && <span className="ls-badge cotacao-badge-recomendada">★ Recomendada</span>}
                       {cot.eh_cenario_atual && <span className="ls-badge cotacao-badge-cenario-atual">📍 Cenário Atual</span>}
                     </div>
+
                     {cot.itens_cotacao?.length > 0 && (
                       <div className="cotacao-item-valores">
                         {cot.itens_cotacao.map((item) => {
-                          // ACHADO (21/08): mostrava só o valor unitário por
-                          // vida, nunca multiplicava por quantidade_vidas —
-                          // quem tinha 2+ vidas na mesma faixa via o preço de
-                          // 1 pessoa só. Mesmo padrão de soma já usado pra
-                          // Contratos (totalValor, mais acima neste arquivo).
                           const subtotalFaixa = (item.quantidade_vidas ?? 0) * Number(item.valor ?? 0)
                           return (
                             <span key={item.id} className="cotacao-item-valor">
@@ -993,86 +1069,40 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                             </span>
                           )
                         })}
-                        <span className="cotacao-item-valor cotacao-item-valor-total">
-                          Total: R${' '}
-                          {cot.itens_cotacao
-                            .reduce((soma, item) => soma + (item.quantidade_vidas ?? 0) * Number(item.valor ?? 0), 0)
-                            .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
                       </div>
                     )}
+
+                    {/* REDESENHO (25/08) — Total maior, linha própria logo
+                        acima do logo (vitrine pro cliente, não só ferramenta
+                        de trabalho do corretor). TODO: espaço reservado ao
+                        lado do Total pra Acomodação/Coparticipação/Qtd de
+                        prestadores — depende de buscar o plano vinculado
+                        (cot.plano_biblioteca_id) na Biblioteca de Mercado,
+                        ainda não implementado nesta entrega. */}
+                    <div className="cotacao-item-destaque">
+                      <span className="cotacao-item-total-grande">
+                        R$ {totalCotacao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                      <LogoOperadoraCotacao logoInfo={logosPorOperadoraId.get(cot.operadora_id)} tamanho="grande" />
+                    </div>
+
                     {cot.contrato_id && (
                       <div className="kpi-detalhe" style={{ margin: '0.25rem 0 0' }}>
                         Contrato gerado — veja em Contratos
                       </div>
                     )}
-                    <div className="cliente-tabela-acoes" style={{ marginTop: '0.6rem' }}>
-                      {/* Etapa 4 (21/08) — seleção pro Estudo, separada
-                          de Recomendada/Cenário Atual (que são tags
-                          permanentes da Cotação). Essa é só "inclui no
-                          PDF que estou montando agora". */}
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.85rem' }}>
-                        <input
-                          type="checkbox"
-                          checked={selecionadasParaEstudo.has(cot.id)}
-                          onChange={() => alternarSelecaoEstudo(cot.id)}
-                        />
-                        Incluir no Estudo
-                      </label>
-                      {podeFechar && (
-                        <button
-                          className="cliente-tabela-btn"
-                          disabled={processando === cot.id}
-                          onClick={() => handleFechar(cot.id)}
-                        >
-                          {processando === cot.id ? '...' : 'Fechar com esta (ir pra Emissão)'}
-                        </button>
-                      )}
-                      {podeFormalizar && (
-                        <button
-                          className="cliente-tabela-btn"
-                          disabled={processando === cot.id}
-                          onClick={() => setCotacaoFormalizando(cot)}
-                        >
-                          {processando === cot.id ? '...' : 'Formalizar Contrato'}
-                        </button>
-                      )}
-                      {podeDesistirOuExpirar && venceu && (
-                        <button
-                          className="cliente-tabela-btn"
-                          disabled={processando === cot.id}
-                          onClick={() => handleExpirar(cot.id)}
-                        >
-                          {processando === cot.id ? '...' : 'Marcar Expirada'}
-                        </button>
-                      )}
-                      {podeFechar && (
-                        <button
-                          className="cliente-tabela-btn"
-                          disabled={processando === cot.id}
-                          onClick={() => handleAlternarRecomendada(cot.id, cot.recomendada)}
-                        >
-                          {cot.recomendada ? '★ Desmarcar recomendada' : '☆ Marcar como recomendada'}
-                        </button>
-                      )}
-                      {/* Etapa 3 do plano "Registro Manual + Estudo de
-                          Mercado" (21/08) — independente de Recomendada
-                          e de status; é um marcador descritivo ("isso é
-                          o que o cliente já tem hoje"), não uma ação de
-                          workflow, por isso sem a mesma trava de
-                          `podeFechar`. */}
-                      <button
-                        className="cliente-tabela-btn"
-                        disabled={processando === cot.id}
-                        onClick={() => handleAlternarCenarioAtual(cot.id, cot.eh_cenario_atual)}
-                      >
-                        {cot.eh_cenario_atual ? '☑ Desmarcar cenário atual' : '☐ Marcar como cenário atual'}
-                      </button>
-                      <button className="cliente-tabela-btn cliente-tabela-btn-perigo" onClick={() => handleExcluir(cot.id)}>
-                        Excluir
-                      </button>
-                      <LogoOperadoraCotacao logoInfo={logosPorOperadoraId.get(cot.operadora_id)} tamanho="grande" />
-                    </div>
+
+                    {/* Etapa 4 (21/08) — continua visível fora do menu, de
+                        propósito: é usada repetidamente ao montar um
+                        Estudo, esconder atrás de "⋮" atrapalharia o fluxo. */}
+                    <label className="cotacao-item-incluir-estudo">
+                      <input
+                        type="checkbox"
+                        checked={selecionadasParaEstudo.has(cot.id)}
+                        onChange={() => alternarSelecaoEstudo(cot.id)}
+                      />
+                      Incluir no Estudo
+                    </label>
                   </div>
                 )
               })}

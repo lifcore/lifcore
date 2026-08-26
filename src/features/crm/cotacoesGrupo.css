@@ -88,3 +88,95 @@
   color: var(--lcds-text-secondary);
   border: 1px solid var(--lcds-text-secondary);
 }
+
+/* REDESENHO card cliente-facing (25/08) — 3 mudanças pedidas pelo
+   usuário: Total maior numa linha própria acima do logo, botões de
+   ação escondidos atrás de "⋮" (menu flutuante), e Cenário Atual
+   sempre ordenado primeiro (isso é JS, em ClienteDetailPage.jsx, não
+   precisa de CSS). O objetivo é o card servir tanto de ferramenta do
+   corretor quanto de vitrine que dá pra printar/mostrar pro cliente. */
+
+.cotacao-item-menu-gatilho {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  background: transparent;
+  color: var(--lcds-text-secondary);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--lcds-radius);
+}
+
+.cotacao-item-menu-gatilho:hover {
+  background: var(--lcds-surface-card-hover);
+  color: var(--lcds-text-primary);
+}
+
+.cotacao-item-menu {
+  position: absolute;
+  top: 2.15rem;
+  right: 0.5rem;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 15rem;
+  background: var(--lcds-surface-card);
+  border: 1px solid var(--lcds-border-strong);
+  border-radius: var(--lcds-radius);
+  box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.cotacao-item-menu-item {
+  padding: 0.55rem 0.85rem;
+  border: none;
+  background: transparent;
+  color: var(--lcds-text-primary);
+  text-align: left;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.cotacao-item-menu-item:hover {
+  background: var(--lcds-surface-card-hover);
+}
+
+.cotacao-item-menu-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cotacao-item-menu-item-perigo {
+  color: var(--lcds-danger, #d64545);
+  border-top: 1px solid var(--lcds-border-strong);
+}
+
+.cotacao-item-destaque {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--lcds-border-strong);
+}
+
+.cotacao-item-total-grande {
+  color: var(--lcds-gold);
+  font-weight: 800;
+  font-size: 1.6rem;
+  letter-spacing: 0.01em;
+}
+
+.cotacao-item-incluir-estudo {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--lcds-text-secondary);
+}
