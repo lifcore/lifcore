@@ -63,20 +63,8 @@ const LIMITE_VIDAS_MULTICALCULO = 99
  *   operadoraCodigo: nome/código da operadora pra filtrar uma só (opcional)
  */
 export async function buscarPlanosElegiveis({ regiaoId = null, regiaoNome = null, operadoraCodigo = null } = {}) {
-  let query = institucional
-    .from('mercado_saude_planos')
-    .select(
-      `
-      plano_id, nome, acomodacao, linha, status,
-      operadoras:operadora_id ( id, nome, logo_url, logo_fundo_chip ),
-      regioes_tarifarias:regiao_tarifaria_id ( id, nome )
-    `
-    )
-    .eq('status', 'ativo')
-
-  if (regiaoId) {
-    query = query.eq('regiao_tarifaria_id', regiaoId)
-  } else if (regiaoNome) {
+  let regiaoIdResolvido = regiaoId
+  if (!regiaoId && regiaoNome) {
     // filtra depois de buscar o id, pra não depender de embed filtrável
     const { data: regiao, error: erroRegiao } = await institucional
       .from('regioes_tarifarias')
@@ -85,9 +73,10 @@ export async function buscarPlanosElegiveis({ regiaoId = null, regiaoNome = null
       .maybeSingle()
     if (erroRegiao) throw new Error(`Erro buscando região "${regiaoNome}": ${erroRegiao.message}`)
     if (!regiao) return { planos: [], motivo: `Nenhuma região tarifária encontrada com nome "${regiaoNome}".` }
-    query = query.eq('regiao_tarifaria_id', regiao.id)
+    regiaoIdResolvido = regiao.id
   }
 
+  let operadoraIdResolvido = null
   if (operadoraCodigo) {
     const { data: operadora, error: erroOperadora } = await institucional
       .from('operadoras')
@@ -97,21 +86,49 @@ export async function buscarPlanosElegiveis({ regiaoId = null, regiaoNome = null
       .maybeSingle()
     if (erroOperadora) throw new Error(`Erro buscando operadora "${operadoraCodigo}": ${erroOperadora.message}`)
     if (!operadora) return { planos: [], motivo: `Nenhuma operadora ativa encontrada com nome "${operadoraCodigo}".` }
-    query = query.eq('operadora_id', operadora.id)
+    operadoraIdResolvido = operadora.id
   }
 
-  // ACHADO (21/08, tarde): essa consulta nunca teve .range() explícito —
-  // só a batelada de preços/rede tinha sido corrigida antes. Diagnóstico
-  // com SQL direto confirmou que o BANCO tem os 163 planos elegíveis
-  // certinhos nas 12 operadoras (dado 100% correto) — então se algumas
-  // sumiam da tela mesmo assim, só podia ser aqui: o teto padrão de
-  // linhas do Supabase cortando a lista ANTES de eu nem chegar na parte
-  // que já tinha corrigido. 999 é generoso pra hoje (163 reais) e sobra
-  // espaço grande pra quando o catálogo crescer.
-  const { data: planos, error } = await query.order('nome').range(0, 999)
-  if (error) throw new Error(`Erro buscando planos elegíveis: ${error.message}`)
+  // CORRIGIDO (25/08) — antes reaproveitava a mesma variável `query`
+  // (builder já com filtros aplicados) em cada volta do loop de
+  // paginação — arriscado, builder do Supabase não é garantidamente
+  // seguro pra reusar depois de já ter sido resolvido numa consulta
+  // anterior. Agora monta uma consulta NOVA a cada página, sempre com
+  // os mesmos filtros (região/operadora já resolvidos acima, fora do
+  // loop, pra não repetir aquelas idas ao banco a cada página).
+  //
+  // Também corrigido o `.range()` de tamanho fixo (mesmo padrão frágil
+  // que já quebrou 2 vezes em buscarCotacoesEmLote): pagina de verdade,
+  // continua buscando até a página vir menor que o pedido, em vez de
+  // confiar que o catálogo nunca vai passar de um teto fixo.
+  function montarConsultaPagina(inicio, fim) {
+    let q = institucional
+      .from('mercado_saude_planos')
+      .select(
+        `
+        plano_id, nome, acomodacao, linha, status,
+        operadoras:operadora_id ( id, nome, logo_url, logo_fundo_chip ),
+        regioes_tarifarias:regiao_tarifaria_id ( id, nome )
+      `
+      )
+      .eq('status', 'ativo')
+    if (regiaoIdResolvido) q = q.eq('regiao_tarifaria_id', regiaoIdResolvido)
+    if (operadoraIdResolvido) q = q.eq('operadora_id', operadoraIdResolvido)
+    return q.order('nome').range(inicio, fim)
+  }
 
-  return { planos: planos ?? [], motivo: null }
+  const PAGINA = 999
+  let inicio = 0
+  const todosPlanos = []
+  while (true) {
+    const { data: pagina, error } = await montarConsultaPagina(inicio, inicio + PAGINA - 1)
+    if (error) throw new Error(`Erro buscando planos elegíveis: ${error.message}`)
+    todosPlanos.push(...(pagina ?? []))
+    if (!pagina || pagina.length < PAGINA) break
+    inicio += PAGINA
+  }
+
+  return { planos: todosPlanos, motivo: null }
 }
 
 /**
@@ -150,18 +167,36 @@ function dividirEmLotes(array, tamanho) {
 }
 
 /** Roda a mesma consulta `.in(coluna, valores)` em vários lotes e junta
- *  os resultados — resiliente a listas grandes (evita estourar URL) e a
- *  operadoras densas (evita estourar o teto de linhas por resposta do
- *  servidor, que não é sobrescrevível só com `.range()` maior do lado
- *  do código — só reduzindo o tamanho do lote de verdade). Sequencial
- *  (não em paralelo) — mais lento, mas simples e confiável. */
+ *  os resultados — resiliente a listas grandes (evita estourar URL).
+ *
+ *  CORRIGIDO (25/08) — a versão antiga confiava num TAMANHO_LOTE fixo
+ *  pra nunca passar do teto de 1000 linhas por resposta do Supabase
+ *  (calculado pra caber a operadora mais densa da época, SulAmérica).
+ *  Quebrou de novo ao adicionar a 13ª/14ª operadora — silencioso, sem
+ *  erro nenhum, só sumindo planos/operadoras da tela (o mesmo sintoma
+ *  de antes). Chutar um "tamanho seguro" não escala: cada operadora
+ *  nova pode ser mais densa que a anterior, e o bug sempre volta.
+ *
+ *  Agora `montarConsulta` recebe também o início/fim do intervalo, e
+ *  esta função pagina de verdade DENTRO de cada lote — continua
+ *  buscando em janelas de 1000 até a resposta vir com MENOS linhas do
+ *  que o pedido (só aí sabemos que não sobrou nada). Resolve o teto do
+ *  servidor na raiz — não depende mais de adivinhar densidade por
+ *  operadora, então não quebra de novo quando a 15ª/16ª/... operadora
+ *  entrar no catálogo. */
 async function buscarEmLotesDeValores(valores, tamanhoDoLote, montarConsulta) {
   const lotes = dividirEmLotes(valores, tamanhoDoLote)
+  const PAGINA = 1000
   const linhas = []
   for (const lote of lotes) {
-    const { data, error } = await montarConsulta(lote)
-    if (error) throw error
-    linhas.push(...(data ?? []))
+    let inicio = 0
+    while (true) {
+      const { data, error } = await montarConsulta(lote, inicio, inicio + PAGINA - 1)
+      if (error) throw error
+      linhas.push(...(data ?? []))
+      if (!data || data.length < PAGINA) break
+      inicio += PAGINA
+    }
   }
   return linhas
 }
@@ -177,31 +212,32 @@ async function buscarCotacoesEmLote(planosBase) {
   //
   // ATUALIZADO (21/08, 2ª correção) — achado mais sério: o teto de 1000
   // linhas por resposta é do SERVIDOR (Supabase), não algo que dá pra
-  // sobrescrever só pedindo `.range()` maior do lado do código — o
-  // `.range(0, 19999)` que coloquei antes NÃO estava tendo efeito de
-  // verdade. Com lotes de 40 planos misturando operadoras densas
-  // (Notredame, SulAmérica — o mesmo plano repetido em dezenas de
-  // combinações de preço), UM lote sozinho já passava do teto do
-  // servidor, cortando o resto sem erro nenhum. Reduzido pra 5 planos
-  // por lote — folga grande mesmo pra operadora mais densa que temos
-  // hoje (SulAmérica, ~240 linhas por plano em média; 5 planos densos
-  // juntos não chegam nem perto de 1000).
+  // sobrescrever só pedindo `.range()` maior do lado do código.
+  //
+  // ATUALIZADO (25/08, 3ª correção) — a 2ª correção (lote de 5 planos)
+  // quebrou de novo com a 13ª/14ª operadora, mais densa que a
+  // SulAmérica (a mais densa até então). `buscarEmLotesDeValores` agora
+  // pagina de verdade dentro de cada lote (ver comentário na função) —
+  // TAMANHO_LOTE aqui só existe pra não estourar o tamanho da URL
+  // (motivo original da 1ª correção), não precisa mais ser pequeno o
+  // suficiente pra nunca passar de 1000 linhas — isso quem resolve
+  // agora é a paginação, não o tamanho do lote.
   const TAMANHO_LOTE = 5
   let todosPrecos, todaRede
   try {
     // Sequencial (não Promise.all) — eliminado paralelismo enquanto
     // investigávamos outra hipótese; mantido por segurança.
-    todosPrecos = await buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote) =>
+    todosPrecos = await buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote, inicio, fim) =>
       institucional
         .from('mercado_saude_precos')
         .select(
           'plano_id, segmentacao, familia_tarifaria, faixa_etaria, valor, vidas_min, vidas_max, mei, coparticipacao_tipo, tipo_contratacao'
         )
         .in('plano_id', lote)
-        .range(0, 19999)
+        .range(inicio, fim)
     )
-    todaRede = await buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote) =>
-      institucional.from('mercado_saude_rede_cobertura').select('plano_id').in('plano_id', lote).range(0, 19999)
+    todaRede = await buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote, inicio, fim) =>
+      institucional.from('mercado_saude_rede_cobertura').select('plano_id').in('plano_id', lote).range(inicio, fim)
     )
   } catch (erro) {
     throw new Error(`Erro buscando preços/rede em lote: ${erro.message}`)
@@ -230,16 +266,28 @@ async function buscarCotacoesEmLote(planosBase) {
   }
 
   const operadoraIdsUnicos = [...new Set(planosBase.map((p) => p.operadoras?.id).filter(Boolean))]
-  const { data: todasRegras, error: erroRegras } =
-    operadoraIdsUnicos.length > 0
-      ? await institucional
-          .from('mercado_saude_regras')
-          .select('operadora_id, tipo, conteudo')
-          .in('operadora_id', operadoraIdsUnicos)
-          .order('tipo')
-          .range(0, 4999)
-      : { data: [], error: null }
-  if (erroRegras) throw new Error(`Erro buscando regras em lote: ${erroRegras.message}`)
+  // CORRIGIDO (25/08) — mesmo padrão dos outros pontos deste arquivo:
+  // `.range(0, 4999)` não é garantia real contra o teto de 1000 linhas
+  // por resposta do servidor. Regras são poucas linhas por operadora
+  // hoje, risco baixo na prática, mas paginado por consistência — não
+  // custa nada e evita reabrir essa investigação de novo no futuro.
+  let todasRegras = []
+  if (operadoraIdsUnicos.length > 0) {
+    const PAGINA_REGRAS = 1000
+    let inicioRegras = 0
+    while (true) {
+      const { data: paginaRegras, error: erroRegras } = await institucional
+        .from('mercado_saude_regras')
+        .select('operadora_id, tipo, conteudo')
+        .in('operadora_id', operadoraIdsUnicos)
+        .order('tipo')
+        .range(inicioRegras, inicioRegras + PAGINA_REGRAS - 1)
+      if (erroRegras) throw new Error(`Erro buscando regras em lote: ${erroRegras.message}`)
+      todasRegras.push(...(paginaRegras ?? []))
+      if (!paginaRegras || paginaRegras.length < PAGINA_REGRAS) break
+      inicioRegras += PAGINA_REGRAS
+    }
+  }
 
   const regrasPorOperadora = new Map()
   for (const r of todasRegras ?? []) {
@@ -446,10 +494,27 @@ async function montarResumoRede(planoId) {
  * idade sem arriscar um valor que não bate com o banco.
  */
 export async function buscarFaixasEtariasDisponiveis() {
-  const { data, error } = await institucional.from('mercado_saude_precos').select('faixa_etaria').range(0, 19999)
-  if (error) throw new Error(`Erro buscando faixas etárias: ${error.message}`)
+  // CORRIGIDO (25/08) — mesmo engano já corrigido em outros pontos deste
+  // arquivo: `.range(0, 19999)` NÃO sobrescreve o teto de 1000 linhas
+  // por resposta do Supabase. Sem paginação de verdade, uma operadora
+  // nova cujas linhas de preço ficassem fora das primeiras 1000
+  // poderia introduzir uma faixa etária nova que nunca apareceria no
+  // seletor — silencioso, sem erro. Pagina de verdade, igual ao resto.
+  const PAGINA = 1000
+  let inicio = 0
+  const todasFaixas = []
+  while (true) {
+    const { data, error } = await institucional
+      .from('mercado_saude_precos')
+      .select('faixa_etaria')
+      .range(inicio, inicio + PAGINA - 1)
+    if (error) throw new Error(`Erro buscando faixas etárias: ${error.message}`)
+    todasFaixas.push(...(data ?? []))
+    if (!data || data.length < PAGINA) break
+    inicio += PAGINA
+  }
 
-  const unicas = [...new Set((data ?? []).map((r) => r.faixa_etaria))]
+  const unicas = [...new Set(todasFaixas.map((r) => r.faixa_etaria))]
   // ordena pelo primeiro número da faixa (funciona pros formatos "0 a 18" e "00-18")
   return unicas.sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0))
 }
