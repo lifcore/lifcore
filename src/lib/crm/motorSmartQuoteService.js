@@ -106,13 +106,25 @@ export async function buscarPlanosElegiveis({ regiaoId = null, regiaoNome = null
       .from('mercado_saude_planos')
       .select(
         `
-        plano_id, nome, acomodacao, linha, status,
+        plano_id, nome, acomodacao, linha, status, regiao_todas,
         operadoras:operadora_id ( id, nome, logo_url, logo_fundo_chip ),
         regioes_tarifarias:regiao_tarifaria_id ( id, nome )
       `
       )
       .eq('status', 'ativo')
-    if (regiaoIdResolvido) q = q.eq('regiao_tarifaria_id', regiaoIdResolvido)
+    // CORRIGIDO (25/08, ajuste de segurança) — a versão anterior tratava
+    // QUALQUER `regiao_tarifaria_id = null` como "vale pra qualquer
+    // região". Isso é perigoso: um erro de importação futuro (o mesmo
+    // tipo de bug já visto nesta base — vínculo de região quebrando
+    // silenciosamente) faria um plano que DEVERIA ser restrito a uma
+    // região aparecer em TODA busca, sem erro nenhum e sem ninguém
+    // perceber — pior que sumir (que pelo menos é visível). Agora só
+    // considera "vale pra qualquer região" quando isso foi CONFIRMADO
+    // explicitamente (`regiao_todas = true`, hoje só Plena e Unica,
+    // confirmado com o usuário 25/08) — um `null` sem essa marcação
+    // continua se comportando como bug visível: o plano não aparece,
+    // sinalizando que algo precisa de correção, igual antes.
+    if (regiaoIdResolvido) q = q.or(`regiao_tarifaria_id.eq.${regiaoIdResolvido},regiao_todas.eq.true`)
     if (operadoraIdResolvido) q = q.eq('operadora_id', operadoraIdResolvido)
     return q.order('nome').range(inicio, fim)
   }
