@@ -321,6 +321,70 @@ async function buscarCotacoesEmLote(planosBase) {
 }
 
 /**
+ * NOVO (25/08) — resumo leve de Acomodação + contagem de prestadores na
+ * rede, por `plano_biblioteca_id`, pro card cliente-facing de Cotação
+ * (CotacoesSecao, em ClienteDetailPage.jsx). Diferente de
+ * `buscarCotacoesEmLote` (que já vem de dentro do fluxo de
+ * `montarCotacaoEstruturada`, com um `plano` "base" de
+ * `buscarPlanosElegiveis`), o card só tem o `plano_biblioteca_id`
+ * salvo na Cotação — não passou pela cascata de busca — por isso essa
+ * função busca direto por lista de plano_id, sem depender de nada
+ * anterior.
+ *
+ * Contagem de prestadores conta linhas de `mercado_saude_rede_cobertura`
+ * direto (sem SELECT DISTINCT) porque a chave única da tabela já é
+ * (prestador_id, plano_id) — 1 linha por prestador por plano, contar
+ * linha já é contar prestador. Células "-" (sem cobertura) e null são
+ * excluídas, senão contaria prestador sem cobertura de verdade nesse
+ * plano.
+ *
+ * Não traz separação Hospital × Laboratório — a coluna `categoria` não
+ * existe hoje em `mercado_saude_rede_prestadores` (achado real, 25/08:
+ * ~96% dos prestadores sem essa distinção) — fica pra quando esse gap
+ * for resolvido.
+ *
+ * @param {string[]} planoIds — `cot.plano_biblioteca_id` de cada
+ *   Cotação exibida; ids nulos/vazios podem vir misturados na lista,
+ *   são filtrados aqui dentro.
+ * @returns {Promise<Map<string, { acomodacao: string|null, totalPrestadores: number }>>}
+ */
+export async function buscarResumoPlanosPorId(planoIds) {
+  const idsUnicos = [...new Set((planoIds ?? []).filter(Boolean))]
+  if (idsUnicos.length === 0) return new Map()
+
+  const TAMANHO_LOTE = 5
+  const [planos, coberturas] = await Promise.all([
+    buscarEmLotesDeValores(idsUnicos, TAMANHO_LOTE, (lote, inicio, fim) =>
+      institucional.from('mercado_saude_planos').select('plano_id, acomodacao').in('plano_id', lote).range(inicio, fim)
+    ),
+    buscarEmLotesDeValores(idsUnicos, TAMANHO_LOTE, (lote, inicio, fim) =>
+      institucional
+        .from('mercado_saude_rede_cobertura')
+        .select('plano_id')
+        .in('plano_id', lote)
+        .not('codigo_bruto', 'is', null)
+        .neq('codigo_bruto', '-')
+        .range(inicio, fim)
+    ),
+  ])
+
+  const acomodacaoPorPlano = new Map(planos.map((p) => [p.plano_id, p.acomodacao]))
+  const totalPorPlano = new Map()
+  for (const c of coberturas) {
+    totalPorPlano.set(c.plano_id, (totalPorPlano.get(c.plano_id) ?? 0) + 1)
+  }
+
+  const resultado = new Map()
+  for (const id of idsUnicos) {
+    resultado.set(id, {
+      acomodacao: acomodacaoPorPlano.get(id) ?? null,
+      totalPrestadores: totalPorPlano.get(id) ?? 0,
+    })
+  }
+  return resultado
+}
+
+/**
  * Devolve o "pacote de cotação" completo de UM plano — preço (todas as
  * segmentações disponíveis, agrupadas), rede (resumo + amostra) e
  * regras da operadora — tudo cruzado por plano_id, como o Chief pediu

@@ -26,6 +26,7 @@ import PainelCotacao from './PainelCotacao'
 import './cotacoesGrupo.css'
 import './selecaoPlanosMulticalculo.css'
 import { marcarCotacaoRecomendada, marcarCotacaoCenarioAtual } from '../../lib/crm/multicalculoCotacaoService'
+import { buscarResumoPlanosPorId } from '../../lib/crm/motorSmartQuoteService'
 import { montarDadosEstudoEssencial, montarDadosEstudoExecutivo } from '../../lib/crm/estudoManualDadosService'
 import { gerarHtmlEstudoEssencial } from '../../lib/crm/estudoEssencialPdfService'
 import { gerarHtmlEstudoMercado } from '../../lib/crm/estudoMercadoPdfService'
@@ -733,6 +734,23 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
       })
   }, [])
 
+  // REDESENHO card cliente-facing (25/08) — Acomodação + contagem de
+  // prestadores na rede, por plano_biblioteca_id. Busca em lote 1 vez
+  // sempre que a lista de Cotações muda (não card a card, pra não
+  // multiplicar idas ao banco). Cotação sem plano_biblioteca_id (ainda
+  // não vinculada à Biblioteca) simplesmente não aparece no Map — o
+  // card trata a ausência mostrando nada nesse espaço, sem quebrar.
+  const [resumoPlanosPorId, setResumoPlanosPorId] = useState(new Map())
+
+  useEffect(() => {
+    const idsDaPagina = cotacoes.map((c) => c.plano_biblioteca_id).filter(Boolean)
+    if (idsDaPagina.length === 0) {
+      setResumoPlanosPorId(new Map())
+      return
+    }
+    buscarResumoPlanosPorId(idsDaPagina).then(setResumoPlanosPorId)
+  }, [cotacoes])
+
   async function handleExcluir(cotacaoId) {
     if (!window.confirm('Excluir esta cotação?')) return
     await excluirCotacao(cotacaoId)
@@ -989,6 +1007,7 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                   0
                 )
                 const menuAberto = menuAbertoId === cot.id
+                const resumoPlano = resumoPlanosPorId.get(cot.plano_biblioteca_id)
 
                 return (
                   <div
@@ -1085,13 +1104,35 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                       </div>
                     )}
 
+                    {/* REDESENHO (25/08) — Acomodação + Coparticipação +
+                        contagem de prestadores, no espaço que sobrava vazio
+                        no card. Só aparece o que a Cotação tem de fato:
+                        Acomodação/prestadores dependem de plano_biblioteca_id
+                        (Cotações antigas, criadas antes da correção do bug
+                        do Multicálculo, não têm — ficam sem essa linha, sem
+                        quebrar nada). Coparticipação depende de
+                        coparticipacao_tipo, coluna nova, também não
+                        retroativa. Sem separação Hospital×Laboratório ainda
+                        (ver nota em buscarResumoPlanosPorId). */}
+                    {(cot.coparticipacao_tipo || resumoPlano) && (
+                      <div className="cotacao-item-resumo-plano">
+                        {resumoPlano?.acomodacao && (
+                          <span className="cotacao-item-resumo-item">Acomodação: {resumoPlano.acomodacao}</span>
+                        )}
+                        {cot.coparticipacao_tipo && (
+                          <span className="cotacao-item-resumo-item">Coparticipação: {cot.coparticipacao_tipo}</span>
+                        )}
+                        {resumoPlano && (
+                          <span className="cotacao-item-resumo-item">
+                            {resumoPlano.totalPrestadores} prestador{resumoPlano.totalPrestadores === 1 ? '' : 'es'} na rede
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     {/* REDESENHO (25/08) — Total maior, linha própria logo
                         acima do logo (vitrine pro cliente, não só ferramenta
-                        de trabalho do corretor). TODO: espaço reservado ao
-                        lado do Total pra Acomodação/Coparticipação/Qtd de
-                        prestadores — depende de buscar o plano vinculado
-                        (cot.plano_biblioteca_id) na Biblioteca de Mercado,
-                        ainda não implementado nesta entrega. */}
+                        de trabalho do corretor). */}
                     <div className="cotacao-item-destaque">
                       <span className="cotacao-item-total-grande">
                         R$ {totalCotacao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}

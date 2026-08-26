@@ -159,10 +159,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.35rem;
   margin-top: 0.6rem;
-  padding-top: 0.6rem;
-  border-top: 1px solid var(--lcds-border-strong);
 }
 
 .cotacao-item-total-grande {
@@ -170,6 +167,11 @@
   font-weight: 800;
   font-size: 1.6rem;
   letter-spacing: 0.01em;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.6rem;
+  border-bottom: 1px solid var(--lcds-border-strong);
+  width: 100%;
+  text-align: right;
 }
 
 .cotacao-item-incluir-estudo {
@@ -178,5 +180,23 @@
   gap: 0.35rem;
   margin-top: 0.6rem;
   font-size: 0.85rem;
+  color: var(--lcds-text-secondary);
+}
+
+/* REDESENHO card cliente-facing (25/08) — Acomodação, Coparticipação e
+   contagem de prestadores na rede. Fica no espaço que antes ficava
+   vazio entre os valores por faixa e o bloco Total/Logo — preenche a
+   vitrine sem competir visualmente com o Total (que continua sendo o
+   elemento de maior destaque do card, por isso essa linha usa fonte
+   pequena e cor discreta, igual aos valores por faixa). */
+.cotacao-item-resumo-plano {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.cotacao-item-resumo-item {
+  font-size: 0.8rem;
   color: var(--lcds-text-secondary);
 }

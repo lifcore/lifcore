@@ -41,6 +41,15 @@ import { excluirRascunhoMulticalculo } from './multicalculoRascunhoService'
  * continuam com `plano_biblioteca_id = null` — não é retroativo; se
  * precisar corrigir as já existentes, é um UPDATE à parte, não algo
  * que este arquivo resolve sozinho.
+ *
+ * ATUALIZADO (25/08, mesma sessão) — mesmo raciocínio, agora pra
+ * coparticipação: `operacional.cotacoes.coparticipacao_tipo` (coluna
+ * nova) grava `grupoSegmentacao.coparticipacaoTipo` no momento da
+ * criação. Diferente de acomodação (fixa por plano), coparticipação
+ * varia por SEGMENTAÇÃO de preço — só existe em mercado_saude_precos,
+ * nunca em mercado_saude_planos — por isso não dá pra "buscar depois"
+ * como a contagem de rede; precisa ser salva aqui, na hora certa.
+ * Também não é retroativo.
  */
 
 /**
@@ -118,6 +127,14 @@ export async function criarCotacoesDoMulticalculo({ clienteProspectId, itens }) 
         // pra Cotações vindas do Multicálculo. plano.planoId já vem
         // pronto de montarCotacaoEstruturada, só faltava repassar.
         plano_biblioteca_id: plano.planoId ?? null,
+        // NOVO (25/08) — mesmo raciocínio do plano_biblioteca_id: a
+        // coparticipação não é atributo fixo do PLANO, é da SEGMENTAÇÃO
+        // de preço escolhida (BMR-006: coparticipacao_tipo vive em
+        // mercado_saude_precos, não em mercado_saude_planos) — por isso
+        // só dá pra saber gravando no momento da criação, não buscando
+        // depois. Sem isso, o card/Estudo nunca saberia "Completa" vs
+        // "Parcial" vs "Sem" pra uma Cotação já criada.
+        coparticipacao_tipo: grupoSegmentacao.coparticipacaoTipo ?? null,
         validade: null,
         grupo_comparacao_id: grupoComparacaoId,
         composicao_id: composicaoId,
