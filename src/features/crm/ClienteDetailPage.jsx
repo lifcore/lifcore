@@ -651,11 +651,6 @@ function LogoOperadoraCotacao({ logoInfo, tamanho = 'normal' }) {
   if (logoInfo.logo_fundo_chip === 'claro') classes.push('selecao-planos-logo-chip-claro')
   else if (logoInfo.logo_fundo_chip === 'escuro') classes.push('selecao-planos-logo-chip-escuro')
   if (tamanho === 'grande') classes.push('selecao-planos-logo-chip-grande')
-  // REDESENHO card cliente-facing (25/08) — variante nova, menor que
-  // "grande" (usado no Multicálculo). Classe própria em
-  // cotacoesGrupo.css, isolada — não mexe no tamanho usado em nenhuma
-  // outra tela.
-  else if (tamanho === 'media') classes.push('cotacao-item-logo-media')
   return (
     <span className={classes.join(' ')}>
       <img src={logoInfo.logo_url} alt="" className="selecao-planos-logo-img" />
@@ -1085,8 +1080,11 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                       </div>
                     )}
 
-                    <div className="cotacao-item-header">
-                      <strong>{cot.operadora_nome_livre}</strong>
+                    {/* REDESENHO v2 (25/08) — leitura como vitrine: faixa
+                        operacional (uso do corretor: status, porte, vidas,
+                        data, tags) fica pequena e discreta no topo, sem
+                        competir com o que o cliente realmente quer ver. */}
+                    <div className="cotacao-item-faixa-operacional">
                       <span className="ls-badge ls-badge-prospect">{cot.porte}</span>
                       <span>{cot.numero_vidas} vidas</span>
                       <span>{formatarDataBR(cot.data_cotacao)}</span>
@@ -1095,35 +1093,46 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                       {cot.eh_cenario_atual && <span className="ls-badge cotacao-badge-cenario-atual">📍 Cenário Atual</span>}
                     </div>
 
-                    {/* REDESENHO (25/08) — vitrine: nome do plano em
-                        destaque, seguido de Prestadores/Acomodação/
-                        Coparticipação com mais contraste (não mais cinza
-                        apagado) — é a informação que o cliente mais quer
-                        ver rápido, ganha peso visual próprio, separada dos
-                        badges operacionais do corretor. Só aparece o que a
-                        Cotação tem de fato: ver notas de cada campo mais
-                        abaixo. */}
-                    {(cot.plano || cot.coparticipacao_tipo || resumoPlano) && (
-                      <div className="cotacao-item-vitrine">
-                        {cot.plano && <span className="cotacao-item-plano">{cot.plano}</span>}
-                        {(resumoPlano || cot.coparticipacao_tipo) && (
-                          <div className="cotacao-item-vitrine-specs">
-                            {resumoPlano?.acomodacao && (
-                              <span className="cotacao-item-vitrine-spec">{resumoPlano.acomodacao}</span>
-                            )}
-                            {cot.coparticipacao_tipo && (
-                              <span className="cotacao-item-vitrine-spec">Coparticipação {cot.coparticipacao_tipo}</span>
-                            )}
-                            {resumoPlano && (
-                              <span className="cotacao-item-vitrine-spec">
-                                {resumoPlano.totalPrestadores} prestador{resumoPlano.totalPrestadores === 1 ? '' : 'es'} na rede
-                              </span>
-                            )}
-                          </div>
+                    {/* Cabeçalho vitrine — a leitura que o cliente faz
+                        primeiro: marca (logo grande, de volta ao tamanho
+                        original — reduzir foi um erro, logo pequeno perde a
+                        função de âncora visual), depois plano, depois
+                        preço. Logo+identidade à esquerda, Total à direita —
+                        mesmo padrão de qualquer comparador de produto. */}
+                    <div className="cotacao-item-vitrine-cabecalho">
+                      <div className="cotacao-item-identidade">
+                        <LogoOperadoraCotacao logoInfo={logosPorOperadoraId.get(cot.operadora_id)} tamanho="grande" />
+                        <div>
+                          <strong className="cotacao-item-operadora-nome">{cot.operadora_nome_livre}</strong>
+                          {cot.plano && <span className="cotacao-item-plano">{cot.plano}</span>}
+                        </div>
+                      </div>
+                      <span className="cotacao-item-total-grande">
+                        R$ {totalCotacao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    {/* Specs — apoio à decisão, não a decisão em si; por
+                        isso vêm depois do preço, como chips compactos. */}
+                    {(resumoPlano || cot.coparticipacao_tipo) && (
+                      <div className="cotacao-item-vitrine-specs">
+                        {resumoPlano?.acomodacao && (
+                          <span className="cotacao-item-vitrine-spec">{resumoPlano.acomodacao}</span>
+                        )}
+                        {cot.coparticipacao_tipo && (
+                          <span className="cotacao-item-vitrine-spec">Coparticipação {cot.coparticipacao_tipo}</span>
+                        )}
+                        {resumoPlano && (
+                          <span className="cotacao-item-vitrine-spec">
+                            {resumoPlano.totalPrestadores} prestador{resumoPlano.totalPrestadores === 1 ? '' : 'es'} na rede
+                          </span>
                         )}
                       </div>
                     )}
 
+                    {/* Valores por faixa etária — detalhe de composição,
+                        mais útil pro corretor calculando do que pro
+                        cliente decidindo; por isso discreto, no fim. */}
                     {cot.itens_cotacao?.length > 0 && (
                       <div className="cotacao-item-valores">
                         {cot.itens_cotacao.map((item) => {
@@ -1136,16 +1145,6 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                         })}
                       </div>
                     )}
-
-                    {/* REDESENHO (25/08) — Total maior, linha própria logo
-                        acima do logo (vitrine pro cliente, não só ferramenta
-                        de trabalho do corretor). */}
-                    <div className="cotacao-item-destaque">
-                      <span className="cotacao-item-total-grande">
-                        R$ {totalCotacao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                      <LogoOperadoraCotacao logoInfo={logosPorOperadoraId.get(cot.operadora_id)} tamanho="media" />
-                    </div>
 
                     {cot.contrato_id && (
                       <div className="kpi-detalhe" style={{ margin: '0.25rem 0 0' }}>

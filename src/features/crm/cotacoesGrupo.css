@@ -34,49 +34,6 @@
   color: var(--lcds-gold);
 }
 
-/* Sprint 3b (21/08) — valores por faixa etária + Total, dentro do card
-   de Cotação (ClienteDetailPage.jsx) e na edição simplificada de
-   Cotação do Multicálculo (CotacaoForm.jsx). Antes vivia como estilo
-   solto direto no JSX porque este arquivo não tinha essas classes
-   ainda — agora as duas telas usam só a classe, sem estilo inline. */
-
-.cotacao-item-valores {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem 1rem;
-  margin-top: 0.4rem;
-}
-
-.cotacao-item-valor {
-  font-size: 0.8rem;
-  color: var(--lcds-text-secondary);
-}
-
-.cotacao-item-valor-total {
-  display: block;
-  width: 100%;
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--lcds-border-strong);
-  color: var(--lcds-gold);
-  font-weight: 700;
-  font-size: 1.05rem;
-  letter-spacing: 0.01em;
-}
-
-/* REDESENHO card cliente-facing (25/08) — nome do plano SAIU do
-   cabeçalho (era inline, itálico, discreto — competia mal com os
-   badges operacionais ao lado). Agora é seu próprio bloco, mais peso
-   visual, primeira coisa que aparece depois do cabeçalho — é a
-   informação que o cliente mais quer identificar rápido. */
-.cotacao-item-plano {
-  display: block;
-  font-weight: 700;
-  font-size: 0.95rem;
-  color: var(--lcds-text-primary);
-  margin-top: 0.4rem;
-}
-
 /* Etapa 3 do plano "Registro Manual + Estudo de Mercado" (21/08) —
    destaque visual do Cenário Atual, mesmo padrão da Recomendada, mas
    com propriedade CSS diferente (box-shadow em vez de border-color) —
@@ -94,13 +51,130 @@
   border: 1px solid var(--lcds-text-secondary);
 }
 
-/* REDESENHO card cliente-facing (25/08) — 3 mudanças pedidas pelo
-   usuário: Total maior numa linha própria acima do logo, botões de
-   ação escondidos atrás de "⋮" (menu flutuante), e Cenário Atual
-   sempre ordenado primeiro (isso é JS, em ClienteDetailPage.jsx, não
-   precisa de CSS). O objetivo é o card servir tanto de ferramenta do
-   corretor quanto de vitrine que dá pra printar/mostrar pro cliente. */
+/* REDESENHO v2 card cliente-facing (25/08) — leitura como vitrine, na
+   ordem que uma pessoa comparando planos de saúde realmente segue:
+   marca -> plano -> preço -> specs de apoio -> detalhe fino. A v1
+   (Total grande espremido ao lado de um logo pequeno, plano competindo
+   em peso visual com os chips) misturava tudo no mesmo nível —
+   corrigido dando um lugar fixo pra cada categoria de informação. */
 
+/* Faixa operacional (uso do corretor: status, porte, vidas, data,
+   tags) — pequena e discreta no topo, separada visualmente do resto.
+   É informação de PROCESSO, não de PRODUTO — não deveria competir com
+   o que o cliente realmente quer comparar. */
+.cotacao-item-faixa-operacional {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--lcds-text-secondary);
+  padding-right: 1.75rem; /* espaço pro botão de menu "⋮" no canto */
+}
+
+/* Cabeçalho vitrine — logo GRANDE de volta (reduzir foi um erro: logo
+   pequeno perde a função de âncora visual, que é a primeira coisa que
+   alguém busca ao comparar seguradoras) + identidade (operadora, depois
+   plano) à esquerda, Total à direita. Mesmo padrão de qualquer cartão
+   de produto/comparador: identidade de um lado, preço do outro. */
+.cotacao-item-vitrine-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.cotacao-item-identidade {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.cotacao-item-operadora-nome {
+  display: block;
+  font-size: 1rem;
+  color: var(--lcds-text-primary);
+}
+
+.cotacao-item-plano {
+  display: block;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--lcds-text-primary);
+  margin-top: 0.1rem;
+}
+
+.cotacao-item-total-grande {
+  color: var(--lcds-gold);
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* Specs — apoio à decisão, não a decisão em si; vêm depois do preço,
+   como chips compactos com contraste real (não mais cinza apagado). */
+.cotacao-item-vitrine-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+.cotacao-item-vitrine-spec {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--lcds-text-primary);
+  background: var(--lcds-surface-card-hover);
+  border: 1px solid var(--lcds-border-strong);
+  border-radius: var(--lcds-radius-sm, 4px);
+  padding: 0.15rem 0.55rem;
+}
+
+/* Valores por faixa etária — compartilhada com CotacaoForm.jsx
+   (EdicaoCotacaoMulticalculo), por isso mantém o estilo original de
+   sempre aqui, sem o tom "discreto" pensado só pro card vitrine — evita
+   efeito colateral numa tela que não foi revisada neste redesenho. */
+.cotacao-item-valores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.cotacao-item-valor {
+  font-size: 0.8rem;
+  color: var(--lcds-text-secondary);
+}
+
+/* Usada em CotacaoForm.jsx (EdicaoCotacaoMulticalculo) — tela separada,
+   não passou pelo redesenho vitrine deste arquivo, mantém o estilo
+   original de sempre. */
+.cotacao-item-valor-total {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--lcds-border-strong);
+  color: var(--lcds-gold);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+
+.cotacao-item-incluir-estudo {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--lcds-text-secondary);
+}
+
+/* Menu de ações escondido atrás de "⋮" — inalterado desde a v1. */
 .cotacao-item-menu-gatilho {
   position: absolute;
   top: 0.5rem;
@@ -158,69 +232,4 @@
 .cotacao-item-menu-item-perigo {
   color: var(--lcds-danger, #d64545);
   border-top: 1px solid var(--lcds-border-strong);
-}
-
-.cotacao-item-destaque {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  margin-top: 0.5rem;
-}
-
-.cotacao-item-total-grande {
-  color: var(--lcds-gold);
-  font-weight: 800;
-  font-size: 1.2rem;
-  letter-spacing: 0.01em;
-  padding-bottom: 0.4rem;
-  margin-bottom: 0.4rem;
-  border-bottom: 1px solid var(--lcds-border-strong);
-  width: 100%;
-  text-align: right;
-}
-
-/* REDESENHO card cliente-facing (25/08) — logo menor que a variante
-   "grande" (usada no Multicálculo) — o card ficou tomando espaço
-   demais na tela; reduzir o logo é uma das frentes pra deixar mais
-   compacto. Classe isolada, própria deste card — não mexe em nenhuma
-   outra tela que usa selecao-planos-logo-chip-grande. */
-.cotacao-item-logo-media {
-  width: 2.75rem;
-  height: 2.75rem;
-  padding: 0.3rem;
-}
-
-.cotacao-item-incluir-estudo {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin-top: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--lcds-text-secondary);
-}
-
-/* REDESENHO card cliente-facing (25/08) — vitrine: plano + specs
-   (Acomodação, Coparticipação, prestadores). Specs com contraste bem
-   maior que a versão anterior (que ficava cinza apagado, difícil de
-   ler à primeira vista) — cada spec é um chip com fundo e borda
-   próprios, pro cliente bater o olho e já entender sem esforço. */
-.cotacao-item-vitrine {
-  margin-top: 0.15rem;
-}
-
-.cotacao-item-vitrine-specs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.35rem;
-}
-
-.cotacao-item-vitrine-spec {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--lcds-text-primary);
-  background: var(--lcds-surface-card-hover);
-  border: 1px solid var(--lcds-border-strong);
-  border-radius: var(--lcds-radius-sm, 4px);
-  padding: 0.15rem 0.55rem;
 }
