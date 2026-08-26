@@ -651,6 +651,11 @@ function LogoOperadoraCotacao({ logoInfo, tamanho = 'normal' }) {
   if (logoInfo.logo_fundo_chip === 'claro') classes.push('selecao-planos-logo-chip-claro')
   else if (logoInfo.logo_fundo_chip === 'escuro') classes.push('selecao-planos-logo-chip-escuro')
   if (tamanho === 'grande') classes.push('selecao-planos-logo-chip-grande')
+  // REDESENHO card cliente-facing (25/08) — variante nova, menor que
+  // "grande" (usado no Multicálculo). Classe própria em
+  // cotacoesGrupo.css, isolada — não mexe no tamanho usado em nenhuma
+  // outra tela.
+  else if (tamanho === 'media') classes.push('cotacao-item-logo-media')
   return (
     <span className={classes.join(' ')}>
       <img src={logoInfo.logo_url} alt="" className="selecao-planos-logo-img" />
@@ -1082,7 +1087,6 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
 
                     <div className="cotacao-item-header">
                       <strong>{cot.operadora_nome_livre}</strong>
-                      {cot.plano && <span className="cotacao-item-plano">{cot.plano}</span>}
                       <span className="ls-badge ls-badge-prospect">{cot.porte}</span>
                       <span>{cot.numero_vidas} vidas</span>
                       <span>{formatarDataBR(cot.data_cotacao)}</span>
@@ -1090,6 +1094,35 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                       {cot.recomendada && <span className="ls-badge cotacao-badge-recomendada">★ Recomendada</span>}
                       {cot.eh_cenario_atual && <span className="ls-badge cotacao-badge-cenario-atual">📍 Cenário Atual</span>}
                     </div>
+
+                    {/* REDESENHO (25/08) — vitrine: nome do plano em
+                        destaque, seguido de Prestadores/Acomodação/
+                        Coparticipação com mais contraste (não mais cinza
+                        apagado) — é a informação que o cliente mais quer
+                        ver rápido, ganha peso visual próprio, separada dos
+                        badges operacionais do corretor. Só aparece o que a
+                        Cotação tem de fato: ver notas de cada campo mais
+                        abaixo. */}
+                    {(cot.plano || cot.coparticipacao_tipo || resumoPlano) && (
+                      <div className="cotacao-item-vitrine">
+                        {cot.plano && <span className="cotacao-item-plano">{cot.plano}</span>}
+                        {(resumoPlano || cot.coparticipacao_tipo) && (
+                          <div className="cotacao-item-vitrine-specs">
+                            {resumoPlano?.acomodacao && (
+                              <span className="cotacao-item-vitrine-spec">{resumoPlano.acomodacao}</span>
+                            )}
+                            {cot.coparticipacao_tipo && (
+                              <span className="cotacao-item-vitrine-spec">Coparticipação {cot.coparticipacao_tipo}</span>
+                            )}
+                            {resumoPlano && (
+                              <span className="cotacao-item-vitrine-spec">
+                                {resumoPlano.totalPrestadores} prestador{resumoPlano.totalPrestadores === 1 ? '' : 'es'} na rede
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {cot.itens_cotacao?.length > 0 && (
                       <div className="cotacao-item-valores">
@@ -1104,32 +1137,6 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                       </div>
                     )}
 
-                    {/* REDESENHO (25/08) — Acomodação + Coparticipação +
-                        contagem de prestadores, no espaço que sobrava vazio
-                        no card. Só aparece o que a Cotação tem de fato:
-                        Acomodação/prestadores dependem de plano_biblioteca_id
-                        (Cotações antigas, criadas antes da correção do bug
-                        do Multicálculo, não têm — ficam sem essa linha, sem
-                        quebrar nada). Coparticipação depende de
-                        coparticipacao_tipo, coluna nova, também não
-                        retroativa. Sem separação Hospital×Laboratório ainda
-                        (ver nota em buscarResumoPlanosPorId). */}
-                    {(cot.coparticipacao_tipo || resumoPlano) && (
-                      <div className="cotacao-item-resumo-plano">
-                        {resumoPlano?.acomodacao && (
-                          <span className="cotacao-item-resumo-item">Acomodação: {resumoPlano.acomodacao}</span>
-                        )}
-                        {cot.coparticipacao_tipo && (
-                          <span className="cotacao-item-resumo-item">Coparticipação: {cot.coparticipacao_tipo}</span>
-                        )}
-                        {resumoPlano && (
-                          <span className="cotacao-item-resumo-item">
-                            {resumoPlano.totalPrestadores} prestador{resumoPlano.totalPrestadores === 1 ? '' : 'es'} na rede
-                          </span>
-                        )}
-                      </div>
-                    )}
-
                     {/* REDESENHO (25/08) — Total maior, linha própria logo
                         acima do logo (vitrine pro cliente, não só ferramenta
                         de trabalho do corretor). */}
@@ -1137,7 +1144,7 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                       <span className="cotacao-item-total-grande">
                         R$ {totalCotacao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
-                      <LogoOperadoraCotacao logoInfo={logosPorOperadoraId.get(cot.operadora_id)} tamanho="grande" />
+                      <LogoOperadoraCotacao logoInfo={logosPorOperadoraId.get(cot.operadora_id)} tamanho="media" />
                     </div>
 
                     {cot.contrato_id && (

@@ -120,6 +120,16 @@ function reconstruirBlocos(itensCotacao) {
  *     específico — na prática só faz sentido pleno quando há 1 bloco
  *     só. Sinalizando isso porque não foi decidido explicitamente com
  *     o usuário; ele pode preferir tratar diferente.
+ *
+ * CORRIGIDO (25/08) — achado real do usuário: uma Cotação registrada
+ * manualmente ficou sem "Plano" nenhum no card/Estudo. Causa: o
+ * seletor "Plano real" só gravava `plano_biblioteca_id`, nunca
+ * preenchia o campo `plano` (texto livre, é o único que vira o nome
+ * exibido) — corretor que escolhia o plano real sem também abrir
+ * "Detalhar por faixa etária" pra digitar o nome de novo salvava sem
+ * nome nenhum. `selecionarPlanoBiblioteca` agora preenche o nome do
+ * primeiro bloco automaticamente ao escolher o plano real — só quando
+ * está vazio, nunca sobrescreve nome já digitado à mão.
  */
 export default function CotacaoForm({ clienteProspectId, cotacaoExistente, casoId, onSalvo, onCriado, onCancelar }) {
   // Só o Multicálculo grava grupo_comparacao_id hoje — identificador
@@ -307,6 +317,25 @@ function CotacaoFormCompleto({ clienteProspectId, cotacaoExistente, casoId, onSa
     setPlanoBibliotecaId('')
   }
 
+  // CORRIGIDO (25/08) — achado real: escolher um plano no seletor
+  // "Plano real" só gravava `plano_biblioteca_id`, nunca preenchia o
+  // campo `plano` (texto livre, digitado à mão dentro de "Detalhar por
+  // faixa etária e plano") — que é o único campo que vira o nome
+  // exibido nos cards/Estudo. Corretor que escolhia o plano real sem
+  // abrir os detalhes pra digitar o nome de novo salvava a Cotação sem
+  // nome de plano nenhum. Agora, ao escolher um plano real, preenche
+  // automaticamente o nome do PRIMEIRO bloco — só se ele ainda estiver
+  // vazio, nunca sobrescreve um nome que o corretor já digitou à mão.
+  function selecionarPlanoBiblioteca(id) {
+    setPlanoBibliotecaId(id)
+    if (!id) return
+    const planoEscolhido = planosDaOperadora.find((p) => p.plano_id === id)
+    if (!planoEscolhido) return
+    setBlocosPlano((blocos) =>
+      blocos.map((b, index) => (index === 0 && !b.plano ? { ...b, plano: planoEscolhido.nome } : b))
+    )
+  }
+
   function atualizarFaixa(blocoId, faixa, campo, valor) {
     setBlocosPlano((blocos) =>
       blocos.map((b) =>
@@ -394,7 +423,7 @@ function CotacaoFormCompleto({ clienteProspectId, cotacaoExistente, casoId, onSa
           <label>Plano real (opcional)</label>
           <select
             value={planoBibliotecaId}
-            onChange={(e) => setPlanoBibliotecaId(e.target.value)}
+            onChange={(e) => selecionarPlanoBiblioteca(e.target.value)}
             disabled={!operadoraId || carregandoPlanos}
           >
             <option value="">

@@ -5,20 +5,20 @@
 .cotacoes-grupo-comparacao {
   border: 1px dashed var(--lcds-border-strong);
   border-radius: var(--lcds-radius);
-  padding: 0.75rem;
-  margin-bottom: 1rem;
+  padding: 0.6rem;
+  margin-bottom: 0.75rem;
 }
 
 .cotacoes-grupo-titulo {
   font-size: 0.78rem;
   color: var(--lcds-text-muted);
-  margin: 0 0 0.6rem;
+  margin: 0 0 0.5rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 
 .cotacoes-grupo-comparacao .cotacao-item {
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.5rem;
 }
 
 .cotacoes-grupo-comparacao .cotacao-item:last-child {
@@ -43,8 +43,8 @@
 .cotacao-item-valores {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem 1rem;
-  margin-top: 0.5rem;
+  gap: 0.3rem 1rem;
+  margin-top: 0.4rem;
 }
 
 .cotacao-item-valor {
@@ -64,12 +64,17 @@
   letter-spacing: 0.01em;
 }
 
-/* Sprint 3b (21/08) — nome do plano no cabeçalho do card de Cotação
-   (achado real: faltava, só mostrava a operadora). Cor discreta,
-   diferencia do nome da operadora (que fica em negrito/destaque). */
+/* REDESENHO card cliente-facing (25/08) — nome do plano SAIU do
+   cabeçalho (era inline, itálico, discreto — competia mal com os
+   badges operacionais ao lado). Agora é seu próprio bloco, mais peso
+   visual, primeira coisa que aparece depois do cabeçalho — é a
+   informação que o cliente mais quer identificar rápido. */
 .cotacao-item-plano {
-  color: var(--lcds-text-secondary);
-  font-style: italic;
+  display: block;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--lcds-text-primary);
+  margin-top: 0.4rem;
 }
 
 /* Etapa 3 do plano "Registro Manual + Estudo de Mercado" (21/08) —
@@ -159,44 +164,63 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  margin-top: 0.6rem;
+  margin-top: 0.5rem;
 }
 
 .cotacao-item-total-grande {
   color: var(--lcds-gold);
   font-weight: 800;
-  font-size: 1.6rem;
+  font-size: 1.2rem;
   letter-spacing: 0.01em;
-  padding-bottom: 0.6rem;
-  margin-bottom: 0.6rem;
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.4rem;
   border-bottom: 1px solid var(--lcds-border-strong);
   width: 100%;
   text-align: right;
+}
+
+/* REDESENHO card cliente-facing (25/08) — logo menor que a variante
+   "grande" (usada no Multicálculo) — o card ficou tomando espaço
+   demais na tela; reduzir o logo é uma das frentes pra deixar mais
+   compacto. Classe isolada, própria deste card — não mexe em nenhuma
+   outra tela que usa selecao-planos-logo-chip-grande. */
+.cotacao-item-logo-media {
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0.3rem;
 }
 
 .cotacao-item-incluir-estudo {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  margin-top: 0.6rem;
-  font-size: 0.85rem;
-  color: var(--lcds-text-secondary);
-}
-
-/* REDESENHO card cliente-facing (25/08) — Acomodação, Coparticipação e
-   contagem de prestadores na rede. Fica no espaço que antes ficava
-   vazio entre os valores por faixa e o bloco Total/Logo — preenche a
-   vitrine sem competir visualmente com o Total (que continua sendo o
-   elemento de maior destaque do card, por isso essa linha usa fonte
-   pequena e cor discreta, igual aos valores por faixa). */
-.cotacao-item-resumo-plano {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 1rem;
   margin-top: 0.5rem;
-}
-
-.cotacao-item-resumo-item {
   font-size: 0.8rem;
   color: var(--lcds-text-secondary);
+}
+
+/* REDESENHO card cliente-facing (25/08) — vitrine: plano + specs
+   (Acomodação, Coparticipação, prestadores). Specs com contraste bem
+   maior que a versão anterior (que ficava cinza apagado, difícil de
+   ler à primeira vista) — cada spec é um chip com fundo e borda
+   próprios, pro cliente bater o olho e já entender sem esforço. */
+.cotacao-item-vitrine {
+  margin-top: 0.15rem;
+}
+
+.cotacao-item-vitrine-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.cotacao-item-vitrine-spec {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--lcds-text-primary);
+  background: var(--lcds-surface-card-hover);
+  border: 1px solid var(--lcds-border-strong);
+  border-radius: var(--lcds-radius-sm, 4px);
+  padding: 0.15rem 0.55rem;
 }
