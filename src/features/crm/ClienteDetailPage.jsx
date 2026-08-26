@@ -953,7 +953,20 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
         <p className="cliente-vazio">Nenhuma cotação registrada ainda.</p>
       ) : (
         <div className="cotacoes-historico" style={{ marginTop: '1rem' }}>
-          {[...grupos.entries()].map(([chaveGrupo, cotacoesDoGrupo]) => (
+          {/* REDESENHO (25/08) — Cenário Atual precisa ser sempre o
+              PRIMEIRO card entre TODAS as Cotações, não só dentro do
+              próprio grupo de comparação. Ele pode estar sozinho num
+              grupo de 1 item (separado do grupo com as opções concorrentes,
+              como no caso real observado) — por isso a ordenação de
+              grupos entre si é tão necessária quanto a ordenação dentro
+              de cada grupo (já feita mais abaixo, no .map de cada card). */}
+          {[...grupos.entries()]
+            .sort(([, a], [, b]) => {
+              const aTemCenarioAtual = a.some((c) => c.eh_cenario_atual) ? 1 : 0
+              const bTemCenarioAtual = b.some((c) => c.eh_cenario_atual) ? 1 : 0
+              return bTemCenarioAtual - aTemCenarioAtual
+            })
+            .map(([chaveGrupo, cotacoesDoGrupo]) => (
             <div key={chaveGrupo} className={cotacoesDoGrupo.length > 1 ? 'cotacoes-grupo-comparacao' : undefined}>
               {cotacoesDoGrupo.length > 1 && (
                 <p className="cotacoes-grupo-titulo">{cotacoesDoGrupo.length} opções nesta rodada de comparação</p>
