@@ -1098,7 +1098,11 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                         original — reduzir foi um erro, logo pequeno perde a
                         função de âncora visual), depois plano, depois
                         preço. Logo+identidade à esquerda, Total à direita —
-                        mesmo padrão de qualquer comparador de produto. */}
+                        mesmo padrão de qualquer comparador de produto.
+                        "Incluir no Estudo" migrou pra cá (era o último
+                        elemento do card, isolado lá embaixo) — é a decisão
+                        que o corretor toma logo depois de ver o preço, faz
+                        mais sentido perto dele. */}
                     <div className="cotacao-item-vitrine-cabecalho">
                       <div className="cotacao-item-identidade">
                         <LogoOperadoraCotacao logoInfo={logosPorOperadoraId.get(cot.operadora_id)} tamanho="grande" />
@@ -1107,9 +1111,23 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                           {cot.plano && <span className="cotacao-item-plano">{cot.plano}</span>}
                         </div>
                       </div>
-                      <span className="cotacao-item-total-grande">
-                        R$ {totalCotacao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
+                      <div className="cotacao-item-preco-coluna">
+                        <span className="cotacao-item-total-grande">
+                          R$ {totalCotacao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                        {/* Etapa 4 (21/08) — continua visível fora do menu,
+                            de propósito: é usada repetidamente ao montar
+                            um Estudo, esconder atrás de "⋮" atrapalharia
+                            o fluxo. */}
+                        <label className="cotacao-item-incluir-estudo">
+                          <input
+                            type="checkbox"
+                            checked={selecionadasParaEstudo.has(cot.id)}
+                            onChange={() => alternarSelecaoEstudo(cot.id)}
+                          />
+                          Incluir no Estudo
+                        </label>
+                      </div>
                     </div>
 
                     {/* Specs — apoio à decisão, não a decisão em si; por
@@ -1151,18 +1169,6 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
                         Contrato gerado — veja em Contratos
                       </div>
                     )}
-
-                    {/* Etapa 4 (21/08) — continua visível fora do menu, de
-                        propósito: é usada repetidamente ao montar um
-                        Estudo, esconder atrás de "⋮" atrapalharia o fluxo. */}
-                    <label className="cotacao-item-incluir-estudo">
-                      <input
-                        type="checkbox"
-                        checked={selecionadasParaEstudo.has(cot.id)}
-                        onChange={() => alternarSelecaoEstudo(cot.id)}
-                      />
-                      Incluir no Estudo
-                    </label>
                   </div>
                 )
               })}
