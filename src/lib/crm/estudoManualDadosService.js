@@ -137,6 +137,29 @@ export async function buscarClienteDoEstudo(clienteProspectId) {
   return data
 }
 
+/** NOVO (26/08) — extraído pra nível de módulo (antes vivia só dentro
+ *  de `montarDadosEstudoEssencial`) porque `montarDadosEstudoExecutivo`
+ *  também precisa — evita duplicar a mesma consulta em 2 lugares. */
+export async function buscarAcomodacao(planoBibliotecaId) {
+  if (!planoBibliotecaId) return '—'
+  const { data } = await institucional.from('mercado_saude_planos').select('acomodacao').eq('plano_id', planoBibliotecaId).maybeSingle()
+  return data?.acomodacao ?? '—'
+}
+
+/** NOVO (26/08) — total de prestadores na rede do plano, reaproveita a
+ *  mesma busca que já existia pra montar a rede por região. Extraído
+ *  pra nível de módulo pelo mesmo motivo de `buscarAcomodacao` acima.
+ *  `incluirRede` passado explícito (não é mais closure) — só busca de
+ *  verdade quando a opção está ligada, senão não faz sentido gastar
+ *  consulta com algo que não vai aparecer no PDF. Sem separação
+ *  Hospital×Laboratório ainda (coluna `categoria` não existe em
+ *  `mercado_saude_rede_prestadores` hoje — achado real, 25/08). */
+export async function contarPrestadores(planoBibliotecaId, incluirRede) {
+  if (!incluirRede || !planoBibliotecaId) return null
+  const rede = await buscarRedeDoPlano(planoBibliotecaId)
+  return new Set(rede.map((r) => r.prestador?.nome).filter(Boolean)).size
+}
+
 /**
  * Monta `dados` no formato que `gerarHtmlEstudoEssencial` já espera
  * (estudoEssencialPdfService.js — esse arquivo não muda nada na
@@ -157,28 +180,11 @@ export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = tru
   const operadoraIdsEnvolvidas = [...atuais, ...propostasOrdenadas].map((c) => c.operadora_id).filter(Boolean)
   const logosPorOperadora = await buscarLogosOperadoras(operadoraIdsEnvolvidas)
 
-  async function buscarAcomodacao(planoBibliotecaId) {
-    if (!planoBibliotecaId) return '—'
-    const { data } = await institucional.from('mercado_saude_planos').select('acomodacao').eq('plano_id', planoBibliotecaId).maybeSingle()
-    return data?.acomodacao ?? '—'
-  }
-
-  /** NOVO (26/08) — total de prestadores na rede do plano, reaproveita
-   *  a mesma busca que já existia pra montar a rede por região (só
-   *  quando incluirRede está ligado — senão não faz sentido buscar
-   *  algo que não vai aparecer no PDF). Sem separação Hospital×Lab
-   *  ainda (ver nota no topo do arquivo). */
-  async function contarPrestadores(planoBibliotecaId) {
-    if (!incluirRede || !planoBibliotecaId) return null
-    const rede = await buscarRedeDoPlano(planoBibliotecaId)
-    return new Set(rede.map((r) => r.prestador?.nome).filter(Boolean)).size
-  }
-
   let colunaAtual = null
   if (atuais.length === 1) {
     const c = atuais[0]
     const t = calcularTotaisCotacao(c)
-    const totalPrestadores = await contarPrestadores(c.plano_biblioteca_id)
+    const totalPrestadores = await contarPrestadores(c.plano_biblioteca_id, incluirRede)
     const logo = logosPorOperadora.get(c.operadora_id) ?? null
     colunaAtual = {
       operadoraPlano: `${c.operadora_nome_livre}${c.plano ? ' — ' + c.plano : ''}`,
@@ -215,7 +221,7 @@ export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = tru
   const colunasPropostas = []
   for (const cot of propostasOrdenadas) {
     const t = calcularTotaisCotacao(cot)
-    const totalPrestadores = await contarPrestadores(cot.plano_biblioteca_id)
+    const totalPrestadores = await contarPrestadores(cot.plano_biblioteca_id, incluirRede)
     const logo = logosPorOperadora.get(cot.operadora_id) ?? null
     colunasPropostas.push({
       operadoraPlano: `${cot.operadora_nome_livre}${cot.plano ? ' — ' + cot.plano : ''}`,
@@ -299,14 +305,15 @@ export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = tru
 /**
  * Monta `dados` no formato que `gerarHtmlEstudoMercado` já espera
  * (estudoMercadoPdfService.js). Mesma ideia do Essencial acima — só a
- * fonte do dado muda, o HTML/visual não é tocado (exceto o texto
- * "Premium" → "Executivo", feito à parte nesse arquivo).
+ * fonte do dado muda, o HTML/visual não é tocado por este arquivo
+ * (redesenho visual, quando existir, vive só em
+ * estudoMercadoPdfService.js).
  *
- * Logo/prestadores/coparticipação do Executivo ficam pra quando esse
- * arquivo entrar em revisão — hoje ele não tem os campos correspondentes
- * no template de PDF ainda (estudoMercadoPdfService.js não visto nesta
- * sessão), então não adianto sem saber se o template já tem onde
- * exibir. Sinalizado, não implementado às cegas.
+ * ATUALIZADO (26/08) — mesmo enriquecimento que o Essencial já tinha:
+ * acomodação, coparticipação, logo da operadora e contagem de
+ * prestadores por proposta (e pro Cenário Atual, quando ele é 1 plano
+ * só). Antes esses campos não eram preenchidos e o template sempre
+ * mostrava "—" mesmo tendo o dado disponível.
  */
 export async function montarDadosEstudoExecutivo({ cotacaoIds, incluirRede = true, incluirRegras = false }) {
   const cotacoesSelecionadas = await buscarCotacoesParaEstudo(cotacaoIds)
@@ -314,21 +321,37 @@ export async function montarDadosEstudoExecutivo({ cotacaoIds, incluirRede = tru
   const { atuais, propostasOrdenadas } = separarAtuaisEPropostas(cotacoesSelecionadas)
   const totalCenarioAtual = calcularTotalCombinado(atuais)
 
-  const cenarioAtual = atuais.map((c) => {
+  const operadoraIdsEnvolvidas = [...atuais, ...propostasOrdenadas].map((c) => c.operadora_id).filter(Boolean)
+  const logosPorOperadora = await buscarLogosOperadoras(operadoraIdsEnvolvidas)
+
+  const cenarioAtual = []
+  for (const c of atuais) {
     const t = calcularTotaisCotacao(c)
-    return {
+    const logo = logosPorOperadora.get(c.operadora_id) ?? null
+    cenarioAtual.push({
       operadora_nome: c.operadora_nome_livre,
       operadora_nome_livre: c.operadora_nome_livre,
       plano: c.plano,
       quantidade_vidas_informada: t.totalVidas,
       mensalidade_informada: t.totalMensal,
-    }
-  })
+      // Só faz sentido acomodação/coparticipação por linha quando é 1
+      // plano — com vários planos combinados, cada linha já É 1 plano
+      // individual (essa tabela sempre lista 1 linha por Cotação
+      // marcada Cenário Atual, nunca soma), então sempre dá pra tentar.
+      acomodacao: await buscarAcomodacao(c.plano_biblioteca_id),
+      coparticipacao: c.coparticipacao_tipo ?? '—',
+      logoUrl: logo?.logo_url ?? null,
+      logoFundo: logo?.logo_fundo_chip ?? null,
+    })
+  }
 
-  const propostasSelecionadas = propostasOrdenadas.map((cot) => {
+  const propostasSelecionadas = []
+  for (const cot of propostasOrdenadas) {
     const t = calcularTotaisCotacao(cot)
     const impactoMensal = totalCenarioAtual.totalMensal > 0 ? t.totalMensal - totalCenarioAtual.totalMensal : null
-    return {
+    const totalPrestadores = await contarPrestadores(cot.plano_biblioteca_id, incluirRede)
+    const logo = logosPorOperadora.get(cot.operadora_id) ?? null
+    propostasSelecionadas.push({
       id: cot.id,
       plano: cot.plano ?? cot.operadora_nome_livre,
       operadora_nome: cot.operadora_nome_livre,
@@ -343,8 +366,13 @@ export async function montarDadosEstudoExecutivo({ cotacaoIds, incluirRede = tru
       faixasFaltantes: [], // Cotação já criada sempre tem preço completo — nunca falta faixa aqui
       planoBibliotecaId: cot.plano_biblioteca_id ?? null,
       operadoraId: cot.operadora_id ?? null,
-    }
-  })
+      acomodacao: await buscarAcomodacao(cot.plano_biblioteca_id),
+      coparticipacao: cot.coparticipacao_tipo ?? '—',
+      totalPrestadores,
+      logoUrl: logo?.logo_url ?? null,
+      logoFundo: logo?.logo_fundo_chip ?? null,
+    })
+  }
 
   let rede = []
   if (incluirRede) {
