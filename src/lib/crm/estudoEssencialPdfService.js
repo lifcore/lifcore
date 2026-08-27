@@ -65,6 +65,23 @@ function blocoKpis(itens) {
   return `<div class="kpi-linha">${cards}</div>`
 }
 
+/** NOVO (27/08) — "quadro com contorno colorido" pro Perfil do Corretor
+ *  na capa, pedido explícito do usuário (não queria só texto simples).
+ *  Só renderiza os campos que existem — se `corretor` vier vazio/sem
+ *  nenhum campo preenchido, não desenha o quadro (evita caixa vazia). */
+function blocoCorretor(corretor) {
+  const linhas = [
+    corretor?.nome ? `<div class="corretor-nome">${escapeHtml(corretor.nome)}</div>` : '',
+    corretor?.email ? `<div class="corretor-linha">${escapeHtml(corretor.email)}</div>` : '',
+    corretor?.telefone ? `<div class="corretor-linha">${escapeHtml(corretor.telefone)}</div>` : '',
+  ].filter(Boolean)
+  if (linhas.length === 0) return ''
+  return `<div class="corretor-quadro">
+    <div class="corretor-rotulo">Corretor Responsável</div>
+    ${linhas.join('')}
+  </div>`
+}
+
 function formatarMoeda(v) {
   return v == null ? 'não informado' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
@@ -200,7 +217,7 @@ function montarRecomendacao(dados) {
 }
 
 export function gerarHtmlEstudoEssencial(dados) {
-  const { geradoEm, cliente, colunaAtual, colunasPropostas, redePorRegiao, prontidao } = dados
+  const { geradoEm, cliente, corretor, colunaAtual, colunasPropostas, redePorRegiao, prontidao } = dados
 
   const graficoCusto = colunasPropostas.some((c) => c.custoMensal != null)
     ? graficoBarrasVertical({
@@ -256,6 +273,12 @@ export function gerarHtmlEstudoEssencial(dados) {
   .capa h1 { font-size: 32px; margin: 0 0 12px; font-weight: 400; }
   .capa .tagline { font-size: 14px; color: #b9c4c2; max-width: 460px; line-height: 1.6; margin-bottom: 36px; }
   .capa .meta { font-size: 13px; color: #8fa19e; border-top: 1px solid #24403f; padding-top: 16px; }
+  /* NOVO (27/08) — quadro do Perfil do Corretor na capa, contorno
+     colorido (não só texto simples, pedido explícito do usuário). */
+  .corretor-quadro { margin-top: 20px; border: 1px solid var(--primary); border-radius: 8px; padding: 12px 16px; max-width: 300px; }
+  .corretor-rotulo { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--primary); margin-bottom: 5px; }
+  .corretor-nome { font-size: 14px; color: var(--offwhite); font-weight: 700; margin-bottom: 2px; }
+  .corretor-linha { font-size: 12px; color: #b9c4c2; line-height: 1.5; }
   h2.titulo-secao { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--primary); margin: 0 0 20px; font-weight: 400; }
   /* NOVO (26/08) — cabeçalho/rodapé fino repetido por seção + KPIs em
      caixa, mesmo padrão do Executivo (estudoMercadoPdfService.js). */
@@ -336,6 +359,7 @@ export function gerarHtmlEstudoEssencial(dados) {
     <h1>Estudo de Mercado — Essencial</h1>
     <p class="tagline">Uma análise objetiva para encontrar o melhor equilíbrio entre investimento, cobertura e rede.</p>
     <div class="meta">Cliente: ${escapeHtml(cliente.razao_social)}<br/>Data: ${new Date(geradoEm).toLocaleDateString('pt-BR')}</div>
+    ${blocoCorretor(corretor)}
   </section>
 
   <section>

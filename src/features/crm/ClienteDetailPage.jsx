@@ -708,7 +708,12 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
     setGerandoEstudo(true)
     setErroWorkflow(null)
     try {
-      const opcoes = { cotacaoIds: [...selecionadasParaEstudo], incluirRede, incluirRegras }
+      // NOVO (27/08) — perfil do corretor logado, pra exibir no Estudo
+      // (nome/e-mail/telefone). Não busca de novo no banco — já está
+      // disponível aqui via useAuth() (CotacoesSecao recebe `perfil`
+      // como prop desde sempre), só repassa.
+      const corretor = { nome: perfil?.nome_completo ?? null, email: perfil?.email ?? null, telefone: perfil?.telefone ?? null }
+      const opcoes = { cotacaoIds: [...selecionadasParaEstudo], incluirRede, incluirRegras, corretor }
       const dados = tipo === 'essencial' ? await montarDadosEstudoEssencial(opcoes) : await montarDadosEstudoExecutivo(opcoes)
       const html = tipo === 'essencial' ? gerarHtmlEstudoEssencial(dados) : gerarHtmlEstudoMercado(dados)
       const janela = window.open('', '_blank')

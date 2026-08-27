@@ -187,7 +187,7 @@ export async function contarPrestadores(planoBibliotecaId, incluirRede) {
  * continua sendo limitação conhecida, registrada aqui — não inventa
  * dado pra preencher.
  */
-export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = true, incluirRegras = false }) {
+export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = true, incluirRegras = false, corretor = null }) {
   const cotacoesSelecionadas = await buscarCotacoesParaEstudo(cotacaoIds)
   const cliente = await buscarClienteDoEstudo(cotacoesSelecionadas[0].cliente_prospect_id)
   const { atuais, propostasOrdenadas } = separarAtuaisEPropostas(cotacoesSelecionadas)
@@ -309,6 +309,7 @@ export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = tru
   return {
     geradoEm: new Date().toISOString(),
     cliente,
+    corretor,
     colunaAtual,
     colunasPropostas,
     redePorRegiao,
@@ -330,7 +331,7 @@ export async function montarDadosEstudoEssencial({ cotacaoIds, incluirRede = tru
  * só). Antes esses campos não eram preenchidos e o template sempre
  * mostrava "—" mesmo tendo o dado disponível.
  */
-export async function montarDadosEstudoExecutivo({ cotacaoIds, incluirRede = true, incluirRegras = false }) {
+export async function montarDadosEstudoExecutivo({ cotacaoIds, incluirRede = true, incluirRegras = false, corretor = null }) {
   const cotacoesSelecionadas = await buscarCotacoesParaEstudo(cotacaoIds)
   const cliente = await buscarClienteDoEstudo(cotacoesSelecionadas[0].cliente_prospect_id)
   const { atuais, propostasOrdenadas } = separarAtuaisEPropostas(cotacoesSelecionadas)
@@ -418,6 +419,7 @@ export async function montarDadosEstudoExecutivo({ cotacaoIds, incluirRede = tru
   return {
     geradoEm: new Date().toISOString(),
     cliente,
+    corretor,
     cenarioAtual,
     totalCenarioAtual,
     propostasSelecionadas,

@@ -30,6 +30,21 @@ import { graficoBarrasVertical, graficoDivergente } from './graficosSvg'
  * ordem_apresentacao.
  */
 
+/** NOVO (27/08) — mesmo quadro do Perfil do Corretor usado no Essencial,
+ *  os dois documentos devem ter a mesma linguagem visual. */
+function blocoCorretor(corretor) {
+  const linhas = [
+    corretor?.nome ? `<div class="corretor-nome">${escapeHtml(corretor.nome)}</div>` : '',
+    corretor?.email ? `<div class="corretor-linha">${escapeHtml(corretor.email)}</div>` : '',
+    corretor?.telefone ? `<div class="corretor-linha">${escapeHtml(corretor.telefone)}</div>` : '',
+  ].filter(Boolean)
+  if (linhas.length === 0) return ''
+  return `<div class="corretor-quadro">
+    <div class="corretor-rotulo">Corretor Responsável</div>
+    ${linhas.join('')}
+  </div>`
+}
+
 function formatarMoeda(v) {
   return v == null ? '—' : (v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
@@ -187,7 +202,7 @@ function calcularRedeComparativa(rede, propostas) {
 }
 
 export function gerarHtmlEstudoMercado(dados) {
-  const { geradoEm, cliente, cenarioAtual, totalCenarioAtual, propostasSelecionadas, rede, legenda, regrasIncluidas } = dados
+  const { geradoEm, cliente, corretor, cenarioAtual, totalCenarioAtual, propostasSelecionadas, rede, legenda, regrasIncluidas } = dados
 
   const valoresGrafico = [
     { label: 'Atual', valor: totalCenarioAtual.totalMensal ?? 0 },
@@ -273,6 +288,12 @@ export function gerarHtmlEstudoMercado(dados) {
   .capa h1 { font-size: 34px; margin: 0 0 12px; }
   .capa .tagline { font-size: 15px; color: #b9c4c2; max-width: 460px; line-height: 1.6; margin-bottom: 40px; }
   .capa .meta { font-size: 13px; color: #8fa19e; border-top: 1px solid #24403f; padding-top: 16px; }
+  /* NOVO (27/08) — quadro do Perfil do Corretor na capa, contorno
+     colorido (não só texto simples, pedido explícito do usuário). */
+  .corretor-quadro { margin-top: 20px; border: 1px solid var(--primary); border-radius: 8px; padding: 12px 16px; max-width: 300px; }
+  .corretor-rotulo { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--primary); margin-bottom: 5px; }
+  .corretor-nome { font-size: 14px; color: var(--offwhite); font-weight: 700; margin-bottom: 2px; }
+  .corretor-linha { font-size: 12px; color: #b9c4c2; line-height: 1.5; }
   /* NOVO (26/08) — cabeçalho/rodapé fino repetido por seção. */
   .cabecalho-pagina { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #ddd6c7; padding-bottom: 12px; margin-bottom: 28px; }
   .cabecalho-pagina-logo { height: 18px; }
@@ -335,6 +356,7 @@ export function gerarHtmlEstudoMercado(dados) {
     <h1>Estudo de Mercado — Executivo</h1>
     <p class="tagline">Uma análise técnica para encontrar o melhor equilíbrio entre investimento, cobertura e rede.</p>
     <div class="meta">Cliente: ${escapeHtml(cliente.razao_social)}<br/>Data: ${formatarDataBR(geradoEm.slice(0, 10))}</div>
+    ${blocoCorretor(corretor)}
   </section>
 
   <section>
