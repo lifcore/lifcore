@@ -35,6 +35,36 @@ function logoOperadora(logoUrl) {
   return `<div class="logo-operadora-box"><img src="${escapeHtml(logoUrl)}" alt="" class="logo-operadora-img" /></div>`
 }
 
+/** NOVO (26/08) — cabeçalho fino repetido no topo de cada seção, mesmo
+ *  padrão já aplicado no Executivo (estudoMercadoPdfService.js) — os
+ *  dois documentos devem ter a mesma linguagem visual, só o conteúdo
+ *  muda. HTML normal repetido, não CSS de impressão `@page` (suporte
+ *  inconsistente entre navegadores). */
+function cabecalhoPagina() {
+  return `<div class="cabecalho-pagina">
+    <img src="${LOGO_LIFITSEG}" alt="" class="cabecalho-pagina-logo" />
+    <span class="cabecalho-pagina-divisor"></span>
+    <span>Estudo de Mercado • Inteligência em Saúde e Seguros</span>
+  </div>`
+}
+
+/** NOVO (26/08) — rodapé fino repetido no fim de cada seção. Sem número
+ *  de página: não dá pra calcular em que página física cada seção cai
+ *  depois de impressa. Substitui o antigo <footer> único no fim do
+ *  documento. */
+function rodapePagina() {
+  return `<div class="rodape-pagina">LifitSeg • Documento executivo</div>`
+}
+
+/** NOVO (26/08) — linha de KPIs em caixa escura, mesmo padrão do
+ *  Executivo. `itens`: [{ valor, rotulo }]. */
+function blocoKpis(itens) {
+  const cards = itens
+    .map((i) => `<div class="kpi-card"><div class="kpi-valor">${escapeHtml(i.valor)}</div><div class="kpi-rotulo">${escapeHtml(i.rotulo)}</div></div>`)
+    .join('')
+  return `<div class="kpi-linha">${cards}</div>`
+}
+
 function formatarMoeda(v) {
   return v == null ? 'não informado' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
@@ -213,9 +243,21 @@ export function gerarHtmlEstudoEssencial(dados) {
   .capa .tagline { font-size: 14px; color: #b9c4c2; max-width: 460px; line-height: 1.6; margin-bottom: 36px; }
   .capa .meta { font-size: 13px; color: #8fa19e; border-top: 1px solid #24403f; padding-top: 16px; }
   h2.titulo-secao { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--primary); margin: 0 0 20px; font-weight: 400; }
+  /* NOVO (26/08) — cabeçalho/rodapé fino repetido por seção + KPIs em
+     caixa, mesmo padrão do Executivo (estudoMercadoPdfService.js). */
+  .cabecalho-pagina { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #ddd6c7; padding-bottom: 12px; margin-bottom: 24px; }
+  .cabecalho-pagina-logo { height: 18px; }
+  .cabecalho-pagina-divisor { width: 1px; height: 14px; background: #ddd6c7; }
+  .rodape-pagina { font-size: 9.5px; color: var(--text-soft); text-align: right; margin-top: 28px; padding-top: 10px; border-top: 1px solid #ddd6c7; }
+  .kpi-linha { display: flex; gap: 14px; margin: 16px 0 24px; }
+  .kpi-card { flex: 1; background: var(--dark); border-radius: 8px; padding: 16px 14px; text-align: center; }
+  .kpi-valor { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 22px; font-weight: 700; color: var(--offwhite); }
+  .kpi-rotulo { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary); margin-top: 6px; }
   table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   th { text-align: left; background: var(--surface); color: var(--offwhite); padding: 9px 10px; font-size: 10px; text-transform: uppercase; font-weight: 400; }
   td { padding: 9px 10px; border-bottom: 1px solid #e4ded1; vertical-align: top; }
+  /* NOVO (26/08) — zebra striping, "tabela estilo sistema" — mesmo padrão do Executivo. */
+  tbody tr:nth-child(even) { background: #f2ede0; }
   .linha-rotulo { font-weight: 700; color: var(--dark); white-space: nowrap; }
   .linha-custo td { font-weight: 700; font-family: 'Helvetica Neue', Arial, sans-serif; }
   .linha-custo-anual td { font-family: 'Helvetica Neue', Arial, sans-serif; color: var(--text-soft); }
@@ -233,7 +275,6 @@ export function gerarHtmlEstudoEssencial(dados) {
   .aviso-essencial { font-size: 12px; color: var(--text-soft); font-style: italic; background: #f0ece0; border-left: 3px solid var(--primary); padding: 9px 13px; margin: 10px 0; }
   .recomendacao-texto { font-size: 15px; line-height: 1.6; }
   ul.pontos-atencao { padding-left: 18px; font-size: 12.5px; line-height: 1.7; }
-  footer.rodape { font-size: 10px; color: var(--text-soft); text-align: center; padding: 16px; }
   /* NOVO (26/08) — logo da LifitSeg (capa + fechamento) e logo de
      operadora (cabeçalho da tabela comparativa). */
   .capa .logo-lifitseg { height: 40px; margin-bottom: 20px; }
@@ -268,36 +309,52 @@ export function gerarHtmlEstudoEssencial(dados) {
   </section>
 
   <section>
-    <h2 class="titulo-secao">Resumo Executivo</h2>
+    ${cabecalhoPagina()}
+    <h2 class="titulo-secao">01 • Resumo Executivo</h2>
+    ${blocoKpis([
+      { valor: String(colunasPropostas.length), rotulo: 'Propostas comparadas' },
+      { valor: colunaAtual?.custoMensal != null ? formatarMoeda(colunaAtual.custoMensal) : '—', rotulo: 'Custo atual' },
+    ])}
     ${montarRecomendacao(dados)}
     ${prontidao.precisamAtencao.length > 0 ? `<p class="aviso-essencial">⚠️ ${prontidao.precisamAtencao.length} proposta(s) confirmada(s) não entraram neste comparativo — ver Pontos de Atenção.</p>` : ''}
+    ${rodapePagina()}
   </section>
 
   <section>
-    <h2 class="titulo-secao">Comparativo</h2>
+    ${cabecalhoPagina()}
+    <h2 class="titulo-secao">02 • Comparativo</h2>
     ${montarTabelaComparativa(colunaAtual, colunasPropostas)}
+    ${rodapePagina()}
   </section>
 
   <section>
-    <h2 class="titulo-secao">Rede Estratégica por Região</h2>
+    ${cabecalhoPagina()}
+    <h2 class="titulo-secao">03 • Rede Estratégica por Região</h2>
     ${blocoRede}
     <p class="aviso-essencial">${escapeHtml(redePorRegiao.notaValidacao)}</p>
+    ${rodapePagina()}
   </section>
 
   <section>
-    <h2 class="titulo-secao">Financeiro</h2>
+    ${cabecalhoPagina()}
+    <h2 class="titulo-secao">04 • Financeiro</h2>
     ${graficoCusto ? `<div style="margin-bottom:24px;">${graficoCusto}</div>` : ''}
     <div>${blocoImpactoComCobertura(colunaAtual, colunasPropostas)}</div>
+    ${rodapePagina()}
   </section>
 
   <section>
-    <h2 class="titulo-secao">Pontos de Atenção</h2>
+    ${cabecalhoPagina()}
+    <h2 class="titulo-secao">05 • Pontos de Atenção</h2>
     ${pontosAtencao.length ? `<ul class="pontos-atencao">${pontosAtencao.map((p) => `<li>${p}</li>`).join('')}</ul>` : '<p class="aviso-essencial">Nenhum ponto de atenção identificado nos dados disponíveis.</p>'}
+    ${rodapePagina()}
   </section>
 
   <section>
-    <h2 class="titulo-secao">Observações e Metodologia</h2>
+    ${cabecalhoPagina()}
+    <h2 class="titulo-secao">06 • Observações e Metodologia</h2>
     <p class="aviso-essencial">Valores e condições são de responsabilidade das operadoras e sujeitos a alteração — este estudo não vincula a prestação do serviço, que se dá apenas na assinatura do contrato. Preços refletem a regra comercial vigente no Connect Center no momento da geração; confirme período de vigência com a operadora antes de fechar negócio.</p>
+    ${rodapePagina()}
   </section>
 
   <section class="fechamento">
@@ -305,8 +362,6 @@ export function gerarHtmlEstudoEssencial(dados) {
     <p class="mensagem">Obrigado pela confiança em construir, junto com você, a melhor decisão sobre o cuidado da sua equipe.</p>
     <div class="assinatura">LifitSeg — Corretora de Seguros</div>
   </section>
-
-  <footer class="rodape">LifitSeg — Estudo de Mercado (Essencial) gerado em ${new Date(geradoEm).toLocaleDateString('pt-BR')}, a partir de dados confirmados pelo corretor responsável.</footer>
 </body>
 </html>`
 }
