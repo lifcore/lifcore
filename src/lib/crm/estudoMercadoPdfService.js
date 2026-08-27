@@ -185,22 +185,6 @@ function blocoKpis(itens) {
   return `<div class="kpi-linha">${cards}</div>`
 }
 
-/** Interseção e diferenças de prestador entre as propostas selecionadas — só operação de conjunto sobre dado real, nenhuma curadoria inventada. */
-function calcularRedeComparativa(rede, propostas) {
-  const porPrestador = {}
-  for (const linha of rede) {
-    if (!porPrestador[linha.prestador]) porPrestador[linha.prestador] = new Set()
-    porPrestador[linha.prestador].add(linha.proposta_estudo_id)
-  }
-  const totalPropostas = propostas.length
-  const comuns = Object.entries(porPrestador).filter(([, ids]) => ids.size === totalPropostas).map(([p]) => p)
-  const exclusivos = propostas.map((p) => ({
-    proposta: p,
-    prestadores: Object.entries(porPrestador).filter(([, ids]) => ids.size === 1 && ids.has(p.id)).map(([nome]) => nome),
-  }))
-  return { comuns, exclusivos }
-}
-
 export function gerarHtmlEstudoMercado(dados) {
   const { geradoEm, cliente, corretor, cenarioAtual, totalCenarioAtual, propostasSelecionadas, rede, legenda, regrasIncluidas } = dados
 
