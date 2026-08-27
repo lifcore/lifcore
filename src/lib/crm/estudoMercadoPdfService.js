@@ -217,7 +217,7 @@ export function gerarHtmlEstudoMercado(dados) {
   const linhasComparativo = propostasSelecionadas
     .map((p) => `
       <tr>
-        <td>${logoOperadora(p.logoUrl)}<strong>${escapeHtml(p.operadora_nome ?? p.operadora_nome_extraido ?? '—')}</strong><br/><span class="sub">${escapeHtml(p.plano ?? '—')}</span></td>
+        <td><div class="celula-operadora">${logoOperadora(p.logoUrl)}<div><strong>${escapeHtml(p.operadora_nome ?? p.operadora_nome_extraido ?? '—')}</strong><br/><span class="sub">${escapeHtml(p.plano ?? '—')}</span></div></div></td>
         <td>${escapeHtml(p.acomodacao ?? '—')}</td>
         <td>${escapeHtml(p.coparticipacao ?? '—')}</td>
         <td>${p.totalPrestadores != null ? `${p.totalPrestadores} prestador${p.totalPrestadores === 1 ? '' : 'es'}` : '—'}</td>
@@ -229,7 +229,7 @@ export function gerarHtmlEstudoMercado(dados) {
   const linhasCenarioAtual = cenarioAtual
     .map((p) => `
       <tr>
-        <td>${logoOperadora(p.logoUrl)}${escapeHtml(p.operadora_nome ?? p.operadora_nome_livre ?? '—')}</td>
+        <td><div class="celula-operadora">${logoOperadora(p.logoUrl)}<div>${escapeHtml(p.operadora_nome ?? p.operadora_nome_livre ?? '—')}</div></div></td>
         <td>${escapeHtml(p.plano ?? '—')}</td>
         <td>${escapeHtml(p.acomodacao ?? '—')}</td>
         <td>${escapeHtml(p.coparticipacao ?? '—')}</td>
@@ -267,7 +267,7 @@ export function gerarHtmlEstudoMercado(dados) {
   section { padding: 48px 56px; page-break-after: always; }
   section:last-of-type { page-break-after: auto; }
   h1, h2, h3 { font-weight: 400; letter-spacing: 0.01em; }
-  .capa { background: var(--dark); color: var(--offwhite); display: flex; flex-direction: column; justify-content: center; min-height: 100vh; }
+  .capa { background: var(--dark); color: var(--offwhite); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 100vh; }
   .capa .logo-lifitseg { height: 42px; margin-bottom: 22px; }
   .capa .marca { font-size: 13px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--primary); margin-bottom: 24px; }
   .capa h1 { font-size: 34px; margin: 0 0 12px; }
@@ -290,14 +290,23 @@ export function gerarHtmlEstudoMercado(dados) {
   .destaque-card strong { font-size: 16px; color: var(--dark); }
   .faixa-precos { font-size: 15px; margin: 16px 0; color: var(--text-soft); }
   .faixa-precos strong { color: var(--dark); font-size: 20px; font-family: 'Helvetica Neue', Arial, sans-serif; }
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { text-align: left; background: var(--surface); color: var(--offwhite); padding: 10px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 400; }
-  td { padding: 10px 12px; border-bottom: 1px solid #e4ded1; }
+  td { padding: 11px 12px; border-bottom: 1px solid #e4ded1; }
   /* NOVO (26/08) — zebra striping, "tabela estilo sistema". */
   tbody tr:nth-child(even) { background: #f2ede0; }
   td.valor { text-align: right; font-variant-numeric: tabular-nums; font-family: 'Helvetica Neue', Arial, sans-serif; }
   td .sub { color: var(--text-soft); font-size: 12px; }
-  .logo-operadora-box { background: #fff; border-radius: 5px; padding: 4px 7px; display: inline-block; margin-right: 8px; vertical-align: middle; border: 1px solid #e4ded1; }
+  /* NOVO (26/08) — wrapper com cantos arredondados + sombra sutil
+     ("card de sistema", não planilha) — mesmo padrão do Essencial,
+     achado real reportado pelo usuário (tabela parecia Excel). */
+  .tabela-comparativa-wrap { border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(8,33,36,0.10); border: 1px solid #e4ded1; margin-top: 12px; }
+  .tabela-comparativa-wrap table { margin-top: 0; }
+  td + td { border-left: 1px solid #e4ded1; }
+  /* Logo + nome da operadora lado a lado, alinhados — antes ficavam
+     soltos na mesma célula com <br/> entre texto e imagem. */
+  .celula-operadora { display: flex; align-items: center; gap: 10px; }
+  .logo-operadora-box { background: #fff; border-radius: 5px; padding: 4px 7px; display: inline-flex; align-items: center; border: 1px solid #e4ded1; flex-shrink: 0; }
   .logo-operadora-img { height: 16px; display: block; }
   .grafico-bloco { margin: 28px 0; padding: 20px; background: #fff; border-radius: 8px; border: 1px solid #e4ded1; }
   .grafico-titulo { font-size: 12px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
@@ -347,10 +356,10 @@ export function gerarHtmlEstudoMercado(dados) {
       { valor: String(totalCenarioAtual.totalVidas), rotulo: 'Vidas' },
       { valor: formatarMoeda(totalCenarioAtual.totalMensal), rotulo: 'Custo mensal atual' },
     ])}
-    <table>
+    <div class="tabela-comparativa-wrap"><table>
       <thead><tr><th>Operadora</th><th>Plano</th><th>Acomodação</th><th>Coparticipação</th><th>Vidas</th><th>Mensalidade</th></tr></thead>
       <tbody>${linhasCenarioAtual}</tbody>
-    </table>
+    </table></div>
     ` : '<p class="aviso">Cenário atual não cadastrado para esta Cotação.</p>'}
     ${rodapePagina()}
   </section>
@@ -358,10 +367,10 @@ export function gerarHtmlEstudoMercado(dados) {
   <section>
     ${cabecalhoPagina()}
     <h2 class="titulo-secao">03 • Comparativo de Mercado</h2>
-    <table>
+    <div class="tabela-comparativa-wrap"><table>
       <thead><tr><th>Operadora / Plano</th><th>Acomodação</th><th>Coparticipação</th><th>Rede</th><th>Mensal</th><th>Por vida</th></tr></thead>
       <tbody>${linhasComparativo || '<tr><td colspan="6" class="sub">Nenhuma proposta confirmada ainda.</td></tr>'}</tbody>
-    </table>
+    </table></div>
     ${faixasFaltantesGeral ? '<p class="aviso">⚠️ Uma ou mais propostas têm faixa etária sem preço extraído — o valor mensal dessas propostas pode estar subestimado.</p>' : ''}
     ${rodapePagina()}
   </section>

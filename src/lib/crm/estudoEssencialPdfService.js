@@ -80,36 +80,50 @@ function diferencaCobertura(atual, proposta) {
 }
 
 function linhaComparativa(rotulo, campo, colunaAtual, colunasPropostas) {
-  const celulaAtual = colunaAtual ? escapeHtml(colunaAtual[campo]) : '—'
-  const celulasPropostas = colunasPropostas.map((c) => `<td>${escapeHtml(c[campo])}</td>`).join('')
-  return `<tr><td class="linha-rotulo">${rotulo}</td><td>${celulaAtual}</td>${celulasPropostas}</tr>`
+  const cel = (v) => (v && v !== '—' ? `<td>${escapeHtml(v)}</td>` : `<td class="vazio">—</td>`)
+  const celulaAtual = colunaAtual ? cel(colunaAtual[campo]) : `<td class="vazio">—</td>`
+  const celulasPropostas = colunasPropostas.map((c) => cel(c[campo])).join('')
+  return `<tr><td class="linha-rotulo">${rotulo}</td>${celulaAtual}${celulasPropostas}</tr>`
+}
+
+/** NOVO (26/08) — cabeçalho de coluna redesenhado: logo em caixa de
+ *  tamanho fixo (mesma altura pra qualquer operadora, alinhamento
+ *  uniforme entre colunas), nome do plano centralizado embaixo — em vez
+ *  de logo+badge+texto soltos em sequência solta (aparência de
+ *  planilha, achado real reportado pelo usuário). */
+function celulaCabecalhoOperadora({ logoUrl, papelLabel, nomePlano, semCadastro = false }) {
+  if (semCadastro) {
+    return `<th><div class="coluna-cabecalho"><div class="coluna-nome-plano sub">${escapeHtml(nomePlano)}</div></div></th>`
+  }
+  return `<th><div class="coluna-cabecalho">
+    <div class="coluna-logo-caixa">${logoOperadora(logoUrl)}</div>
+    <div class="papel-badge">${papelLabel ?? ''}</div>
+    <div class="coluna-nome-plano">${escapeHtml(nomePlano)}</div>
+  </div></th>`
 }
 
 function montarTabelaComparativa(colunaAtual, colunasPropostas) {
   const cabecalhoAtual = colunaAtual
-    ? `<th>${logoOperadora(colunaAtual.logoUrl)}<div class="papel-badge">Cenário Atual</div>${escapeHtml(colunaAtual.operadoraPlano)}</th>`
-    : `<th class="sub">Atual (não cadastrado)</th>`
+    ? celulaCabecalhoOperadora({ logoUrl: colunaAtual.logoUrl, papelLabel: 'Cenário Atual', nomePlano: colunaAtual.operadoraPlano })
+    : celulaCabecalhoOperadora({ semCadastro: true, nomePlano: 'Atual (não cadastrado)' })
   const cabecalhoPropostas = colunasPropostas
-    .map((c, i) => {
-      const papel = PAPEL_LABEL[c.papel]
-      return `<th>${logoOperadora(c.logoUrl)}<div class="papel-badge">${papel ?? ''}</div>${escapeHtml(c.operadoraPlano)}</th>`
-    })
+    .map((c) => celulaCabecalhoOperadora({ logoUrl: c.logoUrl, papelLabel: PAPEL_LABEL[c.papel], nomePlano: c.operadoraPlano }))
     .join('')
 
   const linhaCusto = `<tr class="linha-custo">
     <td class="linha-rotulo">Custo mensal</td>
-    <td>${colunaAtual ? formatarMoeda(colunaAtual.custoMensal) : '—'}</td>
-    ${colunasPropostas.map((c) => `<td>${formatarMoeda(c.custoMensal)}${c.fontePreco ? `<div class="fonte-preco">${escapeHtml(c.fontePreco)}</div>` : ''}</td>`).join('')}
+    <td class="valor">${colunaAtual ? formatarMoeda(colunaAtual.custoMensal) : '—'}</td>
+    ${colunasPropostas.map((c) => `<td class="valor">${formatarMoeda(c.custoMensal)}${c.fontePreco ? `<div class="fonte-preco">${escapeHtml(c.fontePreco)}</div>` : ''}</td>`).join('')}
   </tr>`
 
   const linhaCustoAnual = `<tr class="linha-custo-anual">
     <td class="linha-rotulo">Custo anual</td>
-    <td>${colunaAtual ? formatarMoeda(colunaAtual.custoAnual) : '—'}</td>
-    ${colunasPropostas.map((c) => `<td>${formatarMoeda(c.custoAnual)}</td>`).join('')}
+    <td class="valor">${colunaAtual ? formatarMoeda(colunaAtual.custoAnual) : '—'}</td>
+    ${colunasPropostas.map((c) => `<td class="valor">${formatarMoeda(c.custoAnual)}</td>`).join('')}
   </tr>`
 
-  return `<table class="tabela-comparativa">
-    <thead><tr><th></th>${cabecalhoAtual}${cabecalhoPropostas}</tr></thead>
+  return `<div class="tabela-comparativa-wrap"><table class="tabela-comparativa">
+    <thead><tr><th class="canto-vazio"></th>${cabecalhoAtual}${cabecalhoPropostas}</tr></thead>
     <tbody>
       ${linhaComparativa('Acomodação', 'acomodacao', colunaAtual, colunasPropostas)}
       ${linhaComparativa('Coparticipação', 'coparticipacao', colunaAtual, colunasPropostas)}
@@ -120,7 +134,7 @@ function montarTabelaComparativa(colunaAtual, colunasPropostas) {
       ${linhaCusto}
       ${linhaCustoAnual}
     </tbody>
-  </table>`
+  </table></div>`
 }
 
 /** SPEC-003 §15 — economia/acréscimo nunca aparece sozinho, sempre com a diferença de cobertura ao lado. */
@@ -237,7 +251,7 @@ export function gerarHtmlEstudoEssencial(dados) {
   body { font-family: 'Georgia', 'Times New Roman', serif; color: var(--text); background: var(--offwhite); max-width: 900px; margin: 0 auto; padding: 0; }
   section { padding: 44px 52px; page-break-after: always; }
   section:last-of-type { page-break-after: auto; }
-  .capa { background: var(--dark); color: var(--offwhite); display: flex; flex-direction: column; justify-content: center; min-height: 100vh; }
+  .capa { background: var(--dark); color: var(--offwhite); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 100vh; }
   .capa .marca { font-size: 13px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--primary); margin-bottom: 24px; }
   .capa h1 { font-size: 32px; margin: 0 0 12px; font-weight: 400; }
   .capa .tagline { font-size: 14px; color: #b9c4c2; max-width: 460px; line-height: 1.6; margin-bottom: 36px; }
@@ -255,14 +269,30 @@ export function gerarHtmlEstudoEssencial(dados) {
   .kpi-rotulo { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary); margin-top: 6px; }
   table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   th { text-align: left; background: var(--surface); color: var(--offwhite); padding: 9px 10px; font-size: 10px; text-transform: uppercase; font-weight: 400; }
-  td { padding: 9px 10px; border-bottom: 1px solid #e4ded1; vertical-align: top; }
+  td { padding: 10px; border-bottom: 1px solid #e4ded1; vertical-align: top; text-align: center; }
+  td.linha-rotulo { text-align: left; }
   /* NOVO (26/08) — zebra striping, "tabela estilo sistema" — mesmo padrão do Executivo. */
   tbody tr:nth-child(even) { background: #f2ede0; }
+  td.vazio { color: #c9c2b0; font-weight: 300; }
   .linha-rotulo { font-weight: 700; color: var(--dark); white-space: nowrap; }
   .linha-custo td { font-weight: 700; font-family: 'Helvetica Neue', Arial, sans-serif; }
   .linha-custo-anual td { font-family: 'Helvetica Neue', Arial, sans-serif; color: var(--text-soft); }
+  td.valor { font-variant-numeric: tabular-nums; }
   .fonte-preco { font-size: 10px; color: var(--text-soft); font-weight: 400; margin-top: 2px; }
-  .papel-badge { font-size: 10px; color: var(--primary); margin-bottom: 3px; min-height: 13px; }
+  /* NOVO (26/08) — cabeçalho de coluna reformulado: caixa de logo com
+     altura fixa (uniforme entre operadoras diferentes, achado real
+     reportado pelo usuário — antes logo+nome ficavam soltos, sem
+     alinhamento entre colunas), tudo centralizado. */
+  .tabela-comparativa-wrap { border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(8,33,36,0.10); border: 1px solid #e4ded1; }
+  .tabela-comparativa-wrap table { font-size: inherit; }
+  th.canto-vazio { background: var(--surface); }
+  .coluna-cabecalho { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0 2px; }
+  .coluna-logo-caixa { height: 30px; display: flex; align-items: center; justify-content: center; margin-bottom: 2px; }
+  .coluna-nome-plano { font-size: 11px; text-transform: none; letter-spacing: 0; text-align: center; line-height: 1.3; }
+  .coluna-nome-plano.sub { color: #9fb0ad; font-style: italic; }
+  .papel-badge { font-size: 9.5px; color: var(--primary); min-height: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  th + th { border-left: 1px solid rgba(247,244,239,0.12); }
+  td + td { border-left: 1px solid #e4ded1; }
   .impacto-card { display: inline-block; width: 30%; margin: 0 1.5% 16px; padding: 14px; background: #fff; border: 1px solid #e4ded1; border-radius: 8px; vertical-align: top; }
   .impacto-valor { font-size: 18px; font-weight: 700; font-family: 'Helvetica Neue', Arial, sans-serif; }
   .impacto-anual { font-size: 12px; color: var(--text-soft); font-family: 'Helvetica Neue', Arial, sans-serif; }
@@ -278,8 +308,8 @@ export function gerarHtmlEstudoEssencial(dados) {
   /* NOVO (26/08) — logo da LifitSeg (capa + fechamento) e logo de
      operadora (cabeçalho da tabela comparativa). */
   .capa .logo-lifitseg { height: 40px; margin-bottom: 20px; }
-  .logo-operadora-box { background: #fff; border-radius: 6px; padding: 6px 10px; display: inline-block; margin-bottom: 6px; }
-  .logo-operadora-img { height: 22px; display: block; }
+  .logo-operadora-box { background: #fff; border-radius: 6px; padding: 5px 9px; display: inline-flex; align-items: center; }
+  .logo-operadora-img { height: 20px; display: block; }
   .fechamento { background: var(--dark); color: var(--offwhite); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
   .fechamento .logo-lifitseg { height: 44px; margin-bottom: 22px; }
   .fechamento .mensagem { font-size: 16px; max-width: 440px; line-height: 1.7; color: #dbe3e1; }
