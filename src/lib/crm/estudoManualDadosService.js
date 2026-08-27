@@ -89,6 +89,21 @@ export function calcularTotalCombinado(cotacoesAtuais) {
  *  (vínculo opcional, ver CotacaoForm.jsx) OU vem do Multicálculo (já
  *  corrigido 25/08). Mesmo padrão de consulta já usado em
  *  `montarResumoRede` (motorSmartQuoteService.js). */
+// NOVO (26/08) — lista fixa de município pra filtrar a rede exibida no
+// Estudo, decisão do usuário (sessão de hoje) enquanto o sistema só tem
+// Jundiaí homologada como região tarifária. Antes disso, a rede vinha
+// sem filtro nenhum — centenas de prestadores de cidades que o cliente
+// nunca vai usar, deixando o PDF gigante e ilegível (achado real, visto
+// no primeiro Estudo Executivo de teste). Comparação por PREFIXO, não
+// igualdade exata — município às vezes vem como "São Paulo - Centro"
+// (subseção dentro da cidade), não só "São Paulo" puro.
+const MUNICIPIOS_REDE_HOMOLOGADOS = ['Jundiaí', 'São Paulo', 'Campinas']
+
+function pertenceAosMunicipiosHomologados(municipio) {
+  const m = municipio ?? ''
+  return MUNICIPIOS_REDE_HOMOLOGADOS.some((alvo) => m.startsWith(alvo))
+}
+
 export async function buscarRedeDoPlano(planoBibliotecaId) {
   if (!planoBibliotecaId) return []
   const { data, error } = await institucional
@@ -96,7 +111,7 @@ export async function buscarRedeDoPlano(planoBibliotecaId) {
     .select('codigo_bruto, prestador:prestador_id ( nome, municipio )')
     .eq('plano_id', planoBibliotecaId)
   if (error) throw new Error(`Erro ao buscar rede do plano: ${error.message}`)
-  return data ?? []
+  return (data ?? []).filter((l) => pertenceAosMunicipiosHomologados(l.prestador?.municipio))
 }
 
 /** Regras da operadora — opt-in explícito (checkbox desmarcado por

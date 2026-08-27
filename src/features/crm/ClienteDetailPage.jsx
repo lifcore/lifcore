@@ -675,13 +675,12 @@ function CotacoesSecao({ clienteId, cotacoes, onAtualizado, perfil }) {
   // banco, mesma ideia do carrinho do Multicálculo (Set em memória).
   const [selecionadasParaEstudo, setSelecionadasParaEstudo] = useState(new Set())
   const [mostrarOpcoesEstudo, setMostrarOpcoesEstudo] = useState(false)
-  // ATUALIZADO (26/08) — voltou a nascer desmarcado: o usuário relatou
-  // esquecer de desligar e imprimir um relatório gigante (rede sem
-  // filtro de município traz centenas de prestadores). Fica assim até
-  // a filtragem por região estar pronta (trabalho em andamento no
-  // banco, ainda não finalizado) — aí volta a fazer sentido nascer
-  // ligado de novo.
-  const [incluirRede, setIncluirRede] = useState(false)
+  // ATUALIZADO (26/08) — volta a nascer marcado: a causa raiz (rede sem
+  // filtro de município, centenas de prestadores irrelevantes) foi
+  // corrigida em buscarRedeDoPlano (estudoManualDadosService.js) — agora
+  // filtra por Jundiaí/São Paulo/Campinas antes de chegar aqui, então o
+  // relatório não fica mais gigante por padrão.
+  const [incluirRede, setIncluirRede] = useState(true)
   const [incluirRegras, setIncluirRegras] = useState(false) // regras são de venda, não valem pro que o cliente já tem ativo — opt-in
   const [gerandoEstudo, setGerandoEstudo] = useState(false)
 
