@@ -149,8 +149,11 @@ function formatarCnpj(cnpj) {
 // pixelizar). Confirmado com o usuário, arquivos já hospedados:
 //   - ESCURO (ícone + "LIFITSEG", texto branco): capa e fechamento
 //   - CLARO (só o ícone): cabeçalho fino de cada seção, fundo claro
-const LOGO_LIFITSEG_ESCURO = 'https://lifitseg.com.br/logo-clr.png'
-const LOGO_LIFITSEG_CLARO = 'https://lifitseg.com.br/logo-esc.png'
+// ATUALIZADO (28/08) — nomenclatura confirmada pelo usuário: logo-esc
+// = fundo escuro (capa/fechamento), logo-clr = página clara (demais
+// seções) — invertido em relação à suposição anterior.
+const LOGO_LIFITSEG_ESCURO = 'https://lifitseg.com.br/logo-esc.png'
+const LOGO_LIFITSEG_CLARO = 'https://lifitseg.com.br/logo-clr.png'
 
 /** NOVO (26/08) — logo de operadora, mesmo padrão do Essencial: caixa
  *  branca fixa atrás (o PDF é fundo claro, funciona pra qualquer logo
