@@ -538,7 +538,10 @@ export function gerarHtmlEstudoEssencial(dados) {
   .regiao-bloco { margin-bottom: 20px; border: 1.5px solid var(--primary); border-radius: 10px; overflow: hidden; background: #fff; }
   .regiao-titulo { background: var(--surface); text-align: center; padding: 10px; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary); }
   .regiao-bloco table { margin: 0; }
-  .linha-logos th { padding: 8px 6px 2px; }
+  /* CORRIGIDO (28/08) — 'text-align: center' explícito (herdava
+     'left' da regra genérica de th, causando o desalinhamento entre
+     o logo e o nome do plano embaixo, reportado pelo usuário). */
+  .linha-logos th { padding: 8px 6px 2px; text-align: center; }
   .rede-rotulo-prestador { text-align: left; }
   .rede-nome-plano { text-align: center; }
   .rede-nome-plano.destaque { color: var(--lime); }
