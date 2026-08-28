@@ -66,8 +66,13 @@ function cabecalhoPagina() {
  *  de página: não dá pra calcular em que página física cada seção cai
  *  depois de impressa. Substitui o antigo <footer> único no fim do
  *  documento. */
+/** ATUALIZADO (28/08) — deixou de repetir "LifitSeg • Documento
+ *  executivo" em toda página de conteúdo (achado do usuário: ficava
+ *  repetitivo demais com 6-8 seções). Esse texto agora só aparece no
+ *  rodapé da capa e no rodapé do fechamento — aqui vira só a linha
+ *  divisória fina, sem texto. */
 function rodapePagina() {
-  return `<div class="rodape-pagina">LifitSeg • Documento executivo</div>`
+  return `<div class="rodape-pagina"></div>`
 }
 
 /** NOVO (26/08) — linha de KPIs em caixa escura, mesmo padrão do
@@ -440,7 +445,12 @@ export function gerarHtmlEstudoEssencial(dados) {
   .cabecalho-pagina { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #ddd6c7; padding-bottom: 12px; margin-bottom: 24px; }
   .cabecalho-pagina-logo { height: 18px; }
   .cabecalho-pagina-divisor { width: 1px; height: 14px; background: #ddd6c7; }
-  .rodape-pagina { font-size: 9.5px; color: var(--text-soft); text-align: right; margin-top: 28px; padding-top: 10px; border-top: 1px solid #ddd6c7; }
+  .rodape-pagina { margin-top: 28px; padding-top: 10px; border-top: 1px solid #ddd6c7; }
+  /* NOVO (28/08) — rodapé "LifitSeg • Documento executivo" só existe
+     na capa e no fechamento agora; 'margin-top: auto' empurra pro fim
+     do card flex, independente de quanto conteúdo tiver acima. */
+  .capa-rodape { margin-top: auto; padding-top: 18px; font-size: 11px; color: #8fa19e; }
+  .fechamento .capa-rodape { color: #8fa19e; margin-top: 22px; padding-top: 0; }
   /* ATUALIZADO (27/08) — padding robusto (16–24px) pedido na diretriz
      visual; segue caixa escura sólida da paleta (confirmado: KPI em
      fundo escuro combina com o resto do documento, que é claro). */
@@ -595,6 +605,7 @@ export function gerarHtmlEstudoEssencial(dados) {
         ${blocoCorretor(corretor)}
       </div>
     </div>
+    <div class="capa-rodape">LifitSeg • Documento executivo</div>
   </section>
 
   <section>
@@ -652,6 +663,7 @@ export function gerarHtmlEstudoEssencial(dados) {
     <div class="fechamento-tagline">Inteligência em Saúde e Seguros</div>
     <p class="mensagem">Obrigado pela confiança em construir, junto com você, a melhor decisão sobre o cuidado da sua equipe.</p>
     <div class="assinatura">LifitSeg — Corretora de Seguros</div>
+    <div class="capa-rodape">LifitSeg • Documento executivo</div>
   </section>
 </body>
 </html>`
