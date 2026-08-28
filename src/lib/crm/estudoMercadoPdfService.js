@@ -265,7 +265,7 @@ export function gerarHtmlEstudoMercado(dados) {
     .map((p) => montarCardPlano({
       tipo: 'proposta',
       logoUrl: p.logoUrl,
-      nomePlano: `${p.operadora_nome ?? p.operadora_nome_extraido ?? '—'} — ${p.plano ?? '—'}`,
+      nomePlano: p.plano ?? p.operadora_nome ?? p.operadora_nome_extraido ?? '—',
       acomodacao: p.acomodacao,
       coparticipacao: p.coparticipacao,
       redeResumo: p.totalPrestadores != null ? `${p.totalPrestadores} prestador${p.totalPrestadores === 1 ? '' : 'es'}` : null,
@@ -355,7 +355,11 @@ export function gerarHtmlEstudoMercado(dados) {
   .cabecalho-pagina-divisor { width: 1px; height: 14px; background: #ddd6c7; }
   .rodape-pagina { font-size: 9.5px; color: var(--text-soft); text-align: right; margin-top: 32px; padding-top: 10px; border-top: 1px solid #ddd6c7; }
   /* ATUALIZADO (27/08) — peso 300 (light), rótulo de seção não é dado. */
-  h2.titulo-secao { font-size: 12px; font-weight: 300; letter-spacing: 0.2em; text-transform: uppercase; color: var(--primary); margin: 0 0 24px; }
+  /* ATUALIZADO (27/08) — trocado texto inteiro em âmbar (baixo
+     contraste sobre o off-white) por barra de destaque + texto escuro,
+     mesmo padrão do Essencial. */
+  h2.titulo-secao { font-size: 12px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--dark); margin: 0 0 24px; display: flex; align-items: center; gap: 8px; }
+  h2.titulo-secao::before { content: ''; width: 5px; height: 13px; background: var(--primary); display: inline-block; border-radius: 0; }
   /* ATUALIZADO (27/08) — padding robusto (16–24px); segue caixa escura
      sólida da paleta (confirmado: KPI em fundo escuro combina com o
      resto do documento, que é claro). */
@@ -391,9 +395,11 @@ export function gerarHtmlEstudoMercado(dados) {
   /* Logo + nome da operadora lado a lado, alinhados — antes ficavam
      soltos na mesma célula com <br/> entre texto e imagem. */
   .celula-operadora { display: flex; align-items: center; gap: 10px; }
-  .logo-operadora-box { background: #fff; border-radius: 5px; padding: 4px 7px; display: inline-flex; align-items: center; border: 1px solid #e4ded1; flex-shrink: 0; }
-  .logo-operadora-img { height: 16px; display: block; }
-  .coluna-logo-caixa { height: 30px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+  /* ATUALIZADO (27/08) — logo maior ("já faz a função de mostrar de
+     quem é" — pedido do usuário). */
+  .logo-operadora-box { background: #fff; border-radius: 6px; padding: 6px 11px; display: inline-flex; align-items: center; border: 1px solid #e4ded1; flex-shrink: 0; }
+  .logo-operadora-img { height: 26px; display: block; }
+  .coluna-logo-caixa { height: 40px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
   /* NOVO (27/08) — comparativo em grade de cards escuros sobre página
      off-white, substituindo a tabela (seção 03). Grid flexível — não
      trava em N colunas, reflui sozinho pra qualquer quantidade de

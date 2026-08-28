@@ -151,7 +151,7 @@ function montarCardPlano({ tipo, logoUrl, nomePlano, acomodacao, coparticipacao,
 function montarCardsComparativos(colunaAtual, colunasPropostas) {
   const cardAtual = colunaAtual
     ? montarCardPlano({
-        tipo: 'atual', logoUrl: colunaAtual.logoUrl, nomePlano: colunaAtual.operadoraPlano,
+        tipo: 'atual', logoUrl: colunaAtual.logoUrl, nomePlano: colunaAtual.plano ?? colunaAtual.operadoraPlano,
         acomodacao: colunaAtual.acomodacao, coparticipacao: colunaAtual.coparticipacao, redeResumo: colunaAtual.redeResumo,
         custoMensal: colunaAtual.custoMensal, custoAnual: colunaAtual.custoAnual, fontePreco: colunaAtual.fontePreco,
       })
@@ -159,7 +159,7 @@ function montarCardsComparativos(colunaAtual, colunasPropostas) {
 
   const cardsPropostas = colunasPropostas
     .map((c) => montarCardPlano({
-      tipo: 'proposta', logoUrl: c.logoUrl, nomePlano: c.operadoraPlano,
+      tipo: 'proposta', logoUrl: c.logoUrl, nomePlano: c.plano ?? c.operadoraPlano,
       acomodacao: c.acomodacao, coparticipacao: c.coparticipacao, redeResumo: c.redeResumo,
       custoMensal: c.custoMensal, custoAnual: c.custoAnual, fontePreco: c.fontePreco, papel: c.papel,
     }))
@@ -315,7 +315,12 @@ export function gerarHtmlEstudoEssencial(dados) {
   .corretor-nome { font-size: 14px; color: var(--offwhite); font-weight: 700; margin-bottom: 2px; }
   .corretor-linha { font-size: 12px; color: #b9c4c2; line-height: 1.5; }
   /* ATUALIZADO (27/08) — peso 300 (light), rótulo de seção não é dado. */
-  h2.titulo-secao { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--primary); margin: 0 0 20px; font-weight: 300; }
+  /* ATUALIZADO (27/08) — trocado texto inteiro em âmbar (baixo
+     contraste sobre o off-white — achado do usuário: "títulos quase
+     não dá pra ver") por barra de destaque + texto escuro, mesmo
+     princípio do mockup aprovado. */
+  h2.titulo-secao { font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--dark); margin: 0 0 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  h2.titulo-secao::before { content: ''; width: 5px; height: 13px; background: var(--primary); display: inline-block; border-radius: 0; }
   /* NOVO (26/08) — cabeçalho/rodapé fino repetido por seção + KPIs em
      caixa, mesmo padrão do Executivo (estudoMercadoPdfService.js). */
   .cabecalho-pagina { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #ddd6c7; padding-bottom: 12px; margin-bottom: 24px; }
@@ -348,7 +353,7 @@ export function gerarHtmlEstudoEssencial(dados) {
   .linha-custo-anual td { color: var(--text-soft); }
   td.valor { font-variant-numeric: tabular-nums; }
   .fonte-preco { font-size: 10px; color: var(--text-soft); font-weight: 400; margin-top: 2px; }
-  .coluna-logo-caixa { height: 30px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+  .coluna-logo-caixa { height: 40px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
   /* NOVO (27/08) — comparativo em grade de cards escuros sobre página
      off-white, substituindo a tabela. Grid flexível: não trava em N
      colunas, then reflui sozinho pra 2/3/5+ propostas. */
@@ -379,8 +384,14 @@ export function gerarHtmlEstudoEssencial(dados) {
   .impacto-anual { font-size: 12px; color: var(--text-soft); font-weight: 500; }
   .impacto-plano { font-size: 12px; margin-top: 6px; font-weight: 700; }
   .impacto-cobertura { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
-  .regiao-bloco { margin-bottom: 20px; }
-  .regiao-bloco h4 { font-size: 13px; color: var(--dark); margin: 0 0 8px; }
+  /* ATUALIZADO (27/08) — mesmo efeito de cantos arredondados do
+     comparativo, aqui em versão clara (fundo branco + borda verde),
+     pedido explícito do usuário pra esta tabela. Peso do subtítulo de
+     região aumentado (13px/700) — o usuário reportou títulos/subtítulos
+     difíceis de ler. */
+  .regiao-bloco { margin-bottom: 20px; border: 1px solid var(--success); border-radius: 10px; overflow: hidden; background: #fff; }
+  .regiao-bloco h4 { font-size: 13px; font-weight: 700; color: var(--dark); margin: 0; padding: 12px 14px 8px; }
+  .regiao-bloco table { margin: 0; }
   .tabela-rede { font-size: 11.5px; }
   .rede-celula { text-align: center; }
   .aviso-essencial { font-size: 12px; color: var(--text-soft); font-style: italic; background: #f0ece0; border-left: 3px solid var(--primary); padding: 9px 13px; margin: 10px 0; }
@@ -389,8 +400,11 @@ export function gerarHtmlEstudoEssencial(dados) {
   /* NOVO (26/08) — logo da LifitSeg (capa + fechamento) e logo de
      operadora (cabeçalho da tabela comparativa). */
   .capa .logo-lifitseg { height: 40px; margin-bottom: 20px; }
-  .logo-operadora-box { background: #fff; border-radius: 6px; padding: 5px 9px; display: inline-flex; align-items: center; }
-  .logo-operadora-img { height: 20px; display: block; }
+  /* ATUALIZADO (27/08) — logo maior dentro do card ("ele já faz a
+     função de mostrar de quem é" — pedido do usuário pra reduzir texto
+     redundante e aumentar a imagem). */
+  .logo-operadora-box { background: #fff; border-radius: 6px; padding: 6px 12px; display: inline-flex; align-items: center; }
+  .logo-operadora-img { height: 28px; display: block; }
   .fechamento { background: var(--dark); color: var(--offwhite); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
   .fechamento .logo-lifitseg { height: 44px; margin-bottom: 22px; }
   .fechamento .mensagem { font-size: 16px; max-width: 440px; line-height: 1.7; color: #dbe3e1; }

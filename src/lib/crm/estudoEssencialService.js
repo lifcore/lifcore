@@ -38,6 +38,12 @@ async function montarColunaAtual(cenarioAtual) {
     operadoraPlano: cenarioAtual.length > 1
       ? `${cenarioAtual.length} planos atuais`
       : `${primeiro.operadora_nome ?? primeiro.operadora_nome_livre ?? 'não informado'} — ${primeiro.plano ?? 'não informado'}`,
+    // NOVO (27/08) — nome do plano isolado (sem operadora), pro card do
+    // comparativo: usuário pediu pra tirar o nome da operadora do card
+    // (o logo já cumpre essa função) e manter só o nome do plano.
+    // null no caso de múltiplos planos — não há um nome de plano único
+    // pra mostrar, o card cai pra 'operadoraPlano' nesse caso.
+    plano: cenarioAtual.length > 1 ? null : (primeiro.plano ?? 'não informado'),
     acomodacao: primeiro.acomodacao || 'não informado',
     coparticipacao: primeiro.coparticipacao || 'não informado',
     reembolso: primeiro.reembolso || 'não informado',
@@ -59,6 +65,8 @@ function montarColunaProposta(registro, proposta) {
       propostaId: registro.propostaId,
       papel: proposta?.papel_selecao ?? null,
       operadoraPlano: `${registro.dadosExtraidos.operadora ?? 'não informado'} — ${registro.dadosExtraidos.plano ?? 'não informado'}`,
+      // NOVO (27/08) — ver comentário em montarColunaAtual.
+      plano: registro.dadosExtraidos.plano ?? 'não informado',
       acomodacao: registro.dadosExtraidos.acomodacao || 'não informado',
       coparticipacao: registro.dadosExtraidos.coparticipacao || 'não informado',
       reembolso: 'não informado (sem vínculo com o Connect Center)',
@@ -80,6 +88,8 @@ function montarColunaProposta(registro, proposta) {
     propostaId: registro.propostaId,
     papel: proposta?.papel_selecao ?? null,
     operadoraPlano: `${proposta?.operadora_nome ?? 'não informado'} — ${registro.plano.nomePlano}${registro.plano.variante ? ` (${registro.plano.variante})` : ''}`,
+    // NOVO (27/08) — ver comentário em montarColunaAtual.
+    plano: `${registro.plano.nomePlano}${registro.plano.variante ? ` (${registro.plano.variante})` : ''}`,
     acomodacao: registro.plano.acomodacao || 'não informado',
     coparticipacao: registro.plano.coparticipacao || (registro.coparticipacao[0]?.conteudo ? JSON.stringify(registro.coparticipacao[0].conteudo) : 'não informado'),
     reembolso: registro.reembolso.length > 0 ? `${registro.reembolso.length} regra(s) — ver detalhe` : 'não informado',
