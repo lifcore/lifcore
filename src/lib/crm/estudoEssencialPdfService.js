@@ -446,7 +446,7 @@ export function gerarHtmlEstudoEssencial(dados) {
   /* NOVO (26/08) — cabeçalho/rodapé fino repetido por seção + KPIs em
      caixa, mesmo padrão do Executivo (estudoMercadoPdfService.js). */
   .cabecalho-pagina { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #ddd6c7; padding-bottom: 12px; margin-bottom: 24px; }
-  .cabecalho-pagina-logo { height: 18px; }
+  .cabecalho-pagina-logo { height: 26px; }
   .cabecalho-pagina-divisor { width: 1px; height: 14px; background: #ddd6c7; }
   .rodape-pagina { margin-top: 28px; padding-top: 10px; border-top: 1px solid #ddd6c7; }
   /* NOVO (28/08) — rodapé "LifitSeg • Documento executivo" só existe
