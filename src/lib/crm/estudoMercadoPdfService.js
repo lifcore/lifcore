@@ -262,20 +262,35 @@ export function gerarHtmlEstudoMercado(dados) {
     --primary: #C9A45A; --offwhite: #F7F4EF;
     --text: #293A38; --text-soft: #687673; --success: #4A9589;
   }
-  body { font-family: 'Georgia', 'Times New Roman', serif; color: var(--text); background: var(--offwhite); max-width: 880px; margin: 0 auto; padding: 0; }
+  /* NOVO (27/08) — numeração de página física via CSS Paged Media.
+     Best-effort: renderiza no Chrome/Chromium (motor usado por
+     "Salvar como PDF"), sem suporte no Firefox — mesma ressalva já
+     aplicada nos fixes de impressão anteriores deste arquivo. Cor em
+     hex fixo porque custom properties (var()) têm suporte instável
+     dentro de margin boxes de @page. */
+  @page {
+    margin: 18mm 14mm;
+    @bottom-right { content: "Página " counter(page) " de " counter(pages); font-family: 'Inter', Arial, sans-serif; font-size: 9px; color: #687673; }
+  }
+  /* ATUALIZADO (27/08) — troca de identidade tipográfica: sans-serif
+     editorial (Inter) em todo o documento, substituindo a serifada
+     (Georgia). Pesos estritos por função: 300 em rótulos/legendas, 500
+     em dado de tabela, 700 em valor financeiro — ver comentários nas
+     classes abaixo onde cada peso é aplicado. */
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--text); background: var(--offwhite); max-width: 880px; margin: 0 auto; padding: 0; }
   section { padding: 48px 56px; page-break-after: always; }
   section:last-of-type { page-break-after: auto; }
   h1, h2, h3 { font-weight: 400; letter-spacing: 0.01em; }
   .capa { background: var(--dark); color: var(--offwhite); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 100vh; }
   .capa .logo-lifitseg { height: 42px; margin-bottom: 22px; }
-  .capa .marca { font-size: 13px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--primary); margin-bottom: 24px; }
+  .capa .marca { font-size: 13px; font-weight: 300; letter-spacing: 0.24em; text-transform: uppercase; color: var(--primary); margin-bottom: 24px; }
   .capa h1 { font-size: 34px; margin: 0 0 12px; }
   .capa .tagline { font-size: 15px; color: #b9c4c2; max-width: 460px; line-height: 1.6; margin-bottom: 40px; }
   .capa .meta { font-size: 13px; color: #8fa19e; border-top: 1px solid #24403f; padding-top: 16px; }
   /* NOVO (27/08) — quadro do Perfil do Corretor na capa, contorno
      colorido (não só texto simples, pedido explícito do usuário). */
   .corretor-quadro { margin-top: 20px; border: 1px solid var(--primary); border-radius: 8px; padding: 12px 16px; max-width: 300px; }
-  .corretor-rotulo { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--primary); margin-bottom: 5px; }
+  .corretor-rotulo { font-size: 9.5px; font-weight: 300; letter-spacing: 0.1em; text-transform: uppercase; color: var(--primary); margin-bottom: 5px; }
   .corretor-nome { font-size: 14px; color: var(--offwhite); font-weight: 700; margin-bottom: 2px; }
   .corretor-linha { font-size: 12px; color: #b9c4c2; line-height: 1.5; }
   /* NOVO (26/08) — cabeçalho/rodapé fino repetido por seção. */
@@ -283,31 +298,40 @@ export function gerarHtmlEstudoMercado(dados) {
   .cabecalho-pagina-logo { height: 18px; }
   .cabecalho-pagina-divisor { width: 1px; height: 14px; background: #ddd6c7; }
   .rodape-pagina { font-size: 9.5px; color: var(--text-soft); text-align: right; margin-top: 32px; padding-top: 10px; border-top: 1px solid #ddd6c7; }
-  h2.titulo-secao { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--primary); margin: 0 0 24px; }
-  /* NOVO (26/08) — linha de KPIs em caixa escura. */
+  /* ATUALIZADO (27/08) — peso 300 (light), rótulo de seção não é dado. */
+  h2.titulo-secao { font-size: 12px; font-weight: 300; letter-spacing: 0.2em; text-transform: uppercase; color: var(--primary); margin: 0 0 24px; }
+  /* ATUALIZADO (27/08) — padding robusto (16–24px); segue caixa escura
+     sólida da paleta (confirmado: KPI em fundo escuro combina com o
+     resto do documento, que é claro). */
   .kpi-linha { display: flex; gap: 14px; margin: 20px 0 28px; }
-  .kpi-card { flex: 1; background: var(--dark); border-radius: 8px; padding: 18px 16px; text-align: center; }
-  .kpi-valor { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 24px; font-weight: 700; color: var(--offwhite); }
-  .kpi-rotulo { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary); margin-top: 6px; }
+  .kpi-card { flex: 1; background: var(--dark); border-radius: 8px; padding: 22px 20px; text-align: center; }
+  .kpi-valor { font-size: 24px; font-weight: 700; color: var(--offwhite); }
+  .kpi-rotulo { font-size: 10px; font-weight: 300; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary); margin-top: 6px; }
   .resumo-destaques { display: flex; gap: 16px; margin: 24px 0; }
-  .destaque-card { flex: 1; border: 1px solid #ddd6c7; border-radius: 8px; padding: 16px; background: #fff; }
-  .destaque-label { display: block; font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
-  .destaque-card strong { font-size: 16px; color: var(--dark); }
-  .faixa-precos { font-size: 15px; margin: 16px 0; color: var(--text-soft); }
-  .faixa-precos strong { color: var(--dark); font-size: 20px; font-family: 'Helvetica Neue', Arial, sans-serif; }
+  .destaque-card { flex: 1; border: 1px solid #ddd6c7; border-radius: 8px; padding: 20px; background: #fff; }
+  .destaque-label { display: block; font-size: 11px; font-weight: 300; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .destaque-card strong { font-size: 16px; font-weight: 700; color: var(--dark); }
+  .faixa-precos { font-size: 15px; margin: 16px 0; color: var(--text-soft); font-weight: 500; }
+  .faixa-precos strong { color: var(--dark); font-size: 20px; font-weight: 700; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; background: var(--surface); color: var(--offwhite); padding: 10px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 400; }
-  td { padding: 11px 12px; border-bottom: 1px solid #e4ded1; }
+  /* ATUALIZADO (27/08) — cabeçalho de tabela: peso semibold + letter-
+     spacing mais aberto (diretriz "Clean Modern"), fundo escuro da
+     paleta mantido (só a tipografia mudou). */
+  th { text-align: left; background: var(--surface); color: var(--offwhite); padding: 10px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+  /* ATUALIZADO (27/08) — peso 500 (medium) no dado de tabela. */
+  td { padding: 11px 12px; border-bottom: 1px solid #e4ded1; font-weight: 500; }
   /* NOVO (26/08) — zebra striping, "tabela estilo sistema". */
   tbody tr:nth-child(even) { background: #f2ede0; }
-  td.valor { text-align: right; font-variant-numeric: tabular-nums; font-family: 'Helvetica Neue', Arial, sans-serif; }
-  td .sub { color: var(--text-soft); font-size: 12px; }
+  td.valor { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  td .sub { color: var(--text-soft); font-size: 12px; font-weight: 400; }
   /* NOVO (26/08) — wrapper com cantos arredondados + sombra sutil
      ("card de sistema", não planilha) — mesmo padrão do Essencial,
      achado real reportado pelo usuário (tabela parecia Excel). */
   .tabela-comparativa-wrap { border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(8,33,36,0.10); border: 1px solid #e4ded1; margin-top: 12px; }
   .tabela-comparativa-wrap table { margin-top: 0; }
-  td + td { border-left: 1px solid #e4ded1; }
+  /* REMOVIDO (27/08) — borda vertical entre colunas (td + td) tirava a
+     leitura "estilo sistema" pedida na diretriz visual ("Clean
+     Modern": zero linha vertical, só horizontal clara). */
   /* Logo + nome da operadora lado a lado, alinhados — antes ficavam
      soltos na mesma célula com <br/> entre texto e imagem. */
   .celula-operadora { display: flex; align-items: center; gap: 10px; }

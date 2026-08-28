@@ -10,16 +10,20 @@
  *
  * ATUALIZADO (26/08) — polimento visual pedido pelo usuário ("fonte
  * confusa nos números" no PDF como um todo, gráfico incluso). SVG
- * inline herda a fonte da página (Georgia, serifada, boa pra texto
- * corrido mas ruim pra número em escala rápida) a menos que a gente
- * force explicitamente — por isso todo <text> aqui agora carrega
- * `font-family` sans-serif direto no atributo. Também adicionadas
- * linhas de grade sutis (referência visual de proporção sem poluir) e
- * cantos de barra um pouco mais arredondados. Segue 100% SVG puro —
- * nenhuma lib nova, nenhuma mudança na confiabilidade de impressão.
+ * inline não herda a fonte da página de forma confiável em todos os
+ * motores de renderização, então todo <text> aqui carrega
+ * `font-family` direto no atributo. Também adicionadas linhas de
+ * grade sutis (referência visual de proporção sem poluir) e cantos de
+ * barra um pouco mais arredondados. Segue 100% SVG puro — nenhuma lib
+ * nova, nenhuma mudança na confiabilidade de impressão.
+ *
+ * ATUALIZADO (27/08) — troca de identidade tipográfica dos dois PDFs
+ * pra sans-serif editorial (Inter); a fonte forçada aqui no SVG
+ * acompanha a mesma troca, com Helvetica/Arial como fallback caso o
+ * motor de renderização não tenha Inter instalada.
  */
 
-const FONTE_NUMERICA = "'Helvetica Neue', Arial, sans-serif"
+const FONTE_NUMERICA = "'Inter', 'Helvetica Neue', Arial, sans-serif"
 
 function escaparTextoSvg(v) {
   return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
@@ -62,7 +66,7 @@ export function graficoBarrasVertical({ dados, largura = 680, altura = 280, form
       return `
         <rect x="${x}" y="${y}" width="${larguraBarra}" height="${alturaBarra}" fill="${cor}" rx="6" />
         <text x="${x + larguraBarra / 2}" y="${y - 10}" text-anchor="middle" font-family="${FONTE_NUMERICA}" font-size="13" fill="#293A38" font-weight="700">${escaparTextoSvg(formatarValor(d.valor))}</text>
-        <text x="${x + larguraBarra / 2}" y="${altura - margemBaixo + 20}" text-anchor="middle" font-family="${FONTE_NUMERICA}" font-size="11" fill="#687673">${escaparTextoSvg(truncar(d.label, 14))}</text>
+        <text x="${x + larguraBarra / 2}" y="${altura - margemBaixo + 20}" text-anchor="middle" font-family="${FONTE_NUMERICA}" font-size="11" font-weight="300" fill="#687673">${escaparTextoSvg(truncar(d.label, 14))}</text>
       `
     })
     .join('')
@@ -95,7 +99,7 @@ export function graficoDivergente({ dados, largura = 680, altura = null, formata
       const cor = economia ? '#4A9589' : '#C9A45A'
       const xBarra = economia ? centroX - larguraBarra : centroX
       return `
-        <text x="${centroX - larguraMaxBarra - 12}" y="${y + 16}" text-anchor="end" font-family="${FONTE_NUMERICA}" font-size="12" fill="#293A38">${escaparTextoSvg(truncar(d.label, 20))}</text>
+        <text x="${centroX - larguraMaxBarra - 12}" y="${y + 16}" text-anchor="end" font-family="${FONTE_NUMERICA}" font-size="12" font-weight="500" fill="#293A38">${escaparTextoSvg(truncar(d.label, 20))}</text>
         <rect x="${xBarra}" y="${y}" width="${larguraBarra}" height="20" fill="${cor}" rx="5" />
         <text x="${economia ? xBarra - 8 : xBarra + larguraBarra + 8}" y="${y + 15}" text-anchor="${economia ? 'end' : 'start'}" font-family="${FONTE_NUMERICA}" font-size="12" font-weight="700" fill="${cor}">${escaparTextoSvg(formatarValor(valor))}</text>
       `

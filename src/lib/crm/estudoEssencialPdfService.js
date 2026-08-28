@@ -265,41 +265,67 @@ export function gerarHtmlEstudoEssencial(dados) {
     --primary: #C9A45A; --offwhite: #F7F4EF;
     --text: #293A38; --text-soft: #687673; --success: #4A9589;
   }
-  body { font-family: 'Georgia', 'Times New Roman', serif; color: var(--text); background: var(--offwhite); max-width: 900px; margin: 0 auto; padding: 0; }
+  /* NOVO (27/08) — numeração de página física via CSS Paged Media.
+     Best-effort: renderiza no Chrome/Chromium (motor usado por
+     "Salvar como PDF"), sem suporte no Firefox — mesma ressalva já
+     aplicada nos fixes de impressão anteriores deste arquivo. Cor em
+     hex fixo porque custom properties (var()) têm suporte instável
+     dentro de margin boxes de @page. */
+  @page {
+    margin: 18mm 14mm;
+    @bottom-right { content: "Página " counter(page) " de " counter(pages); font-family: 'Inter', Arial, sans-serif; font-size: 9px; color: #687673; }
+  }
+  /* ATUALIZADO (27/08) — troca de identidade tipográfica: sans-serif
+     editorial (Inter) em todo o documento, substituindo a serifada
+     (Georgia). Pesos estritos por função: 300 em rótulos/legendas, 500
+     em dado de tabela, 700 em valor financeiro — ver comentários nas
+     classes abaixo onde cada peso é aplicado. */
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--text); background: var(--offwhite); max-width: 900px; margin: 0 auto; padding: 0; }
   section { padding: 44px 52px; page-break-after: always; }
   section:last-of-type { page-break-after: auto; }
   .capa { background: var(--dark); color: var(--offwhite); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 100vh; }
-  .capa .marca { font-size: 13px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--primary); margin-bottom: 24px; }
+  .capa .marca { font-size: 13px; font-weight: 300; letter-spacing: 0.24em; text-transform: uppercase; color: var(--primary); margin-bottom: 24px; }
   .capa h1 { font-size: 32px; margin: 0 0 12px; font-weight: 400; }
   .capa .tagline { font-size: 14px; color: #b9c4c2; max-width: 460px; line-height: 1.6; margin-bottom: 36px; }
   .capa .meta { font-size: 13px; color: #8fa19e; border-top: 1px solid #24403f; padding-top: 16px; }
   /* NOVO (27/08) — quadro do Perfil do Corretor na capa, contorno
      colorido (não só texto simples, pedido explícito do usuário). */
   .corretor-quadro { margin-top: 20px; border: 1px solid var(--primary); border-radius: 8px; padding: 12px 16px; max-width: 300px; }
-  .corretor-rotulo { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--primary); margin-bottom: 5px; }
+  .corretor-rotulo { font-size: 9.5px; font-weight: 300; letter-spacing: 0.1em; text-transform: uppercase; color: var(--primary); margin-bottom: 5px; }
   .corretor-nome { font-size: 14px; color: var(--offwhite); font-weight: 700; margin-bottom: 2px; }
   .corretor-linha { font-size: 12px; color: #b9c4c2; line-height: 1.5; }
-  h2.titulo-secao { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--primary); margin: 0 0 20px; font-weight: 400; }
+  /* ATUALIZADO (27/08) — peso 300 (light), rótulo de seção não é dado. */
+  h2.titulo-secao { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--primary); margin: 0 0 20px; font-weight: 300; }
   /* NOVO (26/08) — cabeçalho/rodapé fino repetido por seção + KPIs em
      caixa, mesmo padrão do Executivo (estudoMercadoPdfService.js). */
   .cabecalho-pagina { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #ddd6c7; padding-bottom: 12px; margin-bottom: 24px; }
   .cabecalho-pagina-logo { height: 18px; }
   .cabecalho-pagina-divisor { width: 1px; height: 14px; background: #ddd6c7; }
   .rodape-pagina { font-size: 9.5px; color: var(--text-soft); text-align: right; margin-top: 28px; padding-top: 10px; border-top: 1px solid #ddd6c7; }
+  /* ATUALIZADO (27/08) — padding robusto (16–24px) pedido na diretriz
+     visual; segue caixa escura sólida da paleta (confirmado: KPI em
+     fundo escuro combina com o resto do documento, que é claro). */
   .kpi-linha { display: flex; gap: 14px; margin: 16px 0 24px; }
-  .kpi-card { flex: 1; background: var(--dark); border-radius: 8px; padding: 16px 14px; text-align: center; }
-  .kpi-valor { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 22px; font-weight: 700; color: var(--offwhite); }
-  .kpi-rotulo { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary); margin-top: 6px; }
+  .kpi-card { flex: 1; background: var(--dark); border-radius: 8px; padding: 20px 18px; text-align: center; }
+  .kpi-valor { font-size: 22px; font-weight: 700; color: var(--offwhite); }
+  .kpi-rotulo { font-size: 10px; font-weight: 300; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary); margin-top: 6px; }
   table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  th { text-align: left; background: var(--surface); color: var(--offwhite); padding: 9px 10px; font-size: 10px; text-transform: uppercase; font-weight: 400; }
-  td { padding: 10px; border-bottom: 1px solid #e4ded1; vertical-align: top; text-align: center; }
+  /* ATUALIZADO (27/08) — cabeçalho de tabela: peso semibold + letter-
+     spacing mais aberto (diretriz "Clean Modern"), mesma cor de fundo
+     escura da paleta (mantida, só a tipografia mudou). */
+  th { text-align: left; background: var(--surface); color: var(--offwhite); padding: 9px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+  /* ATUALIZADO (27/08) — peso 500 (medium) no dado de tabela, distinto do rótulo (300) e do valor financeiro (700). */
+  td { padding: 10px; border-bottom: 1px solid #e4ded1; vertical-align: top; text-align: center; font-weight: 500; }
   td.linha-rotulo { text-align: left; }
   /* NOVO (26/08) — zebra striping, "tabela estilo sistema" — mesmo padrão do Executivo. */
   tbody tr:nth-child(even) { background: #f2ede0; }
   td.vazio { color: #c9c2b0; font-weight: 300; }
   .linha-rotulo { font-weight: 700; color: var(--dark); white-space: nowrap; }
-  .linha-custo td { font-weight: 700; font-family: 'Helvetica Neue', Arial, sans-serif; }
-  .linha-custo-anual td { font-family: 'Helvetica Neue', Arial, sans-serif; color: var(--text-soft); }
+  /* ATUALIZADO (27/08) — linha de custo com leve destaque de fundo
+     (mesmo princípio da linha de TOTAL/SUBTOTAL do modelo de
+     referência), pra separar visualmente do restante da tabela. */
+  .linha-custo td { font-weight: 700; background: rgba(201,164,90,0.10) !important; }
+  .linha-custo-anual td { color: var(--text-soft); }
   td.valor { font-variant-numeric: tabular-nums; }
   .fonte-preco { font-size: 10px; color: var(--text-soft); font-weight: 400; margin-top: 2px; }
   /* NOVO (26/08) — cabeçalho de coluna reformulado: caixa de logo com
@@ -313,12 +339,14 @@ export function gerarHtmlEstudoEssencial(dados) {
   .coluna-logo-caixa { height: 30px; display: flex; align-items: center; justify-content: center; margin-bottom: 2px; }
   .coluna-nome-plano { font-size: 11px; text-transform: none; letter-spacing: 0; text-align: center; line-height: 1.3; }
   .coluna-nome-plano.sub { color: #9fb0ad; font-style: italic; }
-  .papel-badge { font-size: 9.5px; color: var(--primary); min-height: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
-  th + th { border-left: 1px solid rgba(247,244,239,0.12); }
-  td + td { border-left: 1px solid #e4ded1; }
-  .impacto-card { display: inline-block; width: 30%; margin: 0 1.5% 16px; padding: 14px; background: #fff; border: 1px solid #e4ded1; border-radius: 8px; vertical-align: top; }
-  .impacto-valor { font-size: 18px; font-weight: 700; font-family: 'Helvetica Neue', Arial, sans-serif; }
-  .impacto-anual { font-size: 12px; color: var(--text-soft); font-family: 'Helvetica Neue', Arial, sans-serif; }
+  .papel-badge { font-size: 9.5px; font-weight: 300; color: var(--primary); min-height: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  /* REMOVIDO (27/08) — bordas verticais entre colunas (th + th, td +
+     td) tiravam a leitura "estilo sistema" pedida na diretriz visual
+     ("Clean Modern": zero linha vertical, só horizontal clara). */
+  /* ATUALIZADO (27/08) — padding robusto (16–24px). */
+  .impacto-card { display: inline-block; width: 30%; margin: 0 1.5% 16px; padding: 20px; background: #fff; border: 1px solid #e4ded1; border-radius: 8px; vertical-align: top; }
+  .impacto-valor { font-size: 18px; font-weight: 700; }
+  .impacto-anual { font-size: 12px; color: var(--text-soft); font-weight: 500; }
   .impacto-plano { font-size: 12px; margin-top: 6px; font-weight: 700; }
   .impacto-cobertura { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
   .regiao-bloco { margin-bottom: 20px; }
