@@ -378,6 +378,13 @@ export function gerarHtmlEstudoEssencial(dados) {
   /* NOVO (28/08) — card de destaque do cliente na capa, mesmo padrão
      visual do quadro do corretor, contorno dourado. */
   .cliente-quadro { background: var(--surface); border: 1px solid rgba(255,187,68,0.35); border-radius: 12px; padding: 20px 22px; margin-bottom: 20px; max-width: 320px; }
+  /* NOVO (28/08) — linha de stats na capa (vidas, e futuramente CNPJs/
+     validade da proposta quando o dado existir) — layout já preparado
+     pra receber mais itens sem redesenhar. */
+  .capa-stats { display: flex; gap: 12px; margin-bottom: 22px; }
+  .capa-stat { background: var(--surface); border-radius: 10px; padding: 14px 20px; text-align: center; min-width: 90px; }
+  .capa-stat-valor { font-size: 20px; font-weight: 700; color: var(--offwhite); }
+  .capa-stat-rotulo { font-size: 9px; font-weight: 300; text-transform: uppercase; letter-spacing: 0.08em; color: var(--primary); margin-top: 4px; }
   .cliente-rotulo { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #8fa19e; margin-bottom: 6px; }
   .cliente-nome { font-size: 22px; font-weight: 800; color: var(--offwhite); }
   .cliente-data { font-size: 11px; color: #8fa19e; margin-top: 6px; }
@@ -521,6 +528,12 @@ export function gerarHtmlEstudoEssencial(dados) {
     </div>
     <h1>Estudo de Mercado</h1>
     <p class="tagline">Uma análise objetiva para encontrar o melhor equilíbrio entre investimento, cobertura e rede.</p>
+    ${colunaAtual?.totalVidas ? `<div class="capa-stats">
+      <div class="capa-stat">
+        <div class="capa-stat-valor">${colunaAtual.totalVidas}</div>
+        <div class="capa-stat-rotulo">Vidas</div>
+      </div>
+    </div>` : ''}
     <div class="cliente-quadro">
       <div class="cliente-rotulo">Estudo preparado para</div>
       <div class="cliente-nome">${escapeHtml(cliente.razao_social)}</div>
