@@ -135,6 +135,14 @@ function escapeHtml(valor) {
   return String(valor).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 }
 
+/** NOVO (28/08) — máscara de CNPJ, mesmo padrão do Essencial. */
+function formatarCnpj(cnpj) {
+  if (!cnpj) return null
+  const digitos = String(cnpj).replace(/\D/g, '')
+  if (digitos.length !== 14) return cnpj
+  return digitos.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')
+}
+
 // ATUALIZADO (28/08) — logo dividido em duas versões, cada uma sem a
 // tagline embutida na imagem (evita redundância com o texto que já
 // aparece ao lado dela no cabeçalho, e permite aumentar o logo sem
@@ -420,7 +428,13 @@ export function gerarHtmlEstudoMercado(dados) {
   .capa .tagline { font-size: 13px; color: #9fb0ad; max-width: 400px; line-height: 1.6; margin-bottom: 28px; }
   /* NOVO (28/08) — card de destaque do cliente na capa, mesmo padrão
      visual do quadro do corretor, contorno dourado. */
-  .cliente-quadro { background: var(--surface); border: 1px solid rgba(255,187,68,0.35); border-radius: 12px; padding: 20px 22px; margin-bottom: 20px; max-width: 320px; }
+  /* ATUALIZADO (28/08) — capa deixa de empilhar tudo à esquerda: cliente
+     e corretor viram duas colunas lado a lado, usando o espaço vazio à
+     direita (achado do usuário — capa parecia "um bloco só, vazia"). */
+  .capa-grid { display: flex; gap: 20px; width: 100%; flex-wrap: wrap; }
+  .capa-coluna { flex: 1 1 260px; }
+  .cliente-quadro { background: var(--surface); border: 1px solid rgba(255,187,68,0.35); border-radius: 12px; padding: 20px 22px; height: 100%; }
+  .cliente-cnpj { font-size: 11px; color: #8fa19e; margin-top: 2px; }
   /* NOVO (28/08) — linha de stats na capa (vidas, e futuramente CNPJs/
      validade da proposta quando o dado existir) — layout já preparado
      pra receber mais itens sem redesenhar. */
@@ -433,7 +447,7 @@ export function gerarHtmlEstudoMercado(dados) {
   .cliente-data { font-size: 11px; color: #8fa19e; margin-top: 6px; }
   /* NOVO (27/08) — quadro do Perfil do Corretor na capa, contorno
      colorido (não só texto simples, pedido explícito do usuário). */
-  .corretor-quadro { margin-top: 20px; border: 1px solid var(--primary); border-radius: 8px; padding: 12px 16px; max-width: 300px; }
+  .corretor-quadro { border: 1px solid var(--primary); border-radius: 8px; padding: 12px 16px; height: 100%; }
   .corretor-rotulo { font-size: 9.5px; font-weight: 300; letter-spacing: 0.1em; text-transform: uppercase; color: var(--primary); margin-bottom: 5px; }
   .corretor-nome { font-size: 14px; color: var(--offwhite); font-weight: 700; margin-bottom: 2px; }
   .corretor-linha { font-size: 12px; color: #b9c4c2; line-height: 1.5; }
@@ -564,12 +578,19 @@ export function gerarHtmlEstudoMercado(dados) {
         <div class="capa-stat-rotulo">Vidas</div>
       </div>
     </div>` : ''}
-    <div class="cliente-quadro">
-      <div class="cliente-rotulo">Estudo preparado para</div>
-      <div class="cliente-nome">${escapeHtml(cliente.razao_social)}</div>
-      <div class="cliente-data">Gerado em ${formatarDataBR(geradoEm.slice(0, 10))}</div>
+    <div class="capa-grid">
+      <div class="capa-coluna">
+        <div class="cliente-quadro">
+          <div class="cliente-rotulo">Estudo preparado para</div>
+          <div class="cliente-nome">${escapeHtml(cliente.razao_social)}</div>
+          ${cliente.cnpj ? `<div class="cliente-cnpj">CNPJ ${escapeHtml(formatarCnpj(cliente.cnpj))}</div>` : ''}
+          <div class="cliente-data">Gerado em ${formatarDataBR(geradoEm.slice(0, 10))}</div>
+        </div>
+      </div>
+      <div class="capa-coluna">
+        ${blocoCorretor(corretor)}
+      </div>
     </div>
-    ${blocoCorretor(corretor)}
   </section>
 
   <section>

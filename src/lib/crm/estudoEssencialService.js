@@ -158,7 +158,7 @@ export async function montarDadosEstudoEssencial(cotacaoId, { regiao = null, seg
 
   const { data: cliente, error: erroCliente } = await operacional
     .from('clientes_prospects')
-    .select('razao_social')
+    .select('razao_social, cnpj')
     .eq('id', cotacao.cliente_prospect_id)
     .single()
   if (erroCliente) throw new Error(`Erro ao buscar cliente: ${erroCliente.message}`)
