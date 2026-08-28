@@ -384,7 +384,7 @@ export function gerarHtmlEstudoEssencial(dados) {
      margem física de página (@page, ver numeração) já criava: em vez
      de forçar sangramento total, vira um card com acabamento — cantos
      arredondados, borda dourada, sombra sutil (pedido do usuário). */
-  /* ATUALIZADO (28/08) — `justify-content: flex-start` (era `center`):
+  /* ATUALIZADO (28/08) — 'justify-content: flex-start' (era 'center'):
      título sobe pro topo em vez de ficar no meio da página, achado do
      usuário ("capa parece vazia" com tudo centralizado verticalmente). */
   .capa { background: var(--dark); color: var(--offwhite); display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; min-height: 100vh; border-radius: 18px; border: 2px solid var(--primary); box-shadow: 0 14px 32px rgba(3,15,16,0.22); padding-top: 60px; }
