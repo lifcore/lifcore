@@ -4,9 +4,9 @@
  * hora de "Salvar como PDF" pelo navegador, mesmo mecanismo de
  * impressão já usado em documentoClienteService.js.
  *
- * Paleta LifitSeg (globals.css do site, REV-SITE-001):
- *   dark #082124 · surface #102D2F · primary (âmbar) #C9A45A ·
- *   offwhite #F7F4EF · text #293A38 · text-soft #687673 · success #4A9589
+ * Paleta LifitSeg (ATUALIZADA 27/08 — bate com o novo logo):
+ *   dark #05191b · surface #0d2b2c · primary (âmbar) #ffbb44 ·
+ *   offwhite #eeecea · text #293A38 · text-soft #687673 · success #4A9589
  *
  * ATUALIZADO (26/08) — polimento visual pedido pelo usuário ("fonte
  * confusa nos números" no PDF como um todo, gráfico incluso). SVG
@@ -38,7 +38,7 @@ function truncar(texto, max) {
  * Gráfico de barras verticais — usado para "custo atual × propostas"
  * e "distribuição de vidas por faixa". `dados`: [{ label, valor }].
  */
-export function graficoBarrasVertical({ dados, largura = 680, altura = 280, formatarValor = (v) => v, corBarra = '#102D2F', corDestaque = '#C9A45A' }) {
+export function graficoBarrasVertical({ dados, largura = 680, altura = 280, formatarValor = (v) => v, corBarra = '#0d2b2c', corDestaque = '#ffbb44' }) {
   const valores = dados.map((d) => d.valor ?? 0)
   const maxValor = Math.max(...valores, 1)
   const margemBaixo = 56
@@ -96,7 +96,7 @@ export function graficoDivergente({ dados, largura = 680, altura = null, formata
       const valor = d.valor ?? 0
       const larguraBarra = maxAbs > 0 ? (Math.abs(valor) / maxAbs) * larguraMaxBarra : 0
       const economia = valor < 0
-      const cor = economia ? '#4A9589' : '#C9A45A'
+      const cor = economia ? '#4A9589' : '#ffbb44'
       const xBarra = economia ? centroX - larguraBarra : centroX
       return `
         <text x="${centroX - larguraMaxBarra - 12}" y="${y + 16}" text-anchor="end" font-family="${FONTE_NUMERICA}" font-size="12" font-weight="500" fill="#293A38">${escaparTextoSvg(truncar(d.label, 20))}</text>

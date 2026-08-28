@@ -185,6 +185,49 @@ function blocoKpis(itens) {
   return `<div class="kpi-linha">${cards}</div>`
 }
 
+/** NOVO (27/08) — card de plano pro comparativo em grade (mesmo padrão
+ *  do Essencial, estudoEssencialPdfService.js — os dois documentos
+ *  devem ter a mesma linguagem visual). Dois níveis de destaque:
+ *  Cenário Atual (contorno fino, se distingue sem competir) e
+ *  Recomendada (hero forte — borda dourada, elevação, selo). */
+function montarCardPlano({ tipo, logoUrl, nomePlano, acomodacao, coparticipacao, redeResumo, custoMensal, custoAnual, fontePreco, papel, semCadastro = false }) {
+  if (semCadastro) {
+    return `<div class="plano-card"><div class="plano-card-nome sub">${escapeHtml(nomePlano)}</div></div>`
+  }
+
+  const classes = ['plano-card']
+  let selo = ''
+  if (tipo === 'atual') {
+    classes.push('atual')
+    selo = '<div class="selo-atual">Cenário atual</div>'
+  } else if (papel === 'recomendada') {
+    classes.push('recomendada')
+    selo = '<div class="selo-recomendada">⭐ Recomendada</div>'
+  }
+  const badgePapel = tipo !== 'atual' && papel && papel !== 'recomendada' ? PAPEL_LABEL[papel] : null
+
+  const linhaSe = (rotulo, valor) =>
+    valor && valor !== '—' && valor !== 'não informado' ? `<div class="plano-detalhe"><strong>${escapeHtml(rotulo)}:</strong> ${escapeHtml(valor)}</div>` : ''
+
+  return `<div class="${classes.join(' ')}">
+    ${selo}
+    <div>
+      <div class="coluna-logo-caixa">${logoOperadora(logoUrl)}</div>
+      <div class="plano-card-nome">${escapeHtml(nomePlano)}</div>
+      ${badgePapel ? `<div class="plano-badge-papel">${badgePapel}</div>` : ''}
+      ${linhaSe('Acomodação', acomodacao)}
+      ${linhaSe('Coparticipação', coparticipacao)}
+      ${linhaSe('Rede', redeResumo)}
+    </div>
+    <div class="plano-preco-box">
+      <div class="plano-preco-rotulo">${tipo === 'atual' ? 'Custo atual' : 'Mensal'}</div>
+      <div class="plano-preco-valor">${formatarMoeda(custoMensal)}</div>
+      ${custoAnual != null ? `<div class="plano-preco-anual">${formatarMoeda(custoAnual)}/ano</div>` : ''}
+      ${fontePreco ? `<div class="fonte-preco">${escapeHtml(fontePreco)}</div>` : ''}
+    </div>
+  </div>`
+}
+
 export function gerarHtmlEstudoMercado(dados) {
   const { geradoEm, cliente, corretor, cenarioAtual, totalCenarioAtual, propostasSelecionadas, rede, legenda, regrasIncluidas } = dados
 
@@ -213,16 +256,24 @@ export function gerarHtmlEstudoMercado(dados) {
     .map((p) => `<div class="destaque-card"><span class="destaque-label">${PAPEL_LABEL[p.papel_selecao]}</span><strong>${escapeHtml(p.plano ?? p.operadora_nome ?? '—')}</strong></div>`)
     .join('')
 
-  const linhasComparativo = propostasSelecionadas
-    .map((p) => `
-      <tr>
-        <td><div class="celula-operadora">${logoOperadora(p.logoUrl)}<div><strong>${escapeHtml(p.operadora_nome ?? p.operadora_nome_extraido ?? '—')}</strong><br/><span class="sub">${escapeHtml(p.plano ?? '—')}</span></div></div></td>
-        <td>${escapeHtml(p.acomodacao ?? '—')}</td>
-        <td>${escapeHtml(p.coparticipacao ?? '—')}</td>
-        <td>${p.totalPrestadores != null ? `${p.totalPrestadores} prestador${p.totalPrestadores === 1 ? '' : 'es'}` : '—'}</td>
-        <td class="valor">${formatarMoeda(p.valorMensalCalculado)}</td>
-        <td class="valor">${formatarMoeda(p.custoPorVida)}</td>
-      </tr>`)
+  // NOVO (27/08) — comparativo de mercado em cards (substitui a
+  // tabela), mesmo padrão do Essencial: grid flexível, hero card pra
+  // recomendada. Cenário Atual não entra aqui — continua na tabela da
+  // seção 02, que já é sua própria listagem (pode ter vários planos
+  // vigentes ao mesmo tempo).
+  const cardsComparativo = propostasSelecionadas
+    .map((p) => montarCardPlano({
+      tipo: 'proposta',
+      logoUrl: p.logoUrl,
+      nomePlano: `${p.operadora_nome ?? p.operadora_nome_extraido ?? '—'} — ${p.plano ?? '—'}`,
+      acomodacao: p.acomodacao,
+      coparticipacao: p.coparticipacao,
+      redeResumo: p.totalPrestadores != null ? `${p.totalPrestadores} prestador${p.totalPrestadores === 1 ? '' : 'es'}` : null,
+      custoMensal: p.valorMensalCalculado,
+      custoAnual: null,
+      fontePreco: p.custoPorVida != null ? `${formatarMoeda(p.custoPorVida)} por vida` : null,
+      papel: p.papel_selecao,
+    }))
     .join('')
 
   const linhasCenarioAtual = cenarioAtual
@@ -257,9 +308,14 @@ export function gerarHtmlEstudoMercado(dados) {
 <title>Estudo de Mercado — ${escapeHtml(cliente.razao_social)}</title>
 <style>
   * { box-sizing: border-box; }
+  /* ATUALIZADO (27/08) — paleta institucional trocada pra bater com o
+     novo logo (coração laranja/ciano) — mesmos hex do Essencial e do
+     site. Acentos coral/cyan/lime disponíveis pra uso pontual, ainda
+     não aplicados em nenhum elemento deste documento. */
   :root {
-    --dark: #082124; --dark-deep: #041416; --surface: #102D2F;
-    --primary: #C9A45A; --offwhite: #F7F4EF;
+    --dark: #05191b; --dark-deep: #030f10; --surface: #0d2b2c;
+    --primary: #ffbb44; --offwhite: #eeecea;
+    --coral: #fb9874; --cyan: #cdfa9a; --lime: #5ff1b3;
     --text: #293A38; --text-soft: #687673; --success: #4A9589;
   }
   /* NOVO (27/08) — numeração de página física via CSS Paged Media.
@@ -337,6 +393,30 @@ export function gerarHtmlEstudoMercado(dados) {
   .celula-operadora { display: flex; align-items: center; gap: 10px; }
   .logo-operadora-box { background: #fff; border-radius: 5px; padding: 4px 7px; display: inline-flex; align-items: center; border: 1px solid #e4ded1; flex-shrink: 0; }
   .logo-operadora-img { height: 16px; display: block; }
+  .coluna-logo-caixa { height: 30px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+  /* NOVO (27/08) — comparativo em grade de cards escuros sobre página
+     off-white, substituindo a tabela (seção 03). Grid flexível — não
+     trava em N colunas, reflui sozinho pra qualquer quantidade de
+     propostas. Mesmo padrão do Essencial. */
+  .comparativo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-top: 14px; }
+  .plano-card { background: var(--surface); border: 1px solid rgba(238,236,234,0.10); border-radius: 10px; padding: 18px 16px; position: relative; display: flex; flex-direction: column; justify-content: space-between; }
+  .plano-card-nome { font-size: 12.5px; font-weight: 700; color: var(--offwhite); margin: 4px 0 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(238,236,234,0.12); }
+  .plano-card-nome.sub { color: #9fb0ad; font-style: italic; font-weight: 400; border-bottom: none; }
+  .plano-detalhe { font-size: 10.5px; color: #b9c4c2; margin-bottom: 4px; }
+  .plano-detalhe strong { color: var(--offwhite); font-weight: 500; }
+  .plano-badge-papel { font-size: 9px; font-weight: 300; color: var(--primary); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .plano-preco-box { margin-top: 14px; padding-top: 10px; border-top: 1px dashed rgba(238,236,234,0.15); text-align: center; }
+  .plano-preco-rotulo { font-size: 8.5px; font-weight: 300; text-transform: uppercase; letter-spacing: 0.05em; color: #8fa19e; }
+  .plano-preco-valor { font-size: 17px; font-weight: 700; color: var(--offwhite); font-variant-numeric: tabular-nums; }
+  .plano-preco-anual { font-size: 10px; color: #8fa19e; margin-top: 2px; }
+  .plano-card .fonte-preco { color: #8fa19e; }
+  .plano-card.atual { border: 1px solid var(--success); }
+  .selo-atual { position: absolute; top: -9px; left: 14px; background: var(--success); color: #fff; font-size: 7.5px; font-weight: 800; text-transform: uppercase; padding: 2px 8px; border-radius: 8px; letter-spacing: 0.03em; }
+  .plano-card.recomendada { border: 2px solid var(--primary); transform: translateY(-4px); box-shadow: 0 10px 24px rgba(3,15,16,0.28); }
+  .plano-card.recomendada .plano-card-nome { color: #fff; font-size: 13.5px; }
+  .plano-card.recomendada .plano-preco-valor { color: var(--primary); font-size: 19px; }
+  .plano-card.recomendada .plano-preco-rotulo { color: var(--primary); }
+  .selo-recomendada { position: absolute; top: -11px; left: 50%; transform: translateX(-50%); background: var(--primary); color: var(--dark); font-size: 8px; font-weight: 800; text-transform: uppercase; padding: 3px 11px; border-radius: 8px; white-space: nowrap; letter-spacing: 0.03em; }
   .grafico-bloco { margin: 28px 0; padding: 20px; background: #fff; border-radius: 8px; border: 1px solid #e4ded1; }
   .grafico-titulo { font-size: 12px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
   .aviso { font-size: 12px; color: var(--text-soft); font-style: italic; background: #f0ece0; border-left: 3px solid var(--primary); padding: 10px 14px; margin: 12px 0; }
@@ -356,7 +436,7 @@ export function gerarHtmlEstudoMercado(dados) {
 </style>
 </head>
 <body>
-  <button class="no-print" onclick="window.print()" style="position:fixed;top:16px;right:16px;padding:10px 18px;background:#C9A45A;color:#082124;border:none;border-radius:6px;cursor:pointer;font-weight:600;z-index:10;">🖨️ Imprimir / Salvar como PDF</button>
+  <button class="no-print" onclick="window.print()" style="position:fixed;top:16px;right:16px;padding:10px 18px;background:#ffbb44;color:#05191b;border:none;border-radius:6px;cursor:pointer;font-weight:600;z-index:10;">🖨️ Imprimir / Salvar como PDF</button>
 
   <section class="capa">
     <img src="${LOGO_LIFITSEG}" alt="LifitSeg" class="logo-lifitseg" />
@@ -397,10 +477,7 @@ export function gerarHtmlEstudoMercado(dados) {
   <section>
     ${cabecalhoPagina()}
     <h2 class="titulo-secao">03 • Comparativo de Mercado</h2>
-    <div class="tabela-comparativa-wrap"><table>
-      <thead><tr><th>Operadora / Plano</th><th>Acomodação</th><th>Coparticipação</th><th>Rede</th><th>Mensal</th><th>Por vida</th></tr></thead>
-      <tbody>${linhasComparativo || '<tr><td colspan="6" class="sub">Nenhuma proposta confirmada ainda.</td></tr>'}</tbody>
-    </table></div>
+    ${propostasSelecionadas.length ? `<div class="comparativo-grid">${cardsComparativo}</div>` : '<p class="aviso">Nenhuma proposta confirmada ainda.</p>'}
     ${faixasFaltantesGeral ? '<p class="aviso">⚠️ Uma ou mais propostas têm faixa etária sem preço extraído — o valor mensal dessas propostas pode estar subestimado.</p>' : ''}
     ${rodapePagina()}
   </section>
