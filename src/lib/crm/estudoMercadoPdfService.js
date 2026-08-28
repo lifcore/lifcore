@@ -404,7 +404,11 @@ export function gerarHtmlEstudoMercado(dados) {
   section { padding: 48px 56px; page-break-after: always; }
   section:last-of-type { page-break-after: auto; }
   h1, h2, h3 { font-weight: 400; letter-spacing: 0.01em; }
-  .capa { background: var(--dark); color: var(--offwhite); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 100vh; }
+  /* ATUALIZADO (28/08) — assume de propósito o enquadramento que a
+     margem física de página (@page, ver numeração) já criava: em vez
+     de forçar sangramento total, vira um card com acabamento — cantos
+     arredondados, borda dourada, sombra sutil (pedido do usuário). */
+  .capa { background: var(--dark); color: var(--offwhite); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 100vh; border-radius: 18px; border: 2px solid var(--primary); box-shadow: 0 14px 32px rgba(3,15,16,0.22); }
   /* ATUALIZADO (28/08) — capa redesenhada: logo maior no canto oposto
      (topo direito), sem texto "LIFITSEG" solto duplicando o que a
      imagem já traz. Título "Estudo de Mercado" ganha peso de título de
@@ -521,7 +525,7 @@ export function gerarHtmlEstudoMercado(dados) {
   .impacto-plano { font-size: 11px; margin-top: 8px; font-weight: 700; color: var(--dark); }
   .aviso { font-size: 12px; color: var(--text-soft); font-style: italic; background: #f0ece0; border-left: 3px solid var(--primary); padding: 10px 14px; margin: 12px 0; }
   footer.rodape { font-size: 10px; color: var(--text-soft); text-align: center; padding: 16px; }
-  .fechamento { background: var(--dark); color: var(--offwhite); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
+  .fechamento { background: var(--dark); color: var(--offwhite); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; border-radius: 18px; border: 2px solid var(--primary); box-shadow: 0 14px 32px rgba(3,15,16,0.22); }
   .fechamento .logo-lifitseg { height: 50px; margin-bottom: 14px; }
   /* NOVO (28/08) — chamada da tagline no fechamento (pedido do
      usuário) — a imagem do logo não traz mais essa frase embutida. */
