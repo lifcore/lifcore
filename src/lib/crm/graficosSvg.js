@@ -79,6 +79,89 @@ export function graficoBarrasVertical({ dados, largura = 680, altura = 280, form
 }
 
 /**
+ * NOVO (28/08) — Dashboard Financeiro: gráfico de colunas com chip de
+ * operadora + percentual embaixo de cada barra, e destaque "hero" pra
+ * proposta recomendada (fundo escuro, borda dourada, estrela).
+ * `dados`: [{ label, valor, percentual?, tipo?: 'atual'|'economia'|'investimento', destaque? }]
+ *
+ * Regra de linguagem (pedido do usuário): quando o valor é maior que o
+ * atual, NUNCA trata como perda/vermelho — é "investimento em
+ * melhoria" (âmbar), porque o cliente está buscando qualidade, não
+ * economia. "economia" só aparece quando o valor é de fato menor.
+ */
+export function graficoColunasComChip({ dados, largura = 680, altura = 320, formatarValor = (v) => v }) {
+  const valores = dados.map((d) => d.valor ?? 0)
+  const maxValor = Math.max(...valores, 1)
+  const margemBaixo = 78
+  const margemTopo = 34
+  const areaAltura = altura - margemBaixo - margemTopo
+  const larguraBarra = Math.min(46, (largura - 40) / dados.length - 22)
+  const espacamento = (largura - 40) / dados.length
+  const larguraChip = Math.min(78, espacamento - 8)
+
+  const linhasGrade = [0.25, 0.5, 0.75, 1]
+    .map((fracao) => {
+      const y = margemTopo + areaAltura * (1 - fracao)
+      return `<line x1="20" y1="${y}" x2="${largura - 20}" y2="${y}" stroke="#e2ddd3" stroke-width="1" stroke-dasharray="2,3" />`
+    })
+    .join('')
+
+  const elementos = dados
+    .map((d, i) => {
+      const xCentro = 20 + i * espacamento + espacamento / 2
+      const x = xCentro - larguraBarra / 2
+      const alturaBarra = maxValor > 0 ? (Math.abs(d.valor ?? 0) / maxValor) * areaAltura : 0
+      const y = margemTopo + (areaAltura - alturaBarra)
+
+      let corBarra = '#0d2b2c'
+      if (d.tipo === 'economia') corBarra = '#5ff1b3'
+      else if (d.tipo === 'investimento') corBarra = '#ffbb44'
+      const corValor = d.tipo === 'economia' ? '#3B6D11' : d.tipo === 'investimento' ? '#854F0B' : '#293A38'
+
+      const chipY = margemTopo + areaAltura + 14
+      const chipAltura = d.percentual != null ? 34 : 22
+      const chipX = xCentro - larguraChip / 2
+
+      let chipFundo = '#f4f1e9'
+      let chipBordaAttrs = ''
+      let corNome = '#293A38'
+      let corPercentual = '#687673'
+      let prefixoNome = ''
+
+      if (d.destaque) {
+        chipFundo = '#05191b'
+        chipBordaAttrs = 'stroke="#ffbb44" stroke-width="1.5"'
+        corNome = '#ffbb44'
+        prefixoNome = '★ '
+        corPercentual = '#eeecea'
+      } else if (d.tipo === 'economia') {
+        chipFundo = '#e1f5ee'
+        corNome = '#04342C'
+        corPercentual = '#0F6E56'
+      } else if (d.tipo === 'investimento') {
+        corPercentual = '#854F0B'
+      }
+
+      const percentualTexto = d.percentual != null ? `${d.percentual < 0 ? '↓' : '↑'} ${Math.abs(d.percentual).toFixed(1)}%` : null
+
+      return `
+        <rect x="${x}" y="${y}" width="${larguraBarra}" height="${alturaBarra}" fill="${corBarra}" rx="5" />
+        <text x="${xCentro}" y="${y - 10}" text-anchor="middle" font-family="${FONTE_NUMERICA}" font-size="12" font-weight="700" fill="${corValor}">${escaparTextoSvg(formatarValor(d.valor))}</text>
+        <rect x="${chipX}" y="${chipY}" width="${larguraChip}" height="${chipAltura}" rx="7" fill="${chipFundo}" ${chipBordaAttrs} />
+        <text x="${xCentro}" y="${chipY + 14}" text-anchor="middle" font-family="${FONTE_NUMERICA}" font-size="9" font-weight="700" fill="${corNome}">${escaparTextoSvg(truncar(`${prefixoNome}${d.label}`, 13))}</text>
+        ${percentualTexto ? `<text x="${xCentro}" y="${chipY + 27}" text-anchor="middle" font-family="${FONTE_NUMERICA}" font-size="8.5" font-weight="700" fill="${corPercentual}">${escaparTextoSvg(percentualTexto)}</text>` : ''}
+      `
+    })
+    .join('')
+
+  return `<svg viewBox="0 0 ${largura} ${altura}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+    ${linhasGrade}
+    <line x1="20" y1="${margemTopo + areaAltura}" x2="${largura - 20}" y2="${margemTopo + areaAltura}" stroke="#cdc6b6" stroke-width="1.5" />
+    ${elementos}
+  </svg>`
+}
+
+/**
  * Gráfico divergente (economia × acréscimo) — barras horizontais a
  * partir de uma linha central em zero. `dados`: [{ label, valor }],
  * valor negativo = economia (verde), positivo = acréscimo (âmbar).

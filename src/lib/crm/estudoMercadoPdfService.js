@@ -9,7 +9,7 @@ import {
   calcularComparativo,
   calcularCustoPorVida,
 } from './estudoFinanceiroService'
-import { graficoBarrasVertical, graficoDivergente } from './graficosSvg'
+import { graficoColunasComChip } from './graficosSvg'
 
 /**
  * SPEC-001 §12 — Estudo de Mercado Executivo LifitSeg (era "Premium" —
@@ -178,11 +178,66 @@ function rodapePagina() {
 /** NOVO (26/08) — linha de KPIs em caixa escura, mesmo padrão do
  *  documento de referência (número grande, rótulo pequeno em caixa
  *  alta embaixo). `itens`: [{ valor, rotulo }]. */
+/** ATUALIZADO (28/08) — suporte a `destaque` (borda dourada), usado no
+ *  KPI da proposta recomendada no Dashboard Financeiro. */
 function blocoKpis(itens) {
   const cards = itens
-    .map((i) => `<div class="kpi-card"><div class="kpi-valor">${escapeHtml(i.valor)}</div><div class="kpi-rotulo">${escapeHtml(i.rotulo)}</div></div>`)
+    .map((i) => `<div class="kpi-card${i.destaque ? ' destaque' : ''}"><div class="kpi-valor${i.destaque ? ' destaque' : ''}">${escapeHtml(i.valor)}</div><div class="kpi-rotulo${i.destaque ? ' destaque' : ''}">${escapeHtml(i.rotulo)}</div></div>`)
     .join('')
   return `<div class="kpi-linha">${cards}</div>`
+}
+
+/** NOVO (28/08) — classifica o impacto sem carga negativa: só "economia"
+ *  quando o valor é de fato menor; valor maior vira "investimento",
+ *  nunca tratado como perda (pedido explícito do usuário — cliente
+ *  pode estar buscando melhoria de qualidade, não economia). */
+function classificarImpacto(impactoMensal) {
+  if (impactoMensal == null) return null
+  if (impactoMensal < 0) return 'economia'
+  if (impactoMensal > 0) return 'investimento'
+  return 'igual'
+}
+
+/** NOVO (28/08) — KPIs do Dashboard Financeiro. */
+function montarKpisFinanceiro(totalCenarioAtual, propostasSelecionadas) {
+  const itens = []
+  if (totalCenarioAtual.totalMensal != null) itens.push({ valor: formatarMoeda(totalCenarioAtual.totalMensal), rotulo: 'Custo atual' })
+
+  if (totalCenarioAtual.totalMensal != null) {
+    const comEconomia = propostasSelecionadas.filter((p) => p.valorMensalCalculado != null && p.valorMensalCalculado < totalCenarioAtual.totalMensal)
+    if (comEconomia.length) {
+      const melhor = comEconomia.reduce((min, p) => (p.valorMensalCalculado < min.valorMensalCalculado ? p : min))
+      itens.push({ valor: `${formatarMoeda(totalCenarioAtual.totalMensal - melhor.valorMensalCalculado)}/mês`, rotulo: 'Melhor economia' })
+    }
+  }
+
+  const recomendada = propostasSelecionadas.find((p) => p.papel_selecao === 'recomendada')
+  if (recomendada) itens.push({ valor: recomendada.plano ?? recomendada.operadora_nome ?? '—', rotulo: 'Recomendada', destaque: true })
+
+  return itens
+}
+
+/** NOVO (28/08) — cards de impacto financeiro por proposta, mesmo
+ *  padrão visual do Essencial (estudoEssencialPdfService.js). Reaproveita
+ *  `p.comparativo` (já calculado em `calcularComparativo`, estudoFinanceiroService.js)
+ *  em vez de recalcular impacto mensal/anual. */
+function montarCardsImpacto(totalCenarioAtual, propostasSelecionadas) {
+  const comImpacto = propostasSelecionadas.filter((p) => p.comparativo?.impactoMensal != null)
+  if (!comImpacto.length) return ''
+  return `<div class="impacto-grid">${comImpacto
+    .map((p) => {
+      const impactoMensal = p.comparativo.impactoMensal
+      const tipo = classificarImpacto(impactoMensal)
+      const percentual = totalCenarioAtual.totalMensal ? (Math.abs(impactoMensal) / totalCenarioAtual.totalMensal) * 100 : null
+      const rotulo = tipo === 'economia' ? '↓ Economia' : tipo === 'investimento' ? '↑ Investimento em melhoria' : '= Mesmo valor'
+      return `<div class="impacto-card ${tipo}">
+        <div class="impacto-rotulo">${rotulo}</div>
+        <div class="impacto-valor">${formatarMoeda(Math.abs(impactoMensal))}/mês</div>
+        <div class="impacto-sub">${percentual != null ? `${percentual.toFixed(1)}% ${tipo === 'economia' ? 'mais barato' : 'acima'} · ` : ''}${p.comparativo.impactoAnual != null ? `${formatarMoeda(Math.abs(p.comparativo.impactoAnual))}/ano` : ''}</div>
+        <div class="impacto-plano">${escapeHtml(p.plano ?? p.operadora_nome ?? '—')}</div>
+      </div>`
+    })
+    .join('')}</div>`
 }
 
 /** NOVO (27/08) — card de plano pro comparativo em grade (mesmo padrão
@@ -231,17 +286,26 @@ function montarCardPlano({ tipo, logoUrl, nomePlano, acomodacao, coparticipacao,
 export function gerarHtmlEstudoMercado(dados) {
   const { geradoEm, cliente, corretor, cenarioAtual, totalCenarioAtual, propostasSelecionadas, rede, legenda, regrasIncluidas } = dados
 
-  const valoresGrafico = [
-    { label: 'Atual', valor: totalCenarioAtual.totalMensal ?? 0 },
-    ...propostasSelecionadas.map((p) => ({ label: p.plano ?? p.operadora_nome ?? '—', valor: p.valorMensalCalculado ?? 0, destaque: p.papel_selecao === 'recomendada' })),
+  // NOVO (28/08) — Dashboard Financeiro: gráfico de colunas com chip
+  // (nome + percentual) por proposta, mesmo padrão do Essencial.
+  // Reaproveita p.comparativo.impactoMensal (já calculado) pra
+  // classificar e calcular o percentual.
+  const dadosGraficoFinanceiro = [
+    { label: 'Atual', valor: totalCenarioAtual.totalMensal ?? 0, tipo: 'atual' },
+    ...propostasSelecionadas.map((p) => {
+      const impactoMensal = p.comparativo?.impactoMensal ?? null
+      const percentual = impactoMensal != null && totalCenarioAtual.totalMensal ? (impactoMensal / totalCenarioAtual.totalMensal) * 100 : null
+      return {
+        label: p.plano ?? p.operadora_nome ?? '—',
+        valor: p.valorMensalCalculado ?? 0,
+        percentual,
+        tipo: classificarImpacto(impactoMensal),
+        destaque: p.papel_selecao === 'recomendada',
+      }
+    }),
   ].filter((d) => d.valor > 0)
 
-  const graficoCusto = valoresGrafico.length >= 2 ? graficoBarrasVertical({ dados: valoresGrafico, formatarValor: formatarMoeda }) : null
-
-  const impactosGrafico = propostasSelecionadas
-    .filter((p) => p.comparativo.impactoMensal != null)
-    .map((p) => ({ label: p.plano ?? p.operadora_nome ?? '—', valor: p.comparativo.impactoMensal }))
-  const graficoImpacto = impactosGrafico.length > 0 ? graficoDivergente({ dados: impactosGrafico, formatarValor: formatarMoeda }) : null
+  const graficoCusto = dadosGraficoFinanceiro.length >= 2 ? graficoColunasComChip({ dados: dadosGraficoFinanceiro, formatarValor: formatarMoeda }) : null
 
   const redeComparativa = calcularRedeComparativa(rede, propostasSelecionadas)
 
@@ -365,8 +429,12 @@ export function gerarHtmlEstudoMercado(dados) {
      resto do documento, que é claro). */
   .kpi-linha { display: flex; gap: 14px; margin: 20px 0 28px; }
   .kpi-card { flex: 1; background: var(--dark); border-radius: 8px; padding: 22px 20px; text-align: center; }
+  /* NOVO (28/08) — KPI de destaque (proposta recomendada), mesmo padrão do Essencial. */
+  .kpi-card.destaque { border: 2px solid var(--primary); }
   .kpi-valor { font-size: 24px; font-weight: 700; color: var(--offwhite); }
+  .kpi-valor.destaque { font-size: 15px; color: var(--primary); }
   .kpi-rotulo { font-size: 10px; font-weight: 300; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary); margin-top: 6px; }
+  .kpi-rotulo.destaque { color: var(--primary); }
   .resumo-destaques { display: flex; gap: 16px; margin: 24px 0; }
   .destaque-card { flex: 1; border: 1px solid #ddd6c7; border-radius: 8px; padding: 20px; background: #fff; }
   .destaque-label { display: block; font-size: 11px; font-weight: 300; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
@@ -425,6 +493,19 @@ export function gerarHtmlEstudoMercado(dados) {
   .selo-recomendada { position: absolute; top: -11px; left: 50%; transform: translateX(-50%); background: var(--primary); color: var(--dark); font-size: 8px; font-weight: 800; text-transform: uppercase; padding: 3px 11px; border-radius: 8px; white-space: nowrap; letter-spacing: 0.03em; }
   .grafico-bloco { margin: 28px 0; padding: 20px; background: #fff; border-radius: 8px; border: 1px solid #e4ded1; }
   .grafico-titulo { font-size: 12px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+  /* NOVO (28/08) — cards de impacto financeiro, mesmo padrão do
+     Essencial: economia = lima, investimento = âmbar (nunca vermelho —
+     "investimento" não é tratado como perda). */
+  .impacto-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin: 20px 0; }
+  .impacto-card { background: #fff; border: 1px solid #e4ded1; border-left: 3px solid var(--text-soft); border-radius: 8px; padding: 14px 16px; }
+  .impacto-card.economia { border-left-color: var(--lime); }
+  .impacto-card.investimento { border-left-color: var(--primary); }
+  .impacto-rotulo { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+  .impacto-card.economia .impacto-rotulo { color: #3B6D11; }
+  .impacto-card.investimento .impacto-rotulo { color: #854F0B; }
+  .impacto-valor { font-size: 16px; font-weight: 700; color: var(--dark); }
+  .impacto-sub { font-size: 9.5px; color: var(--text-soft); margin-top: 2px; }
+  .impacto-plano { font-size: 11px; margin-top: 8px; font-weight: 700; color: var(--dark); }
   .aviso { font-size: 12px; color: var(--text-soft); font-style: italic; background: #f0ece0; border-left: 3px solid var(--primary); padding: 10px 14px; margin: 12px 0; }
   footer.rodape { font-size: 10px; color: var(--text-soft); text-align: center; padding: 16px; }
   .fechamento { background: var(--dark); color: var(--offwhite); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
@@ -491,9 +572,9 @@ export function gerarHtmlEstudoMercado(dados) {
   <section>
     ${cabecalhoPagina()}
     <h2 class="titulo-secao">04 • Financeiro</h2>
-    ${graficoCusto ? `<div class="grafico-bloco"><div class="grafico-titulo">Custo mensal — atual × propostas</div>${graficoCusto}</div>` : ''}
-    ${graficoImpacto ? `<div class="grafico-bloco"><div class="grafico-titulo">Impacto mensal frente ao cenário atual</div>${graficoImpacto}</div>` : ''}
-    ${propostasSelecionadas.map((p) => p.comparativo.impactoAnual != null ? `<p class="faixa-precos">${escapeHtml(p.plano ?? '—')}: impacto anual de <strong>${formatarMoeda(Math.abs(p.comparativo.impactoAnual))}</strong> (${p.comparativo.tipo === 'economia' ? 'economia' : 'acréscimo'})</p>` : '').join('')}
+    ${blocoKpis(montarKpisFinanceiro(totalCenarioAtual, propostasSelecionadas))}
+    ${graficoCusto ? `<div class="grafico-bloco"><div class="grafico-titulo">Custo mensal — atual x propostas</div>${graficoCusto}</div>` : ''}
+    ${montarCardsImpacto(totalCenarioAtual, propostasSelecionadas)}
     ${rodapePagina()}
   </section>
 
