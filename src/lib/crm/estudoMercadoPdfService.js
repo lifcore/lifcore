@@ -416,7 +416,13 @@ export function gerarHtmlEstudoMercado(dados) {
      margem física de página (@page, ver numeração) já criava: em vez
      de forçar sangramento total, vira um card com acabamento — cantos
      arredondados, borda dourada, sombra sutil (pedido do usuário). */
-  .capa { background: var(--dark); color: var(--offwhite); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 100vh; border-radius: 18px; border: 2px solid var(--primary); box-shadow: 0 14px 32px rgba(3,15,16,0.22); }
+  /* ATUALIZADO (28/08) — `justify-content: flex-start` (era `center`):
+     título sobe pro topo em vez de ficar no meio da página. */
+  .capa { background: var(--dark); color: var(--offwhite); display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; min-height: 100vh; border-radius: 18px; border: 2px solid var(--primary); box-shadow: 0 14px 32px rgba(3,15,16,0.22); padding-top: 60px; }
+  /* NOVO (28/08) — kicker pequeno acima do título, substitui o texto "LIFITSEG" que duplicava o logo. */
+  .capa-kicker { font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--primary); margin-bottom: 6px; }
+  /* NOVO (28/08) — "raio de luz" sob o título: sólido no início, se dissolve em degradê até sumir. */
+  .capa-titulo-linha { height: 3px; width: 280px; margin-top: 10px; border-radius: 2px; background: linear-gradient(to right, var(--primary) 0%, var(--primary) 40%, transparent 100%); }
   /* ATUALIZADO (28/08) — capa redesenhada: logo maior no canto oposto
      (topo direito), sem texto "LIFITSEG" solto duplicando o que a
      imagem já traz. Título "Estudo de Mercado" ganha peso de título de
@@ -424,8 +430,8 @@ export function gerarHtmlEstudoMercado(dados) {
      mais pro cliente. */
   .capa-topo { display: flex; justify-content: flex-end; width: 100%; margin-bottom: 30px; }
   .capa-logo { height: 50px; }
-  .capa h1 { font-size: 30px; margin: 0 0 10px; font-weight: 700; line-height: 1.2; }
-  .capa .tagline { font-size: 13px; color: #9fb0ad; max-width: 400px; line-height: 1.6; margin-bottom: 28px; }
+  .capa h1 { font-size: 30px; margin: 0; font-weight: 700; line-height: 1.2; }
+  .capa .tagline { font-size: 13px; color: #9fb0ad; max-width: 400px; line-height: 1.6; margin: 18px 0 28px; }
   /* NOVO (28/08) — card de destaque do cliente na capa, mesmo padrão
      visual do quadro do corretor, contorno dourado. */
   /* ATUALIZADO (28/08) — capa deixa de empilhar tudo à esquerda: cliente
@@ -460,7 +466,7 @@ export function gerarHtmlEstudoMercado(dados) {
   /* ATUALIZADO (27/08) — trocado texto inteiro em âmbar (baixo
      contraste sobre o off-white) por barra de destaque + texto escuro,
      mesmo padrão do Essencial. */
-  h2.titulo-secao { font-size: 12px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--dark); margin: 0 0 24px; display: flex; align-items: center; gap: 8px; }
+  h2.titulo-secao { font-size: 13px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--dark); margin: 0 0 24px; display: flex; align-items: center; gap: 8px; }
   h2.titulo-secao::before { content: ''; width: 5px; height: 13px; background: var(--primary); display: inline-block; border-radius: 0; }
   /* ATUALIZADO (27/08) — padding robusto (16–24px); segue caixa escura
      sólida da paleta (confirmado: KPI em fundo escuro combina com o
@@ -570,7 +576,9 @@ export function gerarHtmlEstudoMercado(dados) {
     <div class="capa-topo">
       <img src="${LOGO_LIFITSEG_ESCURO}" alt="LifitSeg" class="capa-logo" />
     </div>
+    <div class="capa-kicker">Gestão de Saúde</div>
     <h1>Estudo de Mercado</h1>
+    <div class="capa-titulo-linha"></div>
     <p class="tagline">Uma análise técnica para encontrar o melhor equilíbrio entre investimento, cobertura e rede.</p>
     ${totalCenarioAtual.totalVidas ? `<div class="capa-stats">
       <div class="capa-stat">
