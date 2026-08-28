@@ -135,11 +135,14 @@ function escapeHtml(valor) {
   return String(valor).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 }
 
-// NOVO (26/08) — logo da LifitSeg (capa, cabeçalho de cada seção,
-// fechamento). URL fixa, confirmada com o usuário (500×500, fundo
-// transparente — funciona em cima de qualquer fundo escuro sem
-// precisar de caixa branca atrás, diferente do logo de operadora).
-const LOGO_LIFITSEG = 'https://lifitseg.com.br/logo.png'
+// ATUALIZADO (28/08) — logo dividido em duas versões, cada uma sem a
+// tagline embutida na imagem (evita redundância com o texto que já
+// aparece ao lado dela no cabeçalho, e permite aumentar o logo sem
+// pixelizar). Confirmado com o usuário, arquivos já hospedados:
+//   - ESCURO (ícone + "LIFITSEG", texto branco): capa e fechamento
+//   - CLARO (só o ícone): cabeçalho fino de cada seção, fundo claro
+const LOGO_LIFITSEG_ESCURO = 'https://lifitseg.com.br/logo-clr.png'
+const LOGO_LIFITSEG_CLARO = 'https://lifitseg.com.br/logo-esc.png'
 
 /** NOVO (26/08) — logo de operadora, mesmo padrão do Essencial: caixa
  *  branca fixa atrás (o PDF é fundo claro, funciona pra qualquer logo
@@ -159,7 +162,7 @@ function logoOperadora(logoUrl) {
  *  navegadores; isso aqui é 100% confiável porque é conteúdo comum. */
 function cabecalhoPagina() {
   return `<div class="cabecalho-pagina">
-    <img src="${LOGO_LIFITSEG}" alt="" class="cabecalho-pagina-logo" />
+    <img src="${LOGO_LIFITSEG_CLARO}" alt="" class="cabecalho-pagina-logo" />
     <span class="cabecalho-pagina-divisor"></span>
     <span>Estudo de Mercado • Inteligência em Saúde e Seguros</span>
   </div>`
@@ -402,11 +405,21 @@ export function gerarHtmlEstudoMercado(dados) {
   section:last-of-type { page-break-after: auto; }
   h1, h2, h3 { font-weight: 400; letter-spacing: 0.01em; }
   .capa { background: var(--dark); color: var(--offwhite); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 100vh; }
-  .capa .logo-lifitseg { height: 42px; margin-bottom: 22px; }
-  .capa .marca { font-size: 13px; font-weight: 300; letter-spacing: 0.24em; text-transform: uppercase; color: var(--primary); margin-bottom: 24px; }
-  .capa h1 { font-size: 34px; margin: 0 0 12px; }
-  .capa .tagline { font-size: 15px; color: #b9c4c2; max-width: 460px; line-height: 1.6; margin-bottom: 40px; }
-  .capa .meta { font-size: 13px; color: #8fa19e; border-top: 1px solid #24403f; padding-top: 16px; }
+  /* ATUALIZADO (28/08) — capa redesenhada: logo maior no canto oposto
+     (topo direito), sem texto "LIFITSEG" solto duplicando o que a
+     imagem já traz. Título "Estudo de Mercado" ganha peso de título de
+     verdade (30px/700) — nível interno Essencial/Executivo não aparece
+     mais pro cliente. */
+  .capa-topo { display: flex; justify-content: flex-end; width: 100%; margin-bottom: 30px; }
+  .capa-logo { height: 50px; }
+  .capa h1 { font-size: 30px; margin: 0 0 10px; font-weight: 700; line-height: 1.2; }
+  .capa .tagline { font-size: 13px; color: #9fb0ad; max-width: 400px; line-height: 1.6; margin-bottom: 28px; }
+  /* NOVO (28/08) — card de destaque do cliente na capa, mesmo padrão
+     visual do quadro do corretor, contorno dourado. */
+  .cliente-quadro { background: var(--surface); border: 1px solid rgba(255,187,68,0.35); border-radius: 12px; padding: 20px 22px; margin-bottom: 20px; max-width: 320px; }
+  .cliente-rotulo { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #8fa19e; margin-bottom: 6px; }
+  .cliente-nome { font-size: 22px; font-weight: 800; color: var(--offwhite); }
+  .cliente-data { font-size: 11px; color: #8fa19e; margin-top: 6px; }
   /* NOVO (27/08) — quadro do Perfil do Corretor na capa, contorno
      colorido (não só texto simples, pedido explícito do usuário). */
   .corretor-quadro { margin-top: 20px; border: 1px solid var(--primary); border-radius: 8px; padding: 12px 16px; max-width: 300px; }
@@ -509,7 +522,10 @@ export function gerarHtmlEstudoMercado(dados) {
   .aviso { font-size: 12px; color: var(--text-soft); font-style: italic; background: #f0ece0; border-left: 3px solid var(--primary); padding: 10px 14px; margin: 12px 0; }
   footer.rodape { font-size: 10px; color: var(--text-soft); text-align: center; padding: 16px; }
   .fechamento { background: var(--dark); color: var(--offwhite); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
-  .fechamento .logo-lifitseg { height: 44px; margin-bottom: 22px; }
+  .fechamento .logo-lifitseg { height: 50px; margin-bottom: 14px; }
+  /* NOVO (28/08) — chamada da tagline no fechamento (pedido do
+     usuário) — a imagem do logo não traz mais essa frase embutida. */
+  .fechamento-tagline { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); margin-bottom: 26px; }
   .fechamento .mensagem { font-size: 16px; max-width: 440px; line-height: 1.7; color: #dbe3e1; }
   .fechamento .assinatura { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--primary); margin-top: 26px; }
   @media print {
@@ -526,11 +542,16 @@ export function gerarHtmlEstudoMercado(dados) {
   <button class="no-print" onclick="window.print()" style="position:fixed;top:16px;right:16px;padding:10px 18px;background:#ffbb44;color:#05191b;border:none;border-radius:6px;cursor:pointer;font-weight:600;z-index:10;">🖨️ Imprimir / Salvar como PDF</button>
 
   <section class="capa">
-    <img src="${LOGO_LIFITSEG}" alt="LifitSeg" class="logo-lifitseg" />
-    <div class="marca">LifitSeg</div>
-    <h1>Estudo de Mercado — Executivo</h1>
+    <div class="capa-topo">
+      <img src="${LOGO_LIFITSEG_ESCURO}" alt="LifitSeg" class="capa-logo" />
+    </div>
+    <h1>Estudo de Mercado</h1>
     <p class="tagline">Uma análise técnica para encontrar o melhor equilíbrio entre investimento, cobertura e rede.</p>
-    <div class="meta">Cliente: ${escapeHtml(cliente.razao_social)}<br/>Data: ${formatarDataBR(geradoEm.slice(0, 10))}</div>
+    <div class="cliente-quadro">
+      <div class="cliente-rotulo">Estudo preparado para</div>
+      <div class="cliente-nome">${escapeHtml(cliente.razao_social)}</div>
+      <div class="cliente-data">Gerado em ${formatarDataBR(geradoEm.slice(0, 10))}</div>
+    </div>
     ${blocoCorretor(corretor)}
   </section>
 
@@ -623,7 +644,8 @@ export function gerarHtmlEstudoMercado(dados) {
   </section>
 
   <section class="fechamento">
-    <img src="${LOGO_LIFITSEG}" alt="LifitSeg" class="logo-lifitseg" />
+    <img src="${LOGO_LIFITSEG_ESCURO}" alt="LifitSeg" class="logo-lifitseg" />
+    <div class="fechamento-tagline">Inteligência em Saúde e Seguros</div>
     <p class="mensagem">Obrigado pela confiança em construir, junto com você, a melhor decisão sobre o cuidado da sua equipe.</p>
     <div class="assinatura">LifitSeg — Corretora de Seguros</div>
   </section>
