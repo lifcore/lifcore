@@ -614,23 +614,31 @@ export async function buscarFaixasEtariasDisponiveis() {
  * quando "São Paulo" virar região de verdade), ela já existe, só não
  * aparece enquanto não tiver uso real.
  */
+/**
+ * CORRIGIDO — removida a dependência de `mercado_saude_planos` (legado
+ * saindo de uso). regioes_tarifarias é estrutura interna/comercial,
+ * independente da fundação ANS — não precisa de nenhum embed pra
+ * existir. Filtra só por `ativo`, sem join nenhum.
+ *
+ * ATENÇÃO (achado ao validar esta correção): o filtro "só lista região
+ * com pelo menos 1 plano vinculado" (comentário original, 21/08) é
+ * PERDIDO por esta correção — sem o join, não tem como saber se uma
+ * região tem plano de verdade. Isso é intencional por ora (a alternativa,
+ * manter o join, é o que está quebrando a tela agora), mas significa que
+ * as 3 regiões órfãs que o comentário original mencionava (ex: "São
+ * Paulo (Interior I)") podem voltar a aparecer no autocomplete. Se isso
+ * for um problema, a filtragem de "região com plano" precisa de uma
+ * fonte diferente de mercado_saude_planos assim que a fundação ANS
+ * estiver pronta — não recriada aqui.
+ */
 export async function buscarRegioesTarifariasDisponiveis() {
   const { data, error } = await institucional
     .from('regioes_tarifarias')
-    .select('id, nome, mercado_saude_planos!inner(plano_id)')
+    .select('id, nome')
+    .eq('ativo', true)
     .order('nome')
   if (error) throw new Error(`Erro buscando regiões tarifárias: ${error.message}`)
-
-  // O join !inner pode devolver 1 linha por combinação região×plano —
-  // desduplica por id antes de devolver (o formulário só quer {id, nome}).
-  const vistos = new Set()
-  const regioesUnicas = []
-  for (const r of data ?? []) {
-    if (vistos.has(r.id)) continue
-    vistos.add(r.id)
-    regioesUnicas.push({ id: r.id, nome: r.nome })
-  }
-  return regioesUnicas
+  return data ?? []
 }
 
 export function calcularMensalidade(grupoSegmentacao, faixasEtariasDasVidas) {
