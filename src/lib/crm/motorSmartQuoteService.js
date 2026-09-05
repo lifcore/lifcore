@@ -122,15 +122,22 @@ export async function buscarPlanosElegiveis({ regiaoId = null, regiaoNome = null
     // PONTE TEMPORÁRIA (C.6) — mercado_saude_planos vive em
     // legado_biblioteca_pre_ans agora, não mais em institucional. Só
     // o client mudou; não recriar a tabela em institucional.
+    //
+    // CORRIGIDO (achado ao testar a ponte) — o `select` embutido antigo
+    // (`operadoras:operadora_id(...)`, `regioes_tarifarias:regiao_tarifaria_id(...)`)
+    // depende do PostgREST resolver a FK dentro do MESMO schema da
+    // consulta. Como mercado_saude_planos agora mora em
+    // legado_biblioteca_pre_ans e operadoras/regioes_tarifarias moram em
+    // institucional, o embed nunca resolve entre os dois — erro real
+    // visto em produção: "Could not find a relationship... in the
+    // schema cache". Corrigido buscando só as colunas brutas aqui
+    // (`operadora_id`, `regiao_tarifaria_id`) e resolvendo os nomes numa
+    // segunda consulta, cruzando os dois schemas na aplicação em vez de
+    // depender do banco fazer isso sozinho — ver logo após o loop de
+    // paginação, abaixo.
     let q = legadoBibliotecaPreAns
       .from('mercado_saude_planos')
-      .select(
-        `
-        plano_id, nome, acomodacao, linha, status, regiao_todas,
-        operadoras:operadora_id ( id, nome, logo_url, logo_fundo_chip ),
-        regioes_tarifarias:regiao_tarifaria_id ( id, nome )
-      `
-      )
+      .select('plano_id, nome, acomodacao, linha, status, regiao_todas, operadora_id, regiao_tarifaria_id')
       .eq('status', 'ativo')
     // CORRIGIDO (25/08, ajuste de segurança) — a versão anterior tratava
     // QUALQUER `regiao_tarifaria_id = null` como "vale pra qualquer
@@ -151,14 +158,48 @@ export async function buscarPlanosElegiveis({ regiaoId = null, regiaoNome = null
 
   const PAGINA = 999
   let inicio = 0
-  const todosPlanos = []
+  const todosPlanosBrutos = []
   while (true) {
     const { data: pagina, error } = await montarConsultaPagina(inicio, inicio + PAGINA - 1)
     if (error) throw new Error(`Erro buscando planos elegíveis: ${error.message}`)
-    todosPlanos.push(...(pagina ?? []))
+    todosPlanosBrutos.push(...(pagina ?? []))
     if (!pagina || pagina.length < PAGINA) break
     inicio += PAGINA
   }
+
+  // PONTE TEMPORÁRIA (continuação) — resolve operadora/região tarifária
+  // por id, em institucional, e junta no formato que o resto do arquivo
+  // já espera (`plano.operadoras.*`, `plano.regioes_tarifarias.*`) — o
+  // mesmo shape que o embed antigo produzia, só que montado aqui em vez
+  // de pelo banco.
+  const operadoraIdsUnicos = [...new Set(todosPlanosBrutos.map((p) => p.operadora_id).filter(Boolean))]
+  const regiaoIdsUnicos = [...new Set(todosPlanosBrutos.map((p) => p.regiao_tarifaria_id).filter(Boolean))]
+
+  let operadorasPorId = new Map()
+  if (operadoraIdsUnicos.length > 0) {
+    const { data: ops, error: erroOps } = await institucional
+      .from('operadoras')
+      .select('id, nome, logo_url, logo_fundo_chip')
+      .in('id', operadoraIdsUnicos)
+    if (erroOps) throw new Error(`Erro buscando operadoras: ${erroOps.message}`)
+    operadorasPorId = new Map((ops ?? []).map((o) => [o.id, o]))
+  }
+
+  let regioesPorId = new Map()
+  if (regiaoIdsUnicos.length > 0) {
+    const { data: regs, error: erroRegs } = await institucional
+      .from('regioes_tarifarias')
+      .select('id, nome')
+      .in('id', regiaoIdsUnicos)
+    if (erroRegs) throw new Error(`Erro buscando regiões tarifárias: ${erroRegs.message}`)
+    regioesPorId = new Map((regs ?? []).map((r) => [r.id, r]))
+  }
+
+  const todosPlanos = todosPlanosBrutos.map((p) => ({
+    ...p,
+    operadoras: p.operadora_id ? operadorasPorId.get(p.operadora_id) ?? null : null,
+    regioes_tarifarias: p.regiao_tarifaria_id ? regioesPorId.get(p.regiao_tarifaria_id) ?? null : null,
+  }))
 
   return { planos: todosPlanos, motivo: null }
 }
@@ -424,21 +465,26 @@ export async function buscarResumoPlanosPorId(planoIds) {
  */
 export async function buscarCotacaoDoPlano(planoId) {
   // PONTE TEMPORÁRIA (C.6) — mercado_saude_planos vive em legado_biblioteca_pre_ans agora.
+  //
+  // CORRIGIDO (achado ao testar a ponte) — mesmo problema de
+  // buscarPlanosElegiveis: embed entre schemas diferentes não resolve
+  // no PostgREST ("Could not find a relationship..."). Busca só as
+  // colunas brutas aqui, resolve operadora/região tarifária à parte.
   const { data: plano, error: erroPlano } = await legadoBibliotecaPreAns
     .from('mercado_saude_planos')
-    .select(
-      `
-      plano_id, nome, acomodacao, linha, status,
-      operadoras:operadora_id ( id, nome ),
-      regioes_tarifarias:regiao_tarifaria_id ( id, nome )
-    `
-    )
+    .select('plano_id, nome, acomodacao, linha, status, operadora_id, regiao_tarifaria_id')
     .eq('plano_id', planoId)
     .maybeSingle()
   if (erroPlano) throw new Error(`Erro buscando plano "${planoId}": ${erroPlano.message}`)
   if (!plano) return { encontrado: false, motivo: `plano_id "${planoId}" não existe na Biblioteca de Mercado.` }
 
-  const [{ data: precos, error: erroPrecos }, resumoRede, { data: regras, error: erroRegras }] = await Promise.all([
+  const [
+    { data: precos, error: erroPrecos },
+    resumoRede,
+    { data: regras, error: erroRegras },
+    operadoraResolvida,
+    regiaoResolvida,
+  ] = await Promise.all([
     // PONTE TEMPORÁRIA (C.6) — mercado_saude_precos/_regras vivem em legado_biblioteca_pre_ans agora.
     legadoBibliotecaPreAns
       .from('mercado_saude_precos')
@@ -449,18 +495,32 @@ export async function buscarCotacaoDoPlano(planoId) {
       .order('segmentacao')
       .order('faixa_etaria'),
     montarResumoRede(planoId),
+    // Filtra direto pelo id bruto (plano.operadora_id) — antes usava
+    // plano.operadoras.id, que só existia por causa do embed removido.
     legadoBibliotecaPreAns
       .from('mercado_saude_regras')
       .select('tipo, conteudo')
-      .eq('operadora_id', plano.operadoras.id)
+      .eq('operadora_id', plano.operadora_id)
       .order('tipo'),
+    // Resolve operadora/região em institucional, separado do schema do legado.
+    plano.operadora_id
+      ? institucional.from('operadoras').select('id, nome').eq('id', plano.operadora_id).maybeSingle().then((r) => r.data ?? null)
+      : Promise.resolve(null),
+    plano.regiao_tarifaria_id
+      ? institucional
+          .from('regioes_tarifarias')
+          .select('id, nome')
+          .eq('id', plano.regiao_tarifaria_id)
+          .maybeSingle()
+          .then((r) => r.data ?? null)
+      : Promise.resolve(null),
   ])
   if (erroPrecos) throw new Error(`Erro buscando preços do plano "${planoId}": ${erroPrecos.message}`)
   if (erroRegras) throw new Error(`Erro buscando regras da operadora: ${erroRegras.message}`)
 
   return {
     encontrado: true,
-    plano,
+    plano: { ...plano, operadoras: operadoraResolvida, regioes_tarifarias: regiaoResolvida },
     precosPorSegmentacao: agruparPrecosPorSegmentacao(precos ?? []),
     rede: resumoRede,
     regras: regras ?? [],
