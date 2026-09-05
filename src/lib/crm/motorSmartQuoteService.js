@@ -1,4 +1,4 @@
-import { institucional } from '../supabaseSchemas'
+import { institucional, legadoBibliotecaPreAns } from '../supabaseSchemas'
 
 /**
  * Sprint 2A — Motor determinístico do Smart Quote.
@@ -46,6 +46,23 @@ import { institucional } from '../supabaseSchemas'
 // com a seguradora (Estudo Corporativo, Sprint 4). Decisão de produto
 // confirmada pelo usuário, não limite técnico das tabelas atuais.
 const LIMITE_VIDAS_MULTICALCULO = 99
+
+/**
+ * PONTE TEMPORÁRIA (decisão do Chief, C.6 do modelo-alvo da Biblioteca
+ * ANS) — as tabelas mercado_saude_* não existem mais em `institucional`:
+ * foram movidas pro schema `legado_biblioteca_pre_ans` quando o Sistema A
+ * antigo foi descontinuado como fonte da nova Biblioteca. Este arquivo
+ * (motor do Multicálculo) ainda depende delas em 6 funções — a correção
+ * aqui é só trocar o client de schema (`legadoBibliotecaPreAns` em vez de
+ * `institucional`), restaurando o funcionamento atual sem reintroduzir o
+ * legado como fonte da arquitetura nova. `regioes_tarifarias` e
+ * `operadoras` continuam em `institucional` normalmente — não fazem
+ * parte do legado, não mudam de client.
+ *
+ * Esta ponte deve ser removida quando a fundação ANS estiver pronta pra
+ * substituir estas 6 funções — não é solução definitiva, não recriar
+ * mercado_saude_* em institucional por nenhum motivo.
+ */
 
 /**
  * Lista os planos ativos de uma região (e, opcionalmente, operadora
@@ -102,7 +119,10 @@ export async function buscarPlanosElegiveis({ regiaoId = null, regiaoNome = null
   // continua buscando até a página vir menor que o pedido, em vez de
   // confiar que o catálogo nunca vai passar de um teto fixo.
   function montarConsultaPagina(inicio, fim) {
-    let q = institucional
+    // PONTE TEMPORÁRIA (C.6) — mercado_saude_planos vive em
+    // legado_biblioteca_pre_ans agora, não mais em institucional. Só
+    // o client mudou; não recriar a tabela em institucional.
+    let q = legadoBibliotecaPreAns
       .from('mercado_saude_planos')
       .select(
         `
@@ -239,8 +259,10 @@ async function buscarCotacoesEmLote(planosBase) {
   try {
     // Sequencial (não Promise.all) — eliminado paralelismo enquanto
     // investigávamos outra hipótese; mantido por segurança.
+    // PONTE TEMPORÁRIA (C.6) — mercado_saude_precos/_rede_cobertura vivem
+    // em legado_biblioteca_pre_ans agora.
     todosPrecos = await buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote, inicio, fim) =>
-      institucional
+      legadoBibliotecaPreAns
         .from('mercado_saude_precos')
         .select(
           'plano_id, segmentacao, familia_tarifaria, faixa_etaria, valor, vidas_min, vidas_max, mei, coparticipacao_tipo, tipo_contratacao'
@@ -249,7 +271,7 @@ async function buscarCotacoesEmLote(planosBase) {
         .range(inicio, fim)
     )
     todaRede = await buscarEmLotesDeValores(planoIds, TAMANHO_LOTE, (lote, inicio, fim) =>
-      institucional.from('mercado_saude_rede_cobertura').select('plano_id').in('plano_id', lote).range(inicio, fim)
+      legadoBibliotecaPreAns.from('mercado_saude_rede_cobertura').select('plano_id').in('plano_id', lote).range(inicio, fim)
     )
   } catch (erro) {
     throw new Error(`Erro buscando preços/rede em lote: ${erro.message}`)
@@ -288,7 +310,8 @@ async function buscarCotacoesEmLote(planosBase) {
     const PAGINA_REGRAS = 1000
     let inicioRegras = 0
     while (true) {
-      const { data: paginaRegras, error: erroRegras } = await institucional
+      // PONTE TEMPORÁRIA (C.6) — mercado_saude_regras vive em legado_biblioteca_pre_ans agora.
+      const { data: paginaRegras, error: erroRegras } = await legadoBibliotecaPreAns
         .from('mercado_saude_regras')
         .select('operadora_id, tipo, conteudo')
         .in('operadora_id', operadoraIdsUnicos)
@@ -353,12 +376,14 @@ export async function buscarResumoPlanosPorId(planoIds) {
   if (idsUnicos.length === 0) return new Map()
 
   const TAMANHO_LOTE = 5
+  // PONTE TEMPORÁRIA (C.6) — mercado_saude_planos/_rede_cobertura vivem
+  // em legado_biblioteca_pre_ans agora.
   const [planos, coberturas] = await Promise.all([
     buscarEmLotesDeValores(idsUnicos, TAMANHO_LOTE, (lote, inicio, fim) =>
-      institucional.from('mercado_saude_planos').select('plano_id, acomodacao').in('plano_id', lote).range(inicio, fim)
+      legadoBibliotecaPreAns.from('mercado_saude_planos').select('plano_id, acomodacao').in('plano_id', lote).range(inicio, fim)
     ),
     buscarEmLotesDeValores(idsUnicos, TAMANHO_LOTE, (lote, inicio, fim) =>
-      institucional
+      legadoBibliotecaPreAns
         .from('mercado_saude_rede_cobertura')
         .select('plano_id')
         .in('plano_id', lote)
@@ -398,7 +423,8 @@ export async function buscarResumoPlanosPorId(planoIds) {
  * @param {string} planoId
  */
 export async function buscarCotacaoDoPlano(planoId) {
-  const { data: plano, error: erroPlano } = await institucional
+  // PONTE TEMPORÁRIA (C.6) — mercado_saude_planos vive em legado_biblioteca_pre_ans agora.
+  const { data: plano, error: erroPlano } = await legadoBibliotecaPreAns
     .from('mercado_saude_planos')
     .select(
       `
@@ -413,7 +439,8 @@ export async function buscarCotacaoDoPlano(planoId) {
   if (!plano) return { encontrado: false, motivo: `plano_id "${planoId}" não existe na Biblioteca de Mercado.` }
 
   const [{ data: precos, error: erroPrecos }, resumoRede, { data: regras, error: erroRegras }] = await Promise.all([
-    institucional
+    // PONTE TEMPORÁRIA (C.6) — mercado_saude_precos/_regras vivem em legado_biblioteca_pre_ans agora.
+    legadoBibliotecaPreAns
       .from('mercado_saude_precos')
       .select(
         'segmentacao, familia_tarifaria, faixa_etaria, valor, vidas_min, vidas_max, mei, coparticipacao_tipo, tipo_contratacao'
@@ -422,7 +449,7 @@ export async function buscarCotacaoDoPlano(planoId) {
       .order('segmentacao')
       .order('faixa_etaria'),
     montarResumoRede(planoId),
-    institucional
+    legadoBibliotecaPreAns
       .from('mercado_saude_regras')
       .select('tipo, conteudo')
       .eq('operadora_id', plano.operadoras.id)
@@ -535,13 +562,14 @@ export function descreverSegmentacao(grupo) {
 }
 
 async function montarResumoRede(planoId) {
-  const { count, error } = await institucional
+  // PONTE TEMPORÁRIA (C.6) — mercado_saude_rede_cobertura vive em legado_biblioteca_pre_ans agora.
+  const { count, error } = await legadoBibliotecaPreAns
     .from('mercado_saude_rede_cobertura')
     .select('id', { count: 'exact', head: true })
     .eq('plano_id', planoId)
   if (error) throw new Error(`Erro contando rede do plano "${planoId}": ${error.message}`)
 
-  const { data: amostra, error: erroAmostra } = await institucional
+  const { data: amostra, error: erroAmostra } = await legadoBibliotecaPreAns
     .from('mercado_saude_rede_cobertura')
     .select('codigo_bruto, prestador:prestador_id ( nome, municipio )')
     .eq('plano_id', planoId)
@@ -580,7 +608,8 @@ export async function buscarFaixasEtariasDisponiveis() {
   let inicio = 0
   const todasFaixas = []
   while (true) {
-    const { data, error } = await institucional
+    // PONTE TEMPORÁRIA (C.6) — mercado_saude_precos vive em legado_biblioteca_pre_ans agora.
+    const { data, error } = await legadoBibliotecaPreAns
       .from('mercado_saude_precos')
       .select('faixa_etaria')
       .range(inicio, inicio + PAGINA - 1)
